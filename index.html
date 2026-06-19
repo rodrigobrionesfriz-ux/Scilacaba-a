@@ -10,6 +10,7 @@
 <!-- Firebase SDK (compat para uso global sin módulos) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" onerror="window._fbAppErr=true"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" onerror="window._fbFsErr=true"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" onerror="window._fbAuthErr=true"></script>
 <script>
 // Fallback: si los scripts de gstatic fallaron, cargar desde jsdelivr CDN
 (function(){
@@ -26,7 +27,9 @@
         console.warn('[Firebase] SDK de gstatic no disponible, intentando CDN alternativa...');
         loadScript('https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js', function(){
           loadScript('https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-firestore-compat.js', function(){
-            console.log('[Firebase] SDK cargado desde CDN alternativa');
+            loadScript('https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js', function(){
+              console.log('[Firebase] SDK cargado desde CDN alternativa');
+            });
           });
         });
       }
@@ -1807,10 +1810,32 @@ function sciFbInit(){
         return;
       }
     }
+    // Login anónimo (si aún no se hizo desde el Cuaderno)
+    try{
+      if(firebase.auth && !(firebase.auth().currentUser)){
+        firebase.auth().signInAnonymously().catch(function(e){
+          console.warn('[SCI-Firebase] Login anónimo falló:', e && e.code);
+        });
+      }
+    }catch(e){ console.warn('[SCI-Firebase] Auth no disponible:', e); }
     SCIFB.ready = true;
     console.log('[SCI-Firebase] Inicializado');
     sciFbIndicator('connecting', 'Conectando inventario a la nube...');
-    sciFbStartListener();
+    // Arrancar el listener solo cuando la autenticación anónima esté lista
+    if(firebase.auth){
+      var _sciListenerOk = false;
+      firebase.auth().onAuthStateChanged(function(user){
+        if(user && !_sciListenerOk){
+          _sciListenerOk = true;
+          sciFbStartListener();
+        }
+      });
+      setTimeout(function(){
+        if(!_sciListenerOk){ _sciListenerOk = true; sciFbStartListener(); }
+      }, 6000);
+    } else {
+      sciFbStartListener();
+    }
     // Red de seguridad: si en 10s no llegó respuesta de la nube (sin internet, etc.),
     // desactivar el modo arranque para que las escrituras locales puedan subir cuando se reconecte.
     setTimeout(function(){
@@ -9709,12 +9734,40 @@ function fbInit(){
     if(!firebase.apps.length){
       firebase.initializeApp(FB.config);
     }
+    // Login anónimo: autentica el dispositivo de forma invisible para cumplir las reglas de seguridad
+    try{
+      if(firebase.auth){
+        firebase.auth().signInAnonymously().catch(function(e){
+          console.warn('[Firebase] Login anónimo falló:', e && e.code);
+        });
+      }
+    }catch(e){ console.warn('[Firebase] Auth no disponible:', e); }
     FB.db = firebase.firestore();
     FB.ready = true;
     console.log('[Firebase] Inicializado correctamente');
     fbUpdateIndicator('connecting', 'Conectando a la nube...');
-    // Arrancar el listener en vivo
-    fbStartListener();
+    // Arrancar el listener en vivo SOLO cuando la autenticación anónima esté lista
+    // (con la regla de seguridad, sin auth las lecturas/escrituras serían rechazadas)
+    if(firebase.auth){
+      var _listenerArrancado = false;
+      firebase.auth().onAuthStateChanged(function(user){
+        if(user && !_listenerArrancado){
+          _listenerArrancado = true;
+          console.log('[Firebase] Autenticado (anónimo). Arrancando sincronización.');
+          fbStartListener();
+        }
+      });
+      // Respaldo: si en 6s no se autenticó (ej. SDK auth no disponible), arrancar igual
+      setTimeout(function(){
+        if(!_listenerArrancado){
+          _listenerArrancado = true;
+          console.warn('[Firebase] Sin autenticación tras 6s; arrancando listener de todos modos.');
+          fbStartListener();
+        }
+      }, 6000);
+    } else {
+      fbStartListener();
+    }
     // Red de seguridad: si en 10s no hay respuesta, habilitar subidas locales
     setTimeout(function(){
       if(!FB.firstSnapshotReceived){
