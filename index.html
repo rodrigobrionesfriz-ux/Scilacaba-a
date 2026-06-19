@@ -165,6 +165,11 @@ a{color:var(--gm);text-decoration:none}
 /* ─────────── APP LAYOUT ─────────── */
 #app{display:none;height:100vh;grid-template-columns:240px 1fr;grid-template-rows:56px 1fr;grid-template-areas:"sidebar topbar" "sidebar main"}
 #app.show{display:grid}
+/* OP. CONTEOS: modo solo-conteos a pantalla completa (móvil en terreno) */
+body.solo-conteos #app{grid-template-columns:1fr;grid-template-rows:1fr;grid-template-areas:"main"}
+body.solo-conteos .sidebar{display:none!important}
+body.solo-conteos .topbar{display:none!important}
+body.solo-conteos #main, body.solo-conteos .main{padding:0!important}
 .sidebar{
   grid-area:sidebar;
   background:var(--gd);
@@ -1632,6 +1637,7 @@ const STORES=[
   ['movements','numero'],
   ['mantenciones','id'],
   ['conteos','id'],
+  ['estimaciones','id'],
   ['invplantas','id'],
   ['stock','key'],
   ['lots','id'],
@@ -1785,7 +1791,7 @@ var SCIFB = {
   applyingRemote: false,
   saveTimer: null,
   // Tablas que se sincronizan (todas las del SCI)
-  stores: ['users','products','warehouses','groups','productTypes','providers','customers','costCenters','inventoryCounts','movements','stock','lots','audit','config','mantenciones','conteos','invplantas']
+  stores: ['users','products','warehouses','groups','productTypes','providers','customers','costCenters','inventoryCounts','movements','stock','lots','audit','config','mantenciones','conteos','estimaciones','invplantas']
 };
 
 function sciFbDocRef(){
@@ -1998,7 +2004,7 @@ async function sha256(text){
 const STATE={
   user:null,
   page:'dashboard',
-  cache:{products:[],warehouses:[],groups:[],productTypes:[],providers:[],customers:[],costCenters:[],inventoryCounts:[],movements:[],stock:[],lots:[],users:[],config:{},mantenciones:[],conteos:[],invplantas:[]}
+  cache:{products:[],warehouses:[],groups:[],productTypes:[],providers:[],customers:[],costCenters:[],inventoryCounts:[],movements:[],stock:[],lots:[],users:[],config:{},mantenciones:[],conteos:[],estimaciones:[],invplantas:[]}
 };
 
 // ── Advertencia al cerrar / recargar / volver atrás (evita salir por error) ──
@@ -2256,6 +2262,12 @@ async function doLogin(){
   await audit('login','Inicio de sesión',u.id);
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').classList.add('show');
+  // OP. CONTEOS: modo pantalla completa para móvil (oculta menú lateral y barra superior)
+  if(STATE.user && STATE.user.role==='opconteos'){
+    document.body.classList.add('solo-conteos');
+  } else {
+    document.body.classList.remove('solo-conteos');
+  }
   setTimeout(refreshBackupAlert,100);
   // Verificación de consistencia silenciosa al iniciar (solo admin)
   if(u.role==='admin'){
@@ -7428,6 +7440,7 @@ var CTE_N_FIJOS = 3;       // árboles fijos representativos por paño
 var CTE_N_ALEATORIOS = 5;  // árboles al azar por conteo
 var _cteEtapa = '';          // etapa fenológica de la sesión
 var _cteTipoArbol = null;    // 'fijo' | 'aleatorio' en el árbol actual
+var _cteEstimActual = null;  // estimación en edición (hoja propia del módulo)
 
 // Lee los paños del Cuaderno de Campo (objeto global S)
 function ctePanos(){
@@ -7443,6 +7456,8 @@ async function renderConteos(c){
   try{ if(typeof load==='function' && (typeof S==='undefined' || !S.panos || !S.panos.length)){ load(); } }catch(e){}
   // Cargar conteos del cache
   if(!STATE.cache.conteos){ try{ STATE.cache.conteos = await dbAll('conteos'); }catch(e){ STATE.cache.conteos=[]; } }
+  // Cargar estimaciones guardadas (hoja de estimación propia)
+  if(!STATE.cache.estimaciones){ try{ STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){ STATE.cache.estimaciones=[]; } }
   cteRender(c);
 }
 
@@ -7452,6 +7467,7 @@ function cteRender(c){
   var estilos = '<style>'+
     '.cte-wrap{max-width:560px;margin:0 auto;padding:8px 4px}'+
     '.cte-big-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:20px;font-size:18px;font-weight:700;border:none;border-radius:14px;cursor:pointer;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,.12);transition:.1s}'+
+    '.cte-row-btn{display:flex;align-items:center;justify-content:center;gap:6px;flex:1;padding:13px 10px;font-size:14px;font-weight:700;border:none;border-radius:12px;cursor:pointer;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,.1);color:#fff}'+
     '.cte-big-btn:active{transform:scale(.98)}'+
     '.cte-btn-primary{background:#0a6ed1;color:#fff}'+
     '.cte-btn-green{background:#1a7e3e;color:#fff}'+
@@ -7482,6 +7498,10 @@ function cteRender(c){
     html += cteRenderSesion();
   } else if(_cteVista==='lista'){
     html += cteRenderLista();
+  } else if(_cteVista==='estim'){
+    html += cteRenderEstim();
+  } else if(_cteVista==='estimVer' && _cteEstimActual){
+    html += cteRenderEstimVer();
   } else {
     html += cteRenderInicio();
   }
@@ -7492,7 +7512,12 @@ function cteRender(c){
 function cteRenderInicio(){
   var vars = cteVariedades();
   var pend = (STATE.cache.conteos||[]).filter(function(x){ return !x.sincronizado; }).length;
-  return '<div class="cte-card">'+
+  var esSoloConteos = STATE.user && STATE.user.role==='opconteos';
+  var header = esSoloConteos ? ('<div style="display:flex;justify-content:space-between;align-items:center;background:#354a5f;color:#fff;padding:12px 16px;border-radius:0 0 12px 12px;margin-bottom:12px">'+
+      '<div><div style="font-size:15px;font-weight:800">🌸 Conteo de centros</div><div style="font-size:11px;opacity:.8">'+escapeHtml(STATE.user.nombre||'')+'</div></div>'+
+      '<button onclick="logout()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Salir</button>'+
+    '</div>') : '';
+  return header+'<div class="cte-card">'+
       '<div style="font-size:20px;font-weight:800;color:#23303d;margin-bottom:4px">🌸 Conteo de centros florales</div>'+
       '<div style="font-size:13px;color:#777;margin-bottom:16px">Seleccione el paño y cuente los árboles. Funciona sin internet.</div>'+
       '<div class="cte-field"><label>Variedad</label><select id="cte-var" onchange="cteSetVariedad(this.value)">'+
@@ -7510,8 +7535,10 @@ function cteRenderInicio(){
       '<div style="font-size:12px;color:#888;margin-bottom:10px">Se cuentan '+CTE_N_FIJOS+' árboles fijos (representativos) + '+CTE_N_ALEATORIOS+' al azar = '+(CTE_N_FIJOS+CTE_N_ALEATORIOS)+' árboles.</div>'+
       '<button class="cte-big-btn cte-btn-green" onclick="cteIniciarSesion()">▶️ Iniciar conteo</button>'+
     '</div>'+
-    '<button class="cte-big-btn cte-btn-gray" onclick="cteVerLista()">📋 Ver registros guardados'+(pend>0?(' ('+pend+' por subir)'):'')+'</button>'+
-    (navigator.onLine?'<button class="cte-big-btn cte-btn-primary" onclick="cteSincronizar()">☁️ Subir registros a la nube</button>':'');
+    '<div style="display:flex;gap:8px">'+
+      '<button class="cte-row-btn cte-btn-gray" onclick="cteVerLista()">📋 Registros'+(pend>0?(' ('+pend+')'):'')+'</button>'+
+      (navigator.onLine?'<button class="cte-row-btn cte-btn-primary" onclick="cteSincronizar()">☁️ Subir a la nube</button>':'')+
+    '</div>';
 }
 
 
@@ -7702,12 +7729,16 @@ function cteCancelarSesion(){
 }
 function cteVerLista(){ _cteVista='lista'; cteRender(); }
 function cteVolverInicio(){ _cteVista='inicio'; cteRender(); }
+function cteVerEstim(){ _cteVista='estim'; cteRender(); }
 
 
 // ── Lista de sesiones guardadas ──
 function cteRenderLista(){
   var sesiones = (STATE.cache.conteos||[]).slice().sort(function(a,b){ return (b.fechaInicio||'').localeCompare(a.fechaInicio||''); });
   var html = '<button class="cte-big-btn cte-btn-gray" onclick="cteVolverInicio()" style="padding:14px;font-size:16px">‹ Volver</button>';
+  if(can('conteos.revisar')){
+    html += '<button class="cte-big-btn cte-btn-primary" onclick="cteVerEstim()">📈 Estimación de producción</button>';
+  }
   if(can('conteos.revisar') && sesiones.length){
     html += '<button class="cte-big-btn cte-btn-amber" onclick="cteExportarExcel()">📊 Exportar registros a Excel</button>';
   }
@@ -7808,6 +7839,166 @@ async function cteSincronizar(){
 }
 
 // ── Aplicar el promedio a la Estimación de Producción del paño ──
+// ════════ HOJA DE ESTIMACIÓN PROPIA DEL MÓDULO DE CONTEOS EN TERRENO ════════
+// Promedio de centros florales de un paño, calculado desde todos los conteos guardados de ese paño
+function ctePromedioCentrosPano(panoId){
+  var conteos = (STATE.cache.conteos||[]).filter(function(c){ return String(c.panoId)===String(panoId) && c.promedioCentros!=null; });
+  if(!conteos.length) return null;
+  var suma = conteos.reduce(function(a,c){ return a+(parseFloat(c.promedioCentros)||0); }, 0);
+  return suma / conteos.length;
+}
+
+// Lista de versiones de estimación guardadas
+function cteRenderEstim(){
+  var ess = (STATE.cache.estimaciones||[]).slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); });
+  var html = '<button class="cte-big-btn cte-btn-gray" onclick="cteVerLista()" style="padding:14px;font-size:16px">‹ Volver</button>'+
+    '<button class="cte-big-btn cte-btn-green" onclick="cteNuevaEstim()">+ Nueva estimación</button>';
+  if(!ess.length){
+    html += '<div class="cte-card" style="text-align:center;color:#999;padding:24px">Sin estimaciones guardadas. Cree una nueva: tomará los promedios de los conteos registrados.</div>';
+    return html;
+  }
+  html += '<div style="font-weight:800;color:#23303d;margin:8px 0">Versiones guardadas ('+ess.length+')</div>';
+  html += ess.map(function(e){
+    return '<div class="cte-card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:start">'+
+        '<div><div style="font-size:16px;font-weight:800;color:#23303d">'+escapeHtml(e.nombre)+'</div>'+
+          '<div style="font-size:12px;color:#666">'+(e.fecha||'').slice(0,10)+' · '+escapeHtml(e.usuario||'')+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:#0a6ed1">'+(e.totalKg!=null?Math.round(e.totalKg).toLocaleString('es-CL'):'-')+'</div><div style="font-size:11px;color:#888">kg total</div></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="cte-big-btn cte-btn-primary" style="flex:1;margin:0" onclick="cteVerEstimDetalle(\''+e.id+'\')">Ver detalle</button>'+
+        (can('conteos.revisar')?'<button class="cte-big-btn cte-btn-gray" style="margin:0;max-width:60px" onclick="cteEliminarEstim(\''+e.id+'\')">🗑️</button>':'')+
+      '</div>'+
+    '</div>';
+  }).join('');
+  return html;
+}
+
+// Crear nueva estimación: precarga centros desde el promedio de conteos de cada paño
+function cteNuevaEstim(){
+  var panos = ctePanos();
+  var lineas = panos.map(function(p){
+    var centros = ctePromedioCentrosPano(p.id);
+    return {
+      panoId:p.id, panoNombre:p.nombre, variedad:p.variedad||'',
+      plantas: p.plantas || p.nPlantas || 0,
+      centros: centros!=null ? Number(centros.toFixed(1)) : 0,
+      tieneCont: centros!=null,
+      frutosCentro: 2,
+      kgFruto: 0.011
+    };
+  });
+  _cteEstimActual = {
+    id: uid(),
+    nombre: 'Estimación '+new Date().toLocaleDateString('es-CL'),
+    fecha: new Date().toISOString(),
+    usuario: STATE.user ? (STATE.user.nombre||STATE.user.id) : '',
+    lineas: lineas
+  };
+  _cteVista='estimVer'; cteRender();
+}
+
+// Detalle / edición de una estimación con cálculo de kg
+function cteRenderEstimVer(){
+  var e=_cteEstimActual;
+  var totalKg=0, totalCajas=0;
+  e.lineas.forEach(function(l){
+    l.kgPano = (l.centros||0)*(l.frutosCentro||0)*(l.kgFruto||0)*(l.plantas||0);
+    totalKg += l.kgPano;
+  });
+  totalCajas = totalKg/5;
+
+  var html='<button class="cte-big-btn cte-btn-gray" onclick="cteVerEstim()" style="padding:14px;font-size:16px">‹ Volver a versiones</button>'+
+    '<div class="cte-card">'+
+      '<div class="cte-field"><label>Nombre de la versión</label><input type="text" id="cte-es-nombre" value="'+escapeHtml(e.nombre)+'" style="width:100%;padding:10px;border:1px solid #d9d9d9;border-radius:8px"></div>'+
+      '<div style="font-size:12px;color:#888">Fórmula: centros florales × frutos/centro × kg/fruto × N° plantas. Los centros vienen del promedio de los conteos; ajuste los demás valores.</div>'+
+    '</div>';
+
+  e.lineas.forEach(function(l,i){
+    html+='<div class="cte-card">'+
+      '<div style="font-weight:800;color:#23303d;margin-bottom:2px">'+escapeHtml(l.panoNombre)+' <span style="font-size:12px;font-weight:400;color:#888">· '+escapeHtml(l.variedad)+'</span></div>'+
+      '<div style="font-size:11px;color:'+(l.tieneCont?'#0a6e2e':'#c0392b')+';margin-bottom:8px">'+(l.tieneCont?'✓ Centros desde conteos':'⚠ Sin conteos: ingrese centros manualmente')+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
+        '<div><label style="font-size:10px;color:#888;font-weight:700">CENTROS FLORALES</label><input type="number" step="any" value="'+(l.centros||0)+'" onchange="cteEstimSet('+i+',\'centros\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
+        '<div><label style="font-size:10px;color:#888;font-weight:700">FRUTOS/CENTRO</label><input type="number" step="any" value="'+(l.frutosCentro||0)+'" onchange="cteEstimSet('+i+',\'frutosCentro\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
+        '<div><label style="font-size:10px;color:#888;font-weight:700">KG/FRUTO</label><input type="number" step="any" value="'+(l.kgFruto||0)+'" onchange="cteEstimSet('+i+',\'kgFruto\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
+        '<div><label style="font-size:10px;color:#888;font-weight:700">N° PLANTAS</label><input type="number" value="'+(l.plantas||0)+'" onchange="cteEstimSet('+i+',\'plantas\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
+      '</div>'+
+      '<div style="margin-top:8px;text-align:right;font-size:14px"><span style="color:#888">kg paño:</span> <strong style="color:#0a6ed1;font-size:17px">'+Math.round(l.kgPano).toLocaleString('es-CL')+'</strong></div>'+
+    '</div>';
+  });
+
+  html+='<div class="cte-card" style="background:#354a5f;color:#fff">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-size:13px;opacity:.85">PRODUCCIÓN ESTIMADA TOTAL</div>'+
+          '<div style="font-size:11px;opacity:.7">'+Math.round(totalCajas).toLocaleString('es-CL')+' cajas de 5 kg · '+(totalKg/1000).toFixed(1)+' toneladas</div></div>'+
+        '<div style="font-size:26px;font-weight:800">'+Math.round(totalKg).toLocaleString('es-CL')+'<span style="font-size:14px;font-weight:400"> kg</span></div>'+
+      '</div>'+
+    '</div>'+
+    (can('conteos.revisar')?'<button class="cte-big-btn cte-btn-green" onclick="cteGuardarEstim()">💾 Guardar versión</button>':'')+
+    '<button class="cte-big-btn cte-btn-amber" onclick="cteExportarEstim()">📊 Exportar a Excel</button>';
+  return html;
+}
+
+function cteEstimSet(i, campo, val){
+  if(!_cteEstimActual||!_cteEstimActual.lineas[i]) return;
+  _cteEstimActual.lineas[i][campo] = parseFloat(val)||0;
+  cteRender();
+}
+
+async function cteGuardarEstim(){
+  var e=_cteEstimActual;
+  var inp=document.getElementById('cte-es-nombre');
+  e.nombre = (inp && inp.value ? inp.value.trim() : '') || e.nombre;
+  var totalKg=0;
+  e.lineas.forEach(function(l){ l.kgPano=(l.centros||0)*(l.frutosCentro||0)*(l.kgFruto||0)*(l.plantas||0); totalKg+=l.kgPano; });
+  e.totalKg = totalKg;
+  e.modificado = new Date().toISOString();
+  if(!STATE.cache.estimaciones) STATE.cache.estimaciones=[];
+  var idx = STATE.cache.estimaciones.findIndex(function(x){return x.id===e.id;});
+  if(idx>=0){ STATE.cache.estimaciones[idx]=e; } else { STATE.cache.estimaciones.push(e); }
+  try{ await dbPut('estimaciones', e); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(err){ console.warn('estim local:',err); }
+  _cteVista='estim'; cteRender();
+  toast('Estimación guardada','Versión "'+e.nombre+'" guardada','success');
+}
+
+function cteVerEstimDetalle(id){
+  var e=(STATE.cache.estimaciones||[]).find(function(x){return x.id===id;});
+  if(!e) return;
+  _cteEstimActual = JSON.parse(JSON.stringify(e));
+  _cteVista='estimVer'; cteRender();
+}
+
+function cteEliminarEstim(id){
+  if(!can('conteos.revisar')){ toast('Sin permiso','No puede eliminar estimaciones','error'); return; }
+  confirmDialog('Eliminar estimación','¿Eliminar esta versión de estimación?',async function(){
+    try{ await dbDel('estimaciones', id); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){}
+    cteRender();
+    toast('Estimación eliminada','','success');
+  },'Eliminar',true);
+}
+
+function cteExportarEstim(){
+  var e=_cteEstimActual;
+  if(!e){ return; }
+  if(typeof XLSX==='undefined'){ toast('No disponible','La librería de Excel no está cargada','error'); return; }
+  var filas = e.lineas.map(function(l){
+    return {
+      'Paño': l.panoNombre, 'Variedad': l.variedad, 'N° plantas': l.plantas,
+      'Centros florales/árbol': l.centros, 'Frutos/centro': l.frutosCentro,
+      'Kg/fruto': l.kgFruto, 'Kg paño': Math.round(l.kgPano)
+    };
+  });
+  var totalKg = e.lineas.reduce(function(a,l){return a+(l.kgPano||0);},0);
+  filas.push({});
+  filas.push({'Paño':'TOTAL','Kg paño':Math.round(totalKg)});
+  filas.push({'Paño':'Cajas de 5 kg','Kg paño':Math.round(totalKg/5)});
+  var ws = XLSX.utils.json_to_sheet(filas);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Estimación');
+  XLSX.writeFile(wb, 'Estimacion_'+(e.nombre||'centros').replace(/[^a-z0-9]/gi,'_')+'.xlsx');
+}
+
 function cteAplicarEstimacion(id){
   if(!can('conteos.revisar')){ toast('Sin permiso','Solo usuarios con permiso de revisión pueden aplicar a estimación','error'); return; }
   var s = (STATE.cache.conteos||[]).find(function(x){ return String(x.id)===String(id); });
@@ -7834,6 +8025,10 @@ function cteEliminarSesion(id){
   confirmDialog('Eliminar conteo','¿Eliminar este conteo de "'+(s.panoNombre||'')+'"? '+(s.sincronizado?'':'Aún no se ha subido a la nube.'),async function(){
     await dbDel('conteos', id);
     STATE.cache.conteos = await dbAll('conteos');
+    // Forzar subida INMEDIATA del estado sin el conteo, para que el listener remoto no lo restaure
+    if(typeof SCIFB!=='undefined' && SCIFB.ready && typeof sciFbPush==='function'){
+      try{ await sciFbPush(true); }catch(e){ console.warn('Error sincronizando borrado:', e); }
+    }
     cteRender();
     toast('Conteo eliminado','','success');
   },'Eliminar',true);
