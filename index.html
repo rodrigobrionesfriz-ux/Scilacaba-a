@@ -7397,6 +7397,12 @@ function cteSetVariedad(v){ _cteVarFiltro = v||''; cteRender(); }
 var _cteSesion = null;       // sesión activa de conteo
 var _ctePanoSel = null;      // paño seleccionado
 var _cteVista = 'inicio';    // inicio | sesion | lista
+// ── Mejoras: etapa fenológica + árboles fijos/aleatorios ──
+var CTE_ETAPAS = ['Yema hinchada','Yema algodonosa','Botón blanco','Plena flor','Caída de pétalos','Cuaja','Post-cuaja','Fruto en crecimiento'];
+var CTE_N_FIJOS = 3;       // árboles fijos representativos por paño
+var CTE_N_ALEATORIOS = 5;  // árboles al azar por conteo
+var _cteEtapa = '';          // etapa fenológica de la sesión
+var _cteTipoArbol = null;    // 'fijo' | 'aleatorio' en el árbol actual
 
 // Lee los paños del Cuaderno de Campo (objeto global S)
 function ctePanos(){
@@ -7473,6 +7479,10 @@ function cteRenderInicio(){
           return '<option value="'+p.id+'">'+escapeHtml(p.nombre)+' ('+escapeHtml(p.variedad||'')+')</option>';
         }).join('')+
       '</select></div>'+
+      '<div class="cte-field"><label>Etapa fenológica</label><select id="cte-etapa">'+
+        CTE_ETAPAS.map(function(e){return '<option value="'+escapeHtml(e)+'">'+escapeHtml(e)+'</option>';}).join('')+
+      '</select></div>'+
+      '<div style="font-size:12px;color:#888;margin-bottom:10px">Se cuentan '+CTE_N_FIJOS+' árboles fijos (representativos) + '+CTE_N_ALEATORIOS+' al azar = '+(CTE_N_FIJOS+CTE_N_ALEATORIOS)+' árboles.</div>'+
       '<button class="cte-big-btn cte-btn-green" onclick="cteIniciarSesion()">▶️ Iniciar conteo</button>'+
     '</div>'+
     '<button class="cte-big-btn cte-btn-gray" onclick="cteVerLista()">📋 Ver registros guardados'+(pend>0?(' ('+pend+' por subir)'):'')+'</button>'+
@@ -7489,15 +7499,20 @@ function cteIniciarSesion(){
   var pano = ctePanos().find(function(p){ return String(p.id)===String(panoId); });
   if(!pano){ toast('Error','Paño no encontrado','error'); return; }
   _ctePanoSel = pano;
+  var etapaSel = document.getElementById('cte-etapa');
+  _cteEtapa = etapaSel ? etapaSel.value : '';
+  _cteTipoArbol = null;
   _cteSesion = {
     id: uid(),
     panoId: pano.id,
     panoNombre: pano.nombre,
     variedad: pano.variedad||'',
     especie: 'Cerezo',
+    etapa: _cteEtapa,
+    fijosCodigos: (pano.fijos && pano.fijos.length) ? pano.fijos.slice() : ['F1','F2','F3'],
     fechaInicio: new Date().toISOString(),
     usuario: STATE.user ? (STATE.user.nombre||STATE.user.id) : '',
-    arboles: [],   // {n, centros, lat, lng, fecha}
+    arboles: [],   // {n, centros, tipo, codigo, lat, lng, fecha}
     sincronizado: false
   };
   _cteVista = 'sesion';
@@ -7510,14 +7525,29 @@ function cteRenderSesion(){
   var sumC = s.arboles.reduce(function(a,x){ return a+(parseFloat(x.centros)||0); },0);
   var prom = nArboles ? (sumC/nArboles) : 0;
   var numActual = nArboles + 1;
+  // Conteo de fijos y aleatorios ya registrados
+  var nFijos = s.arboles.filter(function(a){return a.tipo==='fijo';}).length;
+  var nAzar = s.arboles.filter(function(a){return a.tipo==='aleatorio';}).length;
+  // Sugerir tipo: primero completar fijos, luego aleatorios
+  var sugerido;
+  if(nFijos < CTE_N_FIJOS){ sugerido='fijo'; }
+  else if(nAzar < CTE_N_ALEATORIOS){ sugerido='aleatorio'; }
+  else { sugerido='aleatorio'; }
+  var tipoActivo = _cteTipoArbol || sugerido;
+  var codigoActual = tipoActivo==='fijo' ? ((s.fijosCodigos&&s.fijosCodigos[nFijos])||('F'+(nFijos+1))) : ('Azar '+(nAzar+1));
 
   return '<div class="cte-card" style="background:#eef6ff;border-color:#bcd9f5">'+
       '<div style="font-size:13px;color:#0854a0;font-weight:700">PAÑO EN CONTEO</div>'+
       '<div style="font-size:22px;font-weight:800;color:#23303d">'+escapeHtml(s.panoNombre)+'</div>'+
-      '<div style="font-size:14px;color:#666">'+escapeHtml(s.variedad)+' · '+nArboles+' árbol(es) contado(s)</div>'+
+      '<div style="font-size:14px;color:#666">'+escapeHtml(s.variedad)+(s.etapa?(' · '+escapeHtml(s.etapa)):'')+'</div>'+
+      '<div style="font-size:11px;color:#0854a0;margin-top:3px">Fijos: '+nFijos+'/'+CTE_N_FIJOS+' · Al azar: '+nAzar+'/'+CTE_N_ALEATORIOS+' · Total: '+nArboles+'</div>'+
     '</div>'+
     '<div class="cte-card">'+
-      '<div style="text-align:center;font-size:15px;font-weight:700;color:#444">🌳 Árbol N° '+numActual+'</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:12px">'+
+        '<button onclick="cteSetTipo(\'fijo\')" style="flex:1;padding:11px;border-radius:10px;border:2px solid '+(tipoActivo==='fijo'?'#0a6ed1':'#d9d9d9')+';background:'+(tipoActivo==='fijo'?'#f0f7ff':'#fff')+';font-weight:700;font-size:13px;cursor:pointer;color:#0a6ed1">📍 Fijo ('+nFijos+'/'+CTE_N_FIJOS+')</button>'+
+        '<button onclick="cteSetTipo(\'aleatorio\')" style="flex:1;padding:11px;border-radius:10px;border:2px solid '+(tipoActivo==='aleatorio'?'#e9730c':'#d9d9d9')+';background:'+(tipoActivo==='aleatorio'?'#fff7ef':'#fff')+';font-weight:700;font-size:13px;cursor:pointer;color:#e9730c">🎲 Al azar ('+nAzar+'/'+CTE_N_ALEATORIOS+')</button>'+
+      '</div>'+
+      '<div style="text-align:center;font-size:15px;font-weight:700;color:#444">🌳 Árbol N° '+numActual+' · <span style="color:'+(tipoActivo==='fijo'?'#0a6ed1':'#e9730c')+'">'+escapeHtml(codigoActual)+'</span></div>'+
       '<div style="text-align:center;font-size:13px;color:#888;margin-bottom:4px">Centros florales</div>'+
       '<div class="cte-counter">'+
         '<button class="minus" onclick="cteAjustar(-1)">−</button>'+
@@ -7534,13 +7564,15 @@ function cteRenderSesion(){
         '<div style="background:#0a6ed1;color:#fff;padding:4px 12px;border-radius:12px;font-size:14px;font-weight:700">Prom: '+prom.toFixed(1)+'</div>'+
       '</div>'+
       s.arboles.map(function(a,i){
-        return '<div class="cte-arbol-row"><span>Árbol '+a.n+'</span><span style="font-weight:700">'+a.centros+' centros'+(a.lat?' 📍':'')+'</span>'+
+        var et = a.tipo==='fijo'?'#0a6ed1':'#e9730c';
+        return '<div class="cte-arbol-row"><span><span style="color:'+et+';font-weight:700">'+escapeHtml(a.codigo||('Árbol '+a.n))+'</span></span><span style="font-weight:700">'+a.centros+' centros'+(a.lat?' 📍':'')+'</span>'+
           '<button onclick="cteEliminarArbol('+i+')" style="background:none;border:none;color:#c0392b;font-size:18px;cursor:pointer">✕</button></div>';
       }).join('')+
     '</div>':'')+
     '<button class="cte-big-btn cte-btn-primary" onclick="cteFinalizarSesion()">🏁 Finalizar y guardar sesión</button>'+
     '<button class="cte-big-btn cte-btn-gray" onclick="cteCancelarSesion()">Cancelar</button>';
 }
+function cteSetTipo(t){ _cteTipoArbol=t; cteRender(); }
 
 var _cteValActual = 0;
 function cteAjustar(d){
@@ -7557,7 +7589,13 @@ function cteGuardarArbol(){
   var centros = _cteValActual;
   if(centros<=0){ toast('Sin valor','Ingrese los centros florales del árbol','error'); return; }
   var n = _cteSesion.arboles.length + 1;
-  var registro = { n:n, centros:centros, lat:null, lng:null, fecha:new Date().toISOString() };
+  // Determinar tipo y código según lo ya contado
+  var nFijos = _cteSesion.arboles.filter(function(a){return a.tipo==='fijo';}).length;
+  var nAzar = _cteSesion.arboles.filter(function(a){return a.tipo==='aleatorio';}).length;
+  var tipo = _cteTipoArbol;
+  if(!tipo){ tipo = nFijos<CTE_N_FIJOS ? 'fijo' : 'aleatorio'; }
+  var codigo = tipo==='fijo' ? ((_cteSesion.fijosCodigos&&_cteSesion.fijosCodigos[nFijos])||('F'+(nFijos+1))) : ('Azar '+(nAzar+1));
+  var registro = { n:n, centros:centros, tipo:tipo, codigo:codigo, lat:null, lng:null, fecha:new Date().toISOString() };
   var gpsEl = document.getElementById('cte-gps-status');
   if(!navigator.geolocation){
     if(gpsEl) gpsEl.textContent='📍 Este dispositivo no soporta GPS';
@@ -7593,6 +7631,7 @@ function cteGuardarArbol(){
 function _cteFinalizarArbol(registro){
   _cteSesion.arboles.push(registro);
   _cteValActual = 0;
+  _cteTipoArbol = null;
   cteRender();
   if(typeof toast==='function' && registro.lat) toast('Árbol guardado','Árbol N° '+registro.n+' con GPS ✓','success');
   else if(typeof toast==='function' && !registro.lat) {} // ya se avisó el motivo
@@ -8262,7 +8301,7 @@ function ipMostrarMapaGeneral(){
 
   var modal=document.createElement('div');
   modal.id='ip-mapagen-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(20,30,20,.85);z-index:10001;display:flex;flex-direction:column;padding:0';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;flex-direction:column;padding:0';
 
   var header='<div style="background:#354a5f;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'+
     '<div><div style="font-size:18px;font-weight:800">🗺️ Mapa general del huerto</div>'+
@@ -8270,11 +8309,11 @@ function ipMostrarMapaGeneral(){
     '<button onclick="document.getElementById(\'ip-mapagen-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:26px;cursor:pointer;width:44px;height:44px;border-radius:8px">×</button>'+
   '</div>';
 
-  var body='<div style="flex:1;overflow:auto;padding:20px;background:#1c2733">';
+  var body='<div style="flex:1;overflow:auto;padding:20px;background:#f4f6f8">';
   // Leyenda de estados
-  body += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;background:rgba(255,255,255,.08);padding:10px 14px;border-radius:8px">'+
-    Object.keys(IP_ESTADOS).map(function(k){var e=IP_ESTADOS[k];return '<span style="display:inline-flex;align-items:center;gap:5px;color:#fff;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+'</span>';}).join('')+
-    '<span style="color:#bbb;font-size:12px;margin-left:auto">Toque una hilera para ver su ubicación en Google Maps</span>'+
+  body += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;background:#fff;border:1px solid #e3e8ee;padding:10px 14px;border-radius:8px">'+
+    Object.keys(IP_ESTADOS).map(function(k){var e=IP_ESTADOS[k];return '<span style="display:inline-flex;align-items:center;gap:5px;color:#3a4a5a;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+'</span>';}).join('')+
+    '<span style="color:#7a8794;font-size:12px;margin-left:auto">Toque una hilera para ver su ubicación en Google Maps</span>'+
   '</div>';
 
   seleccionados.forEach(function(cu){
@@ -8302,26 +8341,40 @@ function ipRenderCuartelSVG(cuartel, hileras){
   hileras.forEach(function(h, fi){
     var y = margenSup + fi*altoFila + altoFila/2;
     var plantas = h.plantas||[];
-    // Etiqueta de hilera (clicable → Google Maps)
-    var gps = h.gpsInicio || (plantas[0] && plantas[0].lat!=null ? {lat:plantas[0].lat,lng:plantas[0].lng} : null);
-    var onClick = gps ? 'onclick="ipAbrirMapaPunto('+gps.lat+','+gps.lng+')" style="cursor:pointer"' : '';
-    svg += '<text x="6" y="'+(y+5)+'" fill="#a3c4e8" font-size="13" font-weight="700" '+onClick+'>'+escapeHtml(h.codigoBase||('H'+h.hilera))+(gps?' 📍':'')+'</text>';
+    // GPS de inicio (primera planta) y fin (última planta) de la hilera
+    var gpsIni = h.gpsInicio || (plantas[0] && plantas[0].lat!=null ? {lat:plantas[0].lat,lng:plantas[0].lng} : null);
+    var gpsFin = h.gpsFin || (plantas.length && plantas[plantas.length-1].lat!=null ? {lat:plantas[plantas.length-1].lat,lng:plantas[plantas.length-1].lng} : null);
+    var tieneGps = gpsIni || gpsFin;
+    // Etiqueta de hilera (solo informativa, ya no es el enlace)
+    svg += '<text x="6" y="'+(y+5)+'" fill="#1a5288" font-size="13" font-weight="700">'+escapeHtml(h.codigoBase||('H'+h.hilera))+(tieneGps?' 📍':'')+'</text>';
     // Línea base de la hilera
     svg += '<line x1="'+margenIzq+'" y1="'+y+'" x2="'+(margenIzq+plantas.length*anchoPlanta)+'" y2="'+y+'" stroke="#5b9bd5" stroke-width="2"/>';
-    // Plantas como círculos
+    // Plantas como círculos. Solo la primera (inicio) y última (fin) enlazan a Google Maps.
+    var ultIdx = plantas.length - 1;
     plantas.forEach(function(p, pi){
       var cx = margenIzq + pi*anchoPlanta + anchoPlanta/2;
       var e = IP_ESTADOS[p.estado]||IP_ESTADOS.sano;
-      var stroke = p.tipo==='poliniz' ? '#e9730c' : 'rgba(255,255,255,.4)';
+      var esInicio = (pi===0 && gpsIni);
+      var esFin = (pi===ultIdx && gpsFin && ultIdx>0);
+      var stroke = p.tipo==='poliniz' ? '#e9730c' : 'rgba(0,0,0,.25)';
       var sw = p.tipo==='poliniz' ? 2.5 : 1;
-      svg += '<circle cx="'+cx+'" cy="'+y+'" r="8" fill="'+e.color+'" stroke="'+stroke+'" stroke-width="'+sw+'"><title>'+escapeHtml(p.codigo)+' · '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:'')+'</title></circle>';
+      var link='', cursor='', extraTitle='';
+      if(esInicio){ link='onclick="ipAbrirMapaPunto('+gpsIni.lat+','+gpsIni.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🟢 INICIO (toque para Google Maps)'; }
+      else if(esFin){ link='onclick="ipAbrirMapaPunto('+gpsFin.lat+','+gpsFin.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🔴 FIN (toque para Google Maps)'; }
+      var r = (esInicio||esFin) ? 9 : 8;
+      svg += '<circle cx="'+cx+'" cy="'+y+'" r="'+r+'" fill="'+e.color+'" stroke="'+stroke+'" stroke-width="'+sw+'" '+link+' style="'+cursor+'"><title>'+escapeHtml(p.codigo)+' · '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:'')+extraTitle+'</title></circle>';
+      // Marcadores de inicio/fin sobre los círculos extremos
+      if(esInicio){ svg += '<text x="'+cx+'" y="'+(y-12)+'" fill="#1565c0" font-size="9" font-weight="700" text-anchor="middle">▶</text>'; }
+      else if(esFin){ svg += '<text x="'+cx+'" y="'+(y-12)+'" fill="#1565c0" font-size="9" font-weight="700" text-anchor="middle">■</text>'; }
     });
   });
   svg += '</svg>';
 
   return '<div style="margin-bottom:22px">'+
-    '<div style="color:#fff;font-size:16px;font-weight:800;margin-bottom:8px">📍 '+escapeHtml(cuartel)+' <span style="font-size:12px;font-weight:400;opacity:.7">— '+hileras.length+' hileras</span></div>'+
-    '<div style="background:rgba(255,255,255,.06);border-radius:10px;padding:12px;overflow-x:auto">'+svg+'</div>'+
+    '<div style="color:#23303d;font-size:16px;font-weight:800;margin-bottom:8px">📍 '+escapeHtml(cuartel)+' <span style="font-size:12px;font-weight:400;opacity:.7">— '+hileras.length+' hileras</span></div>'+
+    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px;overflow-x:auto">'+svg+
+      '<div style="font-size:11px;color:#7a8794;margin-top:8px">▶ Inicio de hilera · ■ Fin de hilera — toque esos puntos para abrir Google Maps</div>'+
+    '</div>'+
   '</div>';
 }
 
