@@ -8620,11 +8620,8 @@ function ipRenderConteo(){
     '<div style="text-align:center;padding:6px;margin-bottom:10px">'+
       '<span style="color:#6a7889;font-size:13px">Total hilera: </span><strong style="font-size:24px;color:#354a5f" id="ip-total-hilera">'+total+'</strong>'+
     '</div>'+
-    // Botones de acción en fila (compactos)
-    '<div style="display:flex;gap:8px;margin-bottom:9px">'+
-      '<button class="ip-big-btn ip-btn-amber" style="margin-bottom:0;flex:1" onclick="ipMarcarFin()">📍 Marcar fin</button>'+
-      '<button class="ip-big-btn ip-btn-primary" style="margin-bottom:0;flex:1" onclick="ipGuardarHilera()">💾 Guardar</button>'+
-    '</div>'+
+    // Botón de guardar (marca GPS de fin automáticamente al presionarlo)
+    '<button class="ip-big-btn ip-btn-primary" style="margin-bottom:9px" onclick="ipGuardarHilera()">💾 Guardar y marcar fin de hilera</button>'+
     '<button class="ip-big-btn ip-btn-gray" style="padding:10px;font-size:14px" onclick="ipCancelarHilera()">Cancelar</button>';
 }
 
@@ -8667,11 +8664,15 @@ async function ipGuardarHilera(){
     toast('Conteo duplicado','Ya existe un registro de '+escapeHtml(s.cuartel)+' · '+escapeHtml(s.variedad)+' · Hilera '+escapeHtml(s.hilera)+'. No se puede guardar otro igual.','error');
     return;
   }
-  if(!s.gpsFin){
-    confirmDialog('Sin GPS de fin','No marcó el fin de hilera con GPS. ¿Guardar de todos modos? El mapa será menos preciso.',function(){ _ipDoGuardarHilera(); },'Guardar igual',false);
-    return;
-  }
-  _ipDoGuardarHilera();
+  // Marcar AUTOMÁTICAMENTE el GPS de fin (esta es la última planta de la hilera) y luego guardar
+  _ipCapturarGps('fin', function(){
+    // Tras intentar capturar el GPS (haya o no señal), guardar
+    if(!_ipSesion.gpsFin){
+      confirmDialog('Sin GPS de fin','No se pudo capturar la ubicación de la última planta. ¿Guardar de todos modos? El mapa será menos preciso.',function(){ _ipDoGuardarHilera(); },'Guardar igual',false);
+    } else {
+      _ipDoGuardarHilera();
+    }
+  });
 }
 async function _ipDoGuardarHilera(){
   var s=_ipSesion;
@@ -8709,13 +8710,13 @@ async function _ipDoGuardarHilera(){
       _ipVarFija = true;  // la variedad principal es una sola por cuartel: se bloquea
       _ipPresetHilera = sigHilera;
       _ipPresetPorta = datosCuartel.portainjerto||'';
-      _ipPresetPoliniz = datosCuartel.polinizante||'';
+      _ipPresetPoliniz = '';  // EN BLANCO: obliga a seleccionar la variedad polinizante en cada hilera
       _ipVista='inicio';
       ipRender();
-      // Rellenar los campos editables tras render (polinizante y portainjerto se pueden ajustar)
+      // Rellenar los campos editables tras render (el polinizante queda vacío a propósito)
       setTimeout(function(){
         if(document.getElementById('ip-porta')) document.getElementById('ip-porta').value = datosCuartel.portainjerto||'';
-        if(document.getElementById('ip-poliniz')) document.getElementById('ip-poliniz').value = datosCuartel.polinizante||'';
+        if(document.getElementById('ip-poliniz')){ document.getElementById('ip-poliniz').value = ''; document.getElementById('ip-poliniz').focus(); }
         if(document.getElementById('ip-hilera')) document.getElementById('ip-hilera').value = sigHilera;
       },50);
     },
