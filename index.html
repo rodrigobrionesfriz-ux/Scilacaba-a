@@ -3019,7 +3019,28 @@ function renderDashboard(c){
   const totalBod=STATE.cache.warehouses.filter(w=>w.activo).length;
   const totalMov=STATE.cache.movements.filter(m=>!m.anulado).length;
   const valorInv=STATE.cache.stock.reduce((s,x)=>s+(x.cantidad*x.costoPromedio||0),0);
-  const lowStock=STATE.cache.stock.filter(s=>s.cantidad>0&&s.cantidad<=(getProduct(s.codigoInterno)?.stockMinimo||0));
+  // Stock bajo: recorrer PRODUCTOS con stock mínimo definido y comparar su existencia total.
+  // Incluye productos en 0 o sin registro en cache.stock (que antes quedaban fuera).
+  const lowStock=(()=>{
+    const res=[];
+    STATE.cache.products.forEach(p=>{
+      const min=p.stockMinimo||0;
+      if(min<=0) return;                       // sin mínimo definido, no alerta
+      if(p.inventariable===false) return;      // servicios/no inventariables no llevan stock
+      // Existencia total del producto sumando todas las bodegas
+      const regs=STATE.cache.stock.filter(s=>s.codigoInterno===p.codigoInterno);
+      const totalCant=regs.reduce((a,s)=>a+(s.cantidad||0),0);
+      if(totalCant<=min){
+        // Una fila por bodega con stock; si no hay ninguna, una fila "sin existencias"
+        if(regs.length){
+          regs.forEach(s=>res.push({codigoInterno:p.codigoInterno, bodegaId:s.bodegaId, cantidad:s.cantidad||0, _min:min}));
+        } else {
+          res.push({codigoInterno:p.codigoInterno, bodegaId:null, cantidad:0, _min:min});
+        }
+      }
+    });
+    return res;
+  })();
   const lotsExp=STATE.cache.lots.filter(l=>l.cantidad>0&&l.fechaVenc&&new Date(l.fechaVenc)<new Date(Date.now()+30*86400000));
 
   const recents=[...STATE.cache.movements].filter(m=>!m.anulado).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).slice(0,8);
@@ -3060,7 +3081,7 @@ function renderDashboard(c){
       </div>
       <div class="stat-card amber">
         <div class="stat-label">Stock bajo</div>
-        <div class="stat-value">${lowStock.length}</div>
+        <div class="stat-value">${new Set(lowStock.map(s=>s.codigoInterno)).size}</div>
         <div class="stat-sub">productos bajo mínimo</div>
       </div>
       <div class="stat-card red">
@@ -3116,7 +3137,8 @@ function renderDashboard(c){
           <thead><tr><th>Producto</th><th>Bodega</th><th class="num">Stock</th><th class="num">Mínimo</th></tr></thead>
           <tbody>${lowStock.slice(0,8).map(s=>{
             const p=getProduct(s.codigoInterno);const b=getWarehouse(s.bodegaId);
-            return `<tr><td><strong>${s.codigoInterno}</strong> · ${escapeHtml(p?p.descripcion:'')}</td><td>${escapeHtml(b?b.nombre:'')}</td><td class="num">${fmtNum(s.cantidad,2)}</td><td class="num">${fmtNum(p?.stockMinimo||0,2)}</td></tr>`;
+            const enCero=(s.cantidad||0)<=0;
+            return `<tr${enCero?' style="background:#fdeaea"':''}><td><strong>${s.codigoInterno}</strong> · ${escapeHtml(p?p.descripcion:'')}</td><td>${s.bodegaId?escapeHtml(b?b.nombre:s.bodegaId):'<span style="color:#c0392b">Sin existencias</span>'}</td><td class="num"${enCero?' style="color:#c0392b;font-weight:700"':''}>${fmtNum(s.cantidad,2)}</td><td class="num">${fmtNum(s._min||p?.stockMinimo||0,2)}</td></tr>`;
           }).join('')}</tbody>
         </table></div>
       </div>`:''}
