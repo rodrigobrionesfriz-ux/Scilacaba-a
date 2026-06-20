@@ -8531,33 +8531,52 @@ function ipGenerarPlantas(s){
 function ipRenderResumenPanos(){
   var regs = STATE.cache.invplantas||[];
   if(!regs.length) return '';
-  // Agrupar conteos reales por cuartel+variedad
+  // Agrupar conteos reales por cuartel+variedad principal
   var grupos = {};
   regs.forEach(function(r){
     var key = (r.cuartel||'')+'||'+(r.variedad||'');
-    if(!grupos[key]) grupos[key] = { cuartel:r.cuartel||'', variedad:r.variedad||'', total:0, hileras:0 };
-    grupos[key].total += (r.total || (r.countPrincipal||0)+(r.countPoliniz||0));
+    if(!grupos[key]) grupos[key] = { cuartel:r.cuartel||'', variedad:r.variedad||'', total:0, hileras:0, principal:0, poliniz:{} };
+    var cp = r.countPrincipal||0, cz = r.countPoliniz||0;
+    grupos[key].total += (r.total || cp+cz);
+    grupos[key].principal += cp;
+    // Acumular polinizantes por nombre de variedad
+    var nomPol = (r.polinizante||'').trim() || 'Polinizante';
+    if(cz>0){ grupos[key].poliniz[nomPol] = (grupos[key].poliniz[nomPol]||0) + cz; }
     grupos[key].hileras += 1;
   });
   var keys = Object.keys(grupos);
   if(!keys.length) return '';
   var html = '<div class="ip-card" style="background:#f0f7ff;border-color:#bcd9f5">'+
     '<div style="font-weight:800;color:#0854a0;margin-bottom:4px">📊 Resumen de plantas contadas</div>'+
-    '<div style="font-size:12px;color:#5a7da0;margin-bottom:12px">Compara el conteo real con el N° de plantas registrado en cada paño. Puedes actualizar el paño con el valor contado.</div>';
+    '<div style="font-size:12px;color:#5a7da0;margin-bottom:12px">Detalle por variedad (principal y polinizantes). Puedes actualizar el N° de plantas del paño con el valor contado.</div>';
   html += keys.map(function(k){
     var g = grupos[k];
-    // Buscar el paño correspondiente en el Cuaderno (mismo nombre de cuartel + variedad)
     var pano = ipBuscarPano(g.cuartel, g.variedad);
     var registrado = pano ? (parseInt(pano.plantas)|| (pano.densidad&&pano.hectareas?Math.round(pano.densidad*pano.hectareas):0)) : null;
     var dif = (registrado!=null) ? (g.total - registrado) : null;
     var difTxt = '';
     if(dif!=null && dif!==0){ difTxt = '<span style="color:'+(dif>0?'#0a6e2e':'#c0392b')+';font-weight:700">'+(dif>0?'+':'')+dif+'</span>'; }
+    // Desglose: principal con su variedad + cada polinizante con su nombre
+    var desglose = '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #dbe7f3">';
+    desglose += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">'+
+      '<span style="color:#1a7e3e;font-weight:700">🌳 '+escapeHtml(g.variedad||'Principal')+' <span style="font-size:11px;color:#888;font-weight:400">(principal)</span></span>'+
+      '<strong style="color:#1a7e3e">'+g.principal.toLocaleString('es-CL')+'</strong></div>';
+    var polKeys = Object.keys(g.poliniz);
+    if(polKeys.length){
+      polKeys.forEach(function(nom){
+        desglose += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">'+
+          '<span style="color:#e9730c;font-weight:700">🐝 '+escapeHtml(nom)+' <span style="font-size:11px;color:#888;font-weight:400">(polinizante)</span></span>'+
+          '<strong style="color:#e9730c">'+g.poliniz[nom].toLocaleString('es-CL')+'</strong></div>';
+      });
+    }
+    desglose += '</div>';
     return '<div style="background:#fff;border:1px solid #dbe7f3;border-radius:10px;padding:11px 13px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:start">'+
         '<div><div style="font-weight:800;color:#23303d">'+escapeHtml(g.cuartel)+' · '+escapeHtml(g.variedad)+'</div>'+
           '<div style="font-size:12px;color:#888">'+g.hileras+' hilera(s) contada(s)</div></div>'+
-        '<div style="text-align:right"><div style="font-size:20px;font-weight:800;color:#0854a0">'+g.total.toLocaleString('es-CL')+'</div><div style="font-size:11px;color:#888">plantas contadas</div></div>'+
+        '<div style="text-align:right"><div style="font-size:20px;font-weight:800;color:#0854a0">'+g.total.toLocaleString('es-CL')+'</div><div style="font-size:11px;color:#888">total plantas</div></div>'+
       '</div>'+
+      desglose+
       (registrado!=null ?
         '<div style="font-size:12px;color:#666;margin-top:6px;padding-top:6px;border-top:1px dashed #dbe7f3">Registrado en el paño: <strong>'+registrado.toLocaleString('es-CL')+'</strong>'+(difTxt?(' · diferencia: '+difTxt):' · <span style="color:#0a6e2e">coincide ✓</span>')+'</div>'
         : '<div style="font-size:12px;color:#c0392b;margin-top:6px">⚠ No se encontró un paño con este cuartel y variedad en el Cuaderno</div>')+
