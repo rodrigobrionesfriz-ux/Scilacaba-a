@@ -3311,6 +3311,7 @@ function openProductForm(codigo=null,opts={}){
         <button type="button" class="pf-tab active" data-tab="generales" onclick="pfTab('generales')">📋 Datos Generales</button>
         <button type="button" class="pf-tab" data-tab="clasif" onclick="pfTab('clasif')">🗂️ Clasificación</button>
         <button type="button" class="pf-tab" data-tab="inventario" onclick="pfTab('inventario')">📦 Inventario</button>
+        <button type="button" class="pf-tab" data-tab="impuestos" onclick="pfTab('impuestos')">💲 Impuestos</button>
       </div>
       <div class="pf-content">
         <div class="pf-pane active" id="pf-pane-generales">
@@ -3349,6 +3350,40 @@ function openProductForm(codigo=null,opts={}){
               <div class="hint">Cuando es Sí, las entradas pedirán lote y fecha de vencimiento.</div>
             </div>
             <div class="form-field"><label>Stock mínimo (opcional)</label><input type="number" step="0.01" id="fpMin" value="${p?.stockMinimo||0}"><div class="hint">Para alertas de bajo stock</div></div>
+          </div>
+        </div>
+        <div class="pf-pane" id="pf-pane-impuestos">
+          <div class="pf-section-title">Impuestos aplicables</div>
+          <div class="form-grid">
+            <div class="form-field span-2"><label>IVA</label>
+              <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+                <span class="switch"><input type="checkbox" id="fpIVA" ${(p?(p.aplicaIVA!==false):true)?'checked':''} onchange="document.getElementById('fpIVALbl').textContent=this.checked?'Sí — afecto a IVA (19%)':'No — exento de IVA'"><span class="switch-slider"></span></span>
+                <span id="fpIVALbl">${(p?(p.aplicaIVA!==false):true)?'Sí — afecto a IVA (19%)':'No — exento de IVA'}</span>
+              </label>
+              <div class="hint">Por defecto los productos son afectos a IVA. Marque "No" solo para productos exentos.</div>
+            </div>
+            <div class="form-field"><label>Impuesto específico combustibles</label>
+              <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+                <span class="switch"><input type="checkbox" id="fpIEC" ${p?.aplicaIEC?'checked':''} onchange="document.getElementById('fpIECDet').style.display=this.checked?'block':'none'"><span class="switch-slider"></span></span>
+                <span>Aplica impuesto específico</span>
+              </label>
+              <div id="fpIECDet" style="display:${p?.aplicaIEC?'block':'none'};margin-top:8px">
+                <label style="font-size:11px;color:var(--mu);font-weight:700">UTM/m³ (tasa)</label>
+                <input type="number" step="0.0001" id="fpIECTasa" value="${p?.iecTasa||0}" placeholder="ej: 1.5" style="width:100%">
+              </div>
+              <div class="hint">Para diésel, gasolina y otros combustibles gravados.</div>
+            </div>
+            <div class="form-field"><label>ILA (bebidas y licores)</label>
+              <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+                <span class="switch"><input type="checkbox" id="fpILA" ${p?.aplicaILA?'checked':''} onchange="document.getElementById('fpILADet').style.display=this.checked?'block':'none'"><span class="switch-slider"></span></span>
+                <span>Aplica ILA</span>
+              </label>
+              <div id="fpILADet" style="display:${p?.aplicaILA?'block':'none'};margin-top:8px">
+                <label style="font-size:11px;color:var(--mu);font-weight:700">Tasa ILA (%)</label>
+                <input type="number" step="0.1" id="fpILATasa" value="${p?.ilaTasa||0}" placeholder="ej: 20.5" style="width:100%">
+              </div>
+              <div class="hint">Impuesto a bebidas alcohólicas, analcohólicas y similares.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -3398,6 +3433,12 @@ async function saveProduct(codigo,opts){
   const atrib=document.getElementById('fpAtrib').checked;
   const inventariable=document.getElementById('fpInv').checked;
   const stockMin=Number(document.getElementById('fpMin').value)||0;
+  // Impuestos
+  const aplicaIVA=document.getElementById('fpIVA')?document.getElementById('fpIVA').checked:true;
+  const aplicaIEC=document.getElementById('fpIEC')?document.getElementById('fpIEC').checked:false;
+  const iecTasa=aplicaIEC?(Number(document.getElementById('fpIECTasa').value)||0):0;
+  const aplicaILA=document.getElementById('fpILA')?document.getElementById('fpILA').checked:false;
+  const ilaTasa=aplicaILA?(Number(document.getElementById('fpILATasa').value)||0):0;
 
   // Validar EAN duplicado al crear (si tiene EAN)
   if(!codigo && ean){
@@ -3413,6 +3454,7 @@ async function saveProduct(codigo,opts){
       toast('No se puede cambiar','Ya existen movimientos con este producto. No se puede modificar el manejo de atributos.','error');return;
     }
     p.codigoEAN=ean;p.descripcion=desc;p.unidadMedida=um;p.tipoProducto=tipo;p.grupo=grupo;p.subGrupo=subGrupo;p.manejaAtributos=atrib;p.inventariable=inventariable;p.stockMinimo=stockMin;
+    p.aplicaIVA=aplicaIVA;p.aplicaIEC=aplicaIEC;p.iecTasa=iecTasa;p.aplicaILA=aplicaILA;p.ilaTasa=ilaTasa;
     p.modificado=new Date().toISOString();
     await dbPut('products',p);
     await audit('producto.editar','Edición de producto',codigo);
@@ -3422,6 +3464,7 @@ async function saveProduct(codigo,opts){
     const np={
       codigoInterno:cod,codigoEAN:ean,descripcion:desc,unidadMedida:um,
       tipoProducto:tipo,grupo:grupo,subGrupo:subGrupo,manejaAtributos:atrib,inventariable:inventariable,
+      aplicaIVA:aplicaIVA,aplicaIEC:aplicaIEC,iecTasa:iecTasa,aplicaILA:aplicaILA,ilaTasa:ilaTasa,
       stockMinimo:stockMin,activo:true,creado:new Date().toISOString()
     };
     await dbPut('products',np);
@@ -6409,6 +6452,21 @@ function lookupProveedor(){
     }
   }
 }
+// Calcula el costo unitario REAL de una línea de entrada considerando impuestos no recuperables.
+// IVA: siempre recuperable (no es costo). ILA: 100% costo. Específico: solo la parte NO recuperada es costo.
+// montoEspecifico e montoILA son los montos TOTALES de la línea (desde la factura).
+function calcCostoConImpuestos(neto, cantidad, montoEspecifico, montoILA){
+  cantidad = Number(cantidad)||0;
+  if(cantidad<=0) return Number(neto)||0;
+  var emp = (STATE.cache.config && STATE.cache.config.empresa) || {};
+  var recupPct = (emp.recupIEC!=null ? emp.recupIEC : 100)/100;   // % recuperación específico
+  var espNoRecup = (Number(montoEspecifico)||0) * (1 - recupPct); // parte del específico que es costo
+  var ilaCosto = (Number(montoILA)||0);                            // ILA 100% costo
+  // Costo unitario = neto unitario + (no recuperado del específico + ILA) repartido por unidad
+  var netoUnit = Number(neto)||0;
+  return netoUnit + (espNoRecup + ilaCosto)/cantidad;
+}
+
 function renderMovDetalle(){
   const w=document.getElementById('mvDetalleWrap');
   const isEnt=movDraft.tipo==='ENT';
@@ -6451,7 +6509,18 @@ function renderMovDetalle(){
             :`<span class="mono" style="font-size:11px">${l.fechaVenc?fmtDateOnly(l.fechaVenc):'-'}</span>`)
           :'<span style="color:var(--mu);font-size:11px">N/A</span>'}</td>
       <td class="col-action"><button class="btn-row-del" onclick="removeMovLine(${i})">×</button></td>
-    </tr>`;
+    </tr>${(isEnt && p && (p.aplicaIEC || p.aplicaILA))?`
+    <tr class="mv-imp-row" style="background:#fafbfc">
+      <td></td>
+      <td colspan="8" style="padding:8px 10px">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px">
+          <span style="color:#0854a0;font-weight:700">💲 Impuestos de factura:</span>
+          ${p.aplicaIEC?`<label style="display:flex;align-items:center;gap:5px">Específico $<input type="number" step="0.01" class="num" style="width:110px" value="${l.montoEspecifico||''}" placeholder="monto total" oninput="updateMovLine(${i},'montoEspecifico',this.value);recalcMovTotals()"></label>`:''}
+          ${p.aplicaILA?`<label style="display:flex;align-items:center;gap:5px">ILA $<input type="number" step="0.01" class="num" style="width:100px" value="${l.montoILA||''}" placeholder="monto total" oninput="updateMovLine(${i},'montoILA',this.value);recalcMovTotals()"></label>`:''}
+          <span style="color:var(--mu)">Costo real unit.: <strong style="color:#0a6e2e" id="mvCostoReal-${i}">${fmtMon(calcCostoConImpuestos(costo, cant, l.montoEspecifico, l.montoILA))}</strong></span>
+        </div>
+      </td>
+    </tr>`:''}`;
   });
   html+=`</tbody>
     <tfoot><tr style="background:var(--gp);font-weight:600">
@@ -6465,9 +6534,15 @@ function renderMovDetalle(){
 }
 function recalcMovTotals(){
   let total=0;
+  const isEnt=movDraft.tipo==='ENT';
   movDraft.lineas.forEach((l,i)=>{
     const t=(Number(l.cantidad)||0)*(Number(l.costo)||0);total+=t;
     const el=document.getElementById('mvLineTot-'+i);if(el)el.textContent=fmtMon(t);
+    // Refrescar costo real con impuestos no recuperables (si la línea lo muestra)
+    const cr=document.getElementById('mvCostoReal-'+i);
+    if(cr&&isEnt){
+      cr.textContent=fmtMon(calcCostoConImpuestos(l.costo, l.cantidad, l.montoEspecifico, l.montoILA));
+    }
   });
   const gt=document.getElementById('mvGranTotal');if(gt)gt.textContent=fmtMon(total);
 }
@@ -6702,12 +6777,25 @@ async function saveMovimiento(){
 
   showLoading('Guardando movimiento...');
   try{
-    const detalles=lineas.map(l=>({
-      codigoInterno:l.codigoInterno,
-      cantidad:Number(l.cantidad),
-      costo:Number(l.costo),
-      lote:l.lote||null,loteId:l.loteId||null,fechaVenc:l.fechaVenc||null
-    }));
+    const esEntrada = movDraft.tipo==='ENT';
+    const detalles=lineas.map(l=>{
+      const p = l.codigoInterno?getProduct(l.codigoInterno):null;
+      const netoUnit = Number(l.costo)||0;
+      // En entradas, el costo que entra al stock incluye los impuestos NO recuperables
+      let costoFinal = netoUnit;
+      if(esEntrada && p && (p.aplicaIEC || p.aplicaILA)){
+        costoFinal = calcCostoConImpuestos(netoUnit, l.cantidad, l.montoEspecifico, l.montoILA);
+      }
+      return {
+        codigoInterno:l.codigoInterno,
+        cantidad:Number(l.cantidad),
+        costo:costoFinal,
+        costoNeto:netoUnit,
+        montoEspecifico:Number(l.montoEspecifico)||0,
+        montoILA:Number(l.montoILA)||0,
+        lote:l.lote||null,loteId:l.loteId||null,fechaVenc:l.fechaVenc||null
+      };
+    });
 
     if(movDraft.editId){
       // Edición: persistir cambios y recalcular stock desde cero
@@ -7179,6 +7267,14 @@ function openEmpresaForm(){
             <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--mu);margin-bottom:4px">Correo electrónico</label>
             <input type="email" id="empresaCorreo" value="${escapeHtml(emp.correo||'')}" placeholder="contacto@empresa.cl" style="width:100%;padding:9px 12px;border:1px solid var(--bo);border-radius:5px;font-size:13px;box-sizing:border-box">
           </div>
+          <div style="grid-column:span 2;border-top:1px solid var(--bo);margin-top:6px;padding-top:12px">
+            <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--mu);margin-bottom:4px">⛽ Recuperación del impuesto específico (%)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" step="0.01" min="0" max="100" id="empresaRecupIEC" value="${emp.recupIEC!=null?emp.recupIEC:100}" style="width:120px;padding:9px 12px;border:1px solid var(--bo);border-radius:5px;font-size:13px;box-sizing:border-box">
+              <span style="font-weight:700;color:var(--mu)">%</span>
+            </div>
+            <div style="font-size:11px;color:var(--mu);margin-top:4px">% del impuesto específico (diésel, etc.) que la empresa puede recuperar según su giro. La parte NO recuperada se considera costo en los consumos por centro de costo. Ej: forestal/agrícola normalmente 100%, pero por circular SII puede ser temporalmente menor (ej. 31% hasta 31-oct).</div>
+          </div>
         </div>
         <div id="empresaFormErr" style="display:none;background:#fee;color:#8B1A1A;padding:8px 12px;border-radius:5px;margin-top:10px;font-size:12px"></div>
       </div>
@@ -7264,6 +7360,10 @@ async function saveEmpresaForm(){
   const giro = document.getElementById('empresaGiro').value.trim();
   const telefono = document.getElementById('empresaTelefono').value.trim();
   const correo = document.getElementById('empresaCorreo').value.trim();
+  const recupIECEl = document.getElementById('empresaRecupIEC');
+  let recupIEC = recupIECEl ? (parseFloat(recupIECEl.value)) : 100;
+  if(isNaN(recupIEC)) recupIEC = 100;
+  recupIEC = Math.max(0, Math.min(100, recupIEC));  // acotar 0-100
   const logo = modal._newLogo || '';
 
   // Validación mínima: si hay correo, debe ser válido
@@ -7272,7 +7372,7 @@ async function saveEmpresaForm(){
   }
 
   try {
-    const empresaData = {key:'empresa', nombre, rut, direccion, giro, telefono, correo, logo};
+    const empresaData = {key:'empresa', nombre, rut, direccion, giro, telefono, correo, logo, recupIEC};
     await dbPut('config', empresaData);
     // Actualizar cache
     if(STATE.cache.config){ STATE.cache.config.empresa = empresaData; }
