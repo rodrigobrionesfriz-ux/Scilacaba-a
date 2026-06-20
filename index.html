@@ -372,6 +372,23 @@ table.data .actions{white-space:nowrap;text-align:right}
 
 /* Form */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px}
+/* Ficha de producto con pestañas laterales (estilo organizado) */
+.pf-ficha{display:flex;gap:0;border:1px solid var(--bo);border-radius:10px;overflow:hidden;min-height:300px}
+.pf-tabs{display:flex;flex-direction:column;background:var(--gs);border-right:1px solid var(--bo);min-width:190px;padding:8px}
+.pf-tab{display:flex;align-items:center;gap:8px;text-align:left;background:none;border:none;color:var(--mu);font-size:13px;font-weight:600;padding:11px 13px;border-radius:7px;cursor:pointer;margin-bottom:3px;transition:.12s}
+.pf-tab:hover{background:rgba(0,0,0,.04);color:var(--tx)}
+.pf-tab.active{background:var(--gd);color:#fff}
+.pf-content{flex:1;padding:18px 20px;min-width:0}
+.pf-pane{display:none}
+.pf-pane.active{display:block;animation:pfFade .15s ease}
+@keyframes pfFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.pf-section-title{font-size:13px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--bo)}
+@media(max-width:680px){
+  .pf-ficha{flex-direction:column}
+  .pf-tabs{flex-direction:row;overflow-x:auto;min-width:0;border-right:none;border-bottom:1px solid var(--bo)}
+  .pf-tab{white-space:nowrap;margin-bottom:0;margin-right:3px}
+  .form-grid{grid-template-columns:1fr}
+}
 .form-grid .span-2{grid-column:span 2}
 .form-field{display:flex;flex-direction:column;gap:5px}
 .form-field label{
@@ -1425,6 +1442,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
           <button class="cc-ytab" id="cc-py26" onclick="setPanoY('2026',this)">🌱 Plantación 2026</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="cc-btn cc-btn-s cc-btn-sm" onclick="configProdEstado()">⚙️ % Producción por estado</button>
           <button class="cc-btn cc-btn-s cc-btn-sm" onclick="exportarPanosExcel()">📊 Exportar a Excel</button>
           <button class="cc-btn cc-btn-g cc-btn-sm" onclick="addPanoApp()">＋ Nuevo paño</button>
         </div>
@@ -3184,6 +3202,12 @@ function renderProductosTable(){
     }).join('')}</tbody></table>`;
 }
 
+function pfTab(tab){
+  document.querySelectorAll('.pf-tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
+  document.querySelectorAll('.pf-pane').forEach(function(pn){ pn.classList.remove('active'); });
+  var pane=document.getElementById('pf-pane-'+tab);
+  if(pane) pane.classList.add('active');
+}
 function openProductForm(codigo=null,opts={}){
   const p=codigo?getProduct(codigo):null;
   const grupos=[...new Set(STATE.cache.groups.map(g=>g.nombre))];
@@ -3194,29 +3218,52 @@ function openProductForm(codigo=null,opts={}){
   const preDesc=opts.prefilledDesc||'';
   showModal(p?`Editar producto · ${p.codigoInterno}`:(opts.fromMov?'Crear producto desde entrada':'Nuevo producto'),
     `${opts.fromMov?'<div class="alert alert-info" style="margin-bottom:14px;font-size:13px">📦 Estás creando un nuevo producto sin perder los datos de la entrada en curso. Al guardar, volverás al formulario con el producto ya seleccionado.</div>':''}
-    <div class="form-grid">
-      <div class="form-field required"><label>Código Interno</label><input type="text" id="fpCod" value="${p?p.codigoInterno:'(automático)'}" readonly><div class="hint">${p?'No editable':'Se asigna automáticamente al guardar'}</div></div>
-      <div class="form-field"><label>Código EAN</label><input type="text" id="fpEAN" value="${escapeHtml(p?.codigoEAN||preEAN)}" placeholder="código de barras"></div>
-      <div class="form-field span-2 required"><label>Descripción</label><input type="text" id="fpDesc" value="${escapeHtml(p?.descripcion||preDesc)}" placeholder="Nombre del producto"></div>
-      <div class="form-field required"><label>Unidad de Medida</label><select id="fpUM">${ums.map(u=>`<option value="${u}" ${p?.unidadMedida===u?'selected':''}>${u}</option>`).join('')}</select></div>
-      <div class="form-field required"><label>Tipo Producto</label><select id="fpTipo"><option value="">- Seleccionar -</option>${tipos.map(t=>`<option value="${escapeHtml(t)}" ${p?.tipoProducto===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}${p?.tipoProducto&&!tipos.includes(p.tipoProducto)?`<option value="${escapeHtml(p.tipoProducto)}" selected>${escapeHtml(p.tipoProducto)} (inactivo)</option>`:''}</select></div>
-      <div class="form-field required"><label>Grupo</label><select id="fpGrupo" onchange="updateSubGrupos()"><option value="">- Seleccionar -</option>${grupos.map(g=>`<option value="${escapeHtml(g)}" ${p?.grupo===g?'selected':''}>${escapeHtml(g)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Sub-Grupo</label><select id="fpSubGrupo"></select></div>
-      <div class="form-field"><label>Maneja atributos (Lote/Vencimiento)</label>
-        <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
-          <span class="switch"><input type="checkbox" id="fpAtrib" ${p?.manejaAtributos?'checked':''}><span class="switch-slider"></span></span>
-          <span id="fpAtribLbl">${p?.manejaAtributos?'Sí — lote y fecha de vencimiento':'No'}</span>
-        </label>
-        <div class="hint">Cuando es Sí, las entradas pedirán lote y fecha de vencimiento.</div>
+    <div class="pf-ficha">
+      <div class="pf-tabs">
+        <button type="button" class="pf-tab active" data-tab="generales" onclick="pfTab('generales')">📋 Datos Generales</button>
+        <button type="button" class="pf-tab" data-tab="clasif" onclick="pfTab('clasif')">🗂️ Clasificación</button>
+        <button type="button" class="pf-tab" data-tab="inventario" onclick="pfTab('inventario')">📦 Inventario</button>
       </div>
-      <div class="form-field"><label>Inventariable</label>
-        <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
-          <span class="switch"><input type="checkbox" id="fpInv" ${(p?(p.inventariable!==false):true)?'checked':''}><span class="switch-slider"></span></span>
-          <span id="fpInvLbl">${(p?(p.inventariable!==false):true)?'Sí — lleva control de stock':'No — no lleva stock'}</span>
-        </label>
-        <div class="hint">Marque "No" para servicios o consumibles que no controlan inventario.</div>
+      <div class="pf-content">
+        <div class="pf-pane active" id="pf-pane-generales">
+          <div class="pf-section-title">Identificación del producto</div>
+          <div class="form-grid">
+            <div class="form-field required"><label>Código Interno</label><input type="text" id="fpCod" value="${p?p.codigoInterno:'(automático)'}" readonly><div class="hint">${p?'No editable':'Se asigna automáticamente al guardar'}</div></div>
+            <div class="form-field"><label>Código EAN</label><input type="text" id="fpEAN" value="${escapeHtml(p?.codigoEAN||preEAN)}" placeholder="código de barras"></div>
+            <div class="form-field span-2 required"><label>Descripción</label><input type="text" id="fpDesc" value="${escapeHtml(p?.descripcion||preDesc)}" placeholder="Nombre del producto"></div>
+            <div class="form-field required"><label>Unidad de Medida</label><select id="fpUM">${ums.map(u=>`<option value="${u}" ${p?.unidadMedida===u?'selected':''}>${u}</option>`).join('')}</select></div>
+            <div class="form-field required"><label>Tipo Producto</label><select id="fpTipo"><option value="">- Seleccionar -</option>${tipos.map(t=>`<option value="${escapeHtml(t)}" ${p?.tipoProducto===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}${p?.tipoProducto&&!tipos.includes(p.tipoProducto)?`<option value="${escapeHtml(p.tipoProducto)}" selected>${escapeHtml(p.tipoProducto)} (inactivo)</option>`:''}</select></div>
+          </div>
+        </div>
+        <div class="pf-pane" id="pf-pane-clasif">
+          <div class="pf-section-title">Clasificación y agrupación</div>
+          <div class="form-grid">
+            <div class="form-field required"><label>Grupo</label><select id="fpGrupo" onchange="updateSubGrupos()"><option value="">- Seleccionar -</option>${grupos.map(g=>`<option value="${escapeHtml(g)}" ${p?.grupo===g?'selected':''}>${escapeHtml(g)}</option>`).join('')}</select></div>
+            <div class="form-field"><label>Sub-Grupo</label><select id="fpSubGrupo"></select></div>
+          </div>
+          <div class="hint" style="margin-top:6px">El grupo y sub-grupo se usan para organizar y filtrar el catálogo de productos.</div>
+        </div>
+        <div class="pf-pane" id="pf-pane-inventario">
+          <div class="pf-section-title">Control de inventario</div>
+          <div class="form-grid">
+            <div class="form-field"><label>Inventariable</label>
+              <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+                <span class="switch"><input type="checkbox" id="fpInv" ${(p?(p.inventariable!==false):true)?'checked':''}><span class="switch-slider"></span></span>
+                <span id="fpInvLbl">${(p?(p.inventariable!==false):true)?'Sí — lleva control de stock':'No — no lleva stock'}</span>
+              </label>
+              <div class="hint">Marque "No" para servicios o consumibles que no controlan inventario.</div>
+            </div>
+            <div class="form-field"><label>Maneja atributos (Lote/Vencimiento)</label>
+              <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
+                <span class="switch"><input type="checkbox" id="fpAtrib" ${p?.manejaAtributos?'checked':''}><span class="switch-slider"></span></span>
+                <span id="fpAtribLbl">${p?.manejaAtributos?'Sí — lote y fecha de vencimiento':'No'}</span>
+              </label>
+              <div class="hint">Cuando es Sí, las entradas pedirán lote y fecha de vencimiento.</div>
+            </div>
+            <div class="form-field"><label>Stock mínimo (opcional)</label><input type="number" step="0.01" id="fpMin" value="${p?.stockMinimo||0}"><div class="hint">Para alertas de bajo stock</div></div>
+          </div>
+        </div>
       </div>
-      <div class="form-field"><label>Stock mínimo (opcional)</label><input type="number" step="0.01" id="fpMin" value="${p?.stockMinimo||0}"><div class="hint">Para alertas de bajo stock</div></div>
     </div>`,
     `<button class="btn btn-secondary" id="pfCancel">${opts.fromMov?'← Volver a la entrada':'Cancelar'}</button>
      <button class="btn btn-primary" id="pfSave">${p?'Guardar cambios':(opts.fromMov?'Crear y volver':'Crear producto')}</button>`,
@@ -7874,14 +7921,49 @@ function cteRenderEstim(){
   return html;
 }
 
+// Calcula el N° de plantas "productivas equivalentes" de un paño, ponderando por estado
+// usando el inventario de huerto y los % configurados en el Cuaderno.
+// Devuelve {equiv, total, desglose} o null si no hay inventario para ese paño.
+function ctePlantasProductivas(pano){
+  var regs = (STATE.cache.invplantas)||[];
+  function norm(x){ return (x||'').toString().trim().toLowerCase(); }
+  // Hileras del inventario que corresponden a este paño (mismo cuartel-nombre + variedad)
+  var hileras = regs.filter(function(r){
+    return norm(r.cuartel)===norm(pano.nombre) && norm(r.variedad)===norm(pano.variedad);
+  });
+  if(!hileras.length) return null;
+  var pct = getProdPorEstado(pano);
+  var conteo = { sano:0, debil:0, muerto:0, replante:0, falta:0 };
+  var total = 0;
+  hileras.forEach(function(h){
+    (h.plantas||[]).forEach(function(p){
+      var est = p.estado || 'sano';
+      if(conteo[est]===undefined) conteo[est]=0;
+      conteo[est]++; total++;
+    });
+  });
+  if(!total) return null;
+  var equiv = 0;
+  Object.keys(conteo).forEach(function(est){
+    var factor = (pct[est]!=null ? pct[est] : 100)/100;
+    equiv += conteo[est]*factor;
+  });
+  return { equiv: Math.round(equiv*10)/10, total: total, desglose: conteo };
+}
+
 // Crear nueva estimación: precarga centros desde el promedio de conteos de cada paño
 function cteNuevaEstim(){
   var panos = ctePanos();
   var lineas = panos.map(function(p){
     var centros = ctePromedioCentrosPano(p.id);
+    var prod = ctePlantasProductivas(p);  // equivalente ponderado por estado (si hay inventario)
+    var plantasBase = p.plantas || p.nPlantas || 0;
     return {
       panoId:p.id, panoNombre:p.nombre, variedad:p.variedad||'',
-      plantas: p.plantas || p.nPlantas || 0,
+      plantas: plantasBase,
+      plantasEquiv: prod ? prod.equiv : null,     // plantas productivas equivalentes
+      plantasInvTotal: prod ? prod.total : null,  // total contado en inventario de huerto
+      usarEquiv: prod ? true : false,             // si hay inventario, usar el equivalente
       centros: centros!=null ? Number(centros.toFixed(1)) : 0,
       tieneCont: centros!=null,
       frutosCentro: 2,
@@ -7903,7 +7985,9 @@ function cteRenderEstimVer(){
   var e=_cteEstimActual;
   var totalKg=0, totalCajas=0;
   e.lineas.forEach(function(l){
-    l.kgPano = (l.centros||0)*(l.frutosCentro||0)*(l.kgFruto||0)*(l.plantas||0);
+    var nPlantas = (l.usarEquiv && l.plantasEquiv!=null) ? l.plantasEquiv : (l.plantas||0);
+    l.plantasUsadas = nPlantas;
+    l.kgPano = (l.centros||0)*(l.frutosCentro||0)*(l.kgFruto||0)*nPlantas;
     totalKg += l.kgPano;
   });
   totalCajas = totalKg/5;
@@ -7915,14 +7999,24 @@ function cteRenderEstimVer(){
     '</div>';
 
   e.lineas.forEach(function(l,i){
+    var infoEquiv = '';
+    if(l.plantasEquiv!=null){
+      infoEquiv = '<div style="font-size:11px;color:#0854a0;background:#f0f7ff;border:1px solid #cfe2f5;border-radius:6px;padding:6px 8px;margin-bottom:8px">'+
+        '🌳 Inventario: '+(l.plantasInvTotal||0).toLocaleString('es-CL')+' plantas · productivas equivalentes (según % por estado): <strong>'+l.plantasEquiv.toLocaleString('es-CL')+'</strong>'+
+        '<label style="display:flex;align-items:center;gap:6px;margin-top:5px;cursor:pointer;color:#333"><input type="checkbox" '+(l.usarEquiv?'checked':'')+' onchange="cteEstimToggleEquiv('+i+',this.checked)"> Usar plantas productivas equivalentes en el cálculo</label>'+
+      '</div>';
+    }
+    var plantasMostrar = (l.usarEquiv && l.plantasEquiv!=null) ? l.plantasEquiv : (l.plantas||0);
+    var plantasEditable = !(l.usarEquiv && l.plantasEquiv!=null);
     html+='<div class="cte-card">'+
       '<div style="font-weight:800;color:#23303d;margin-bottom:2px">'+escapeHtml(l.panoNombre)+' <span style="font-size:12px;font-weight:400;color:#888">· '+escapeHtml(l.variedad)+'</span></div>'+
       '<div style="font-size:11px;color:'+(l.tieneCont?'#0a6e2e':'#c0392b')+';margin-bottom:8px">'+(l.tieneCont?'✓ Centros desde conteos':'⚠ Sin conteos: ingrese centros manualmente')+'</div>'+
+      infoEquiv+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
         '<div><label style="font-size:10px;color:#888;font-weight:700">CENTROS FLORALES</label><input type="number" step="any" value="'+(l.centros||0)+'" onchange="cteEstimSet('+i+',\'centros\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
         '<div><label style="font-size:10px;color:#888;font-weight:700">FRUTOS/CENTRO</label><input type="number" step="any" value="'+(l.frutosCentro||0)+'" onchange="cteEstimSet('+i+',\'frutosCentro\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
         '<div><label style="font-size:10px;color:#888;font-weight:700">KG/FRUTO</label><input type="number" step="any" value="'+(l.kgFruto||0)+'" onchange="cteEstimSet('+i+',\'kgFruto\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
-        '<div><label style="font-size:10px;color:#888;font-weight:700">N° PLANTAS</label><input type="number" value="'+(l.plantas||0)+'" onchange="cteEstimSet('+i+',\'plantas\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px"></div>'+
+        '<div><label style="font-size:10px;color:#888;font-weight:700">N° PLANTAS'+(plantasEditable?'':' (equiv.)')+'</label><input type="number" value="'+plantasMostrar+'" '+(plantasEditable?'':'readonly style="background:#f0f7ff;"')+' onchange="cteEstimSet('+i+',\'plantas\',this.value)" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px'+(plantasEditable?'':';color:#0854a0;font-weight:700')+'"></div>'+
       '</div>'+
       '<div style="margin-top:8px;text-align:right;font-size:14px"><span style="color:#888">kg paño:</span> <strong style="color:#0a6ed1;font-size:17px">'+Math.round(l.kgPano).toLocaleString('es-CL')+'</strong></div>'+
     '</div>';
@@ -7943,6 +8037,11 @@ function cteRenderEstimVer(){
 function cteEstimSet(i, campo, val){
   if(!_cteEstimActual||!_cteEstimActual.lineas[i]) return;
   _cteEstimActual.lineas[i][campo] = parseFloat(val)||0;
+  cteRender();
+}
+function cteEstimToggleEquiv(i, usar){
+  if(!_cteEstimActual||!_cteEstimActual.lineas[i]) return;
+  _cteEstimActual.lineas[i].usarEquiv = !!usar;
   cteRender();
 }
 
@@ -8428,6 +8527,75 @@ function ipGenerarPlantas(s){
 }
 
 // ── Lista de hileras registradas ──
+// Resumen por paño/variedad: total real contado vs registrado, con botón para actualizar el paño
+function ipRenderResumenPanos(){
+  var regs = STATE.cache.invplantas||[];
+  if(!regs.length) return '';
+  // Agrupar conteos reales por cuartel+variedad
+  var grupos = {};
+  regs.forEach(function(r){
+    var key = (r.cuartel||'')+'||'+(r.variedad||'');
+    if(!grupos[key]) grupos[key] = { cuartel:r.cuartel||'', variedad:r.variedad||'', total:0, hileras:0 };
+    grupos[key].total += (r.total || (r.countPrincipal||0)+(r.countPoliniz||0));
+    grupos[key].hileras += 1;
+  });
+  var keys = Object.keys(grupos);
+  if(!keys.length) return '';
+  var html = '<div class="ip-card" style="background:#f0f7ff;border-color:#bcd9f5">'+
+    '<div style="font-weight:800;color:#0854a0;margin-bottom:4px">📊 Resumen de plantas contadas</div>'+
+    '<div style="font-size:12px;color:#5a7da0;margin-bottom:12px">Compara el conteo real con el N° de plantas registrado en cada paño. Puedes actualizar el paño con el valor contado.</div>';
+  html += keys.map(function(k){
+    var g = grupos[k];
+    // Buscar el paño correspondiente en el Cuaderno (mismo nombre de cuartel + variedad)
+    var pano = ipBuscarPano(g.cuartel, g.variedad);
+    var registrado = pano ? (parseInt(pano.plantas)|| (pano.densidad&&pano.hectareas?Math.round(pano.densidad*pano.hectareas):0)) : null;
+    var dif = (registrado!=null) ? (g.total - registrado) : null;
+    var difTxt = '';
+    if(dif!=null && dif!==0){ difTxt = '<span style="color:'+(dif>0?'#0a6e2e':'#c0392b')+';font-weight:700">'+(dif>0?'+':'')+dif+'</span>'; }
+    return '<div style="background:#fff;border:1px solid #dbe7f3;border-radius:10px;padding:11px 13px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:start">'+
+        '<div><div style="font-weight:800;color:#23303d">'+escapeHtml(g.cuartel)+' · '+escapeHtml(g.variedad)+'</div>'+
+          '<div style="font-size:12px;color:#888">'+g.hileras+' hilera(s) contada(s)</div></div>'+
+        '<div style="text-align:right"><div style="font-size:20px;font-weight:800;color:#0854a0">'+g.total.toLocaleString('es-CL')+'</div><div style="font-size:11px;color:#888">plantas contadas</div></div>'+
+      '</div>'+
+      (registrado!=null ?
+        '<div style="font-size:12px;color:#666;margin-top:6px;padding-top:6px;border-top:1px dashed #dbe7f3">Registrado en el paño: <strong>'+registrado.toLocaleString('es-CL')+'</strong>'+(difTxt?(' · diferencia: '+difTxt):' · <span style="color:#0a6e2e">coincide ✓</span>')+'</div>'
+        : '<div style="font-size:12px;color:#c0392b;margin-top:6px">⚠ No se encontró un paño con este cuartel y variedad en el Cuaderno</div>')+
+      (pano && dif!==0 && can('cuaderno.panos') ?
+        '<button onclick="ipActualizarPlantasPano(\''+escapeHtml(pano.id)+'\','+g.total+')" style="width:100%;margin-top:10px;padding:10px;background:#0a6ed1;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">⟳ Actualizar paño a '+g.total.toLocaleString('es-CL')+' plantas</button>'
+        : '')+
+    '</div>';
+  }).join('');
+  html += '</div>';
+  return html;
+}
+
+// Busca un paño del Cuaderno por cuartel (nombre) + variedad
+function ipBuscarPano(cuartel, variedad){
+  function norm(x){ return (x||'').toString().trim().toLowerCase(); }
+  return ipPanos().find(function(p){
+    return norm(p.nombre)===norm(cuartel) && norm(p.variedad)===norm(variedad);
+  }) || null;
+}
+
+// Actualiza el N° de plantas de un paño con el valor contado (con confirmación)
+function ipActualizarPlantasPano(panoId, nuevoTotal){
+  if(!can('cuaderno.panos')){ toast('Sin permiso','No tiene permiso para editar paños','error'); return; }
+  var pano = ipPanos().find(function(p){ return String(p.id)===String(panoId); });
+  if(!pano){ toast('No encontrado','No se encontró el paño','error'); return; }
+  var anterior = parseInt(pano.plantas)|| (pano.densidad&&pano.hectareas?Math.round(pano.densidad*pano.hectareas):0);
+  confirmDialog('Actualizar N° de plantas',
+    'Paño "'+escapeHtml(pano.nombre)+' · '+escapeHtml(pano.variedad)+'":\n\nN° de plantas actual: '+anterior.toLocaleString('es-CL')+'\nNuevo (conteo real): '+nuevoTotal.toLocaleString('es-CL')+'\n\n¿Actualizar el paño con el valor contado? Esto se reflejará en el Cuaderno de Campo, los Conteos en terreno y el Inventario de huerto.',
+    function(){
+      pano.plantas = nuevoTotal;
+      // Persistir en el Cuaderno
+      try{ if(typeof save==='function') save(); }catch(e){ console.warn('save:',e); }
+      try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      ipRender();
+      toast('Paño actualizado','"'+pano.nombre+' · '+pano.variedad+'" ahora tiene '+nuevoTotal.toLocaleString('es-CL')+' plantas','success');
+    },'Actualizar', false);
+}
+
 function ipRenderLista(){
   var regs = (STATE.cache.invplantas||[]).slice().sort(function(a,b){ return (b.fechaInicio||'').localeCompare(a.fechaInicio||''); });
   var html = '<button class="ip-big-btn ip-btn-gray" onclick="ipVolverInicio()" style="padding:14px;font-size:16px">‹ Volver</button>';
@@ -8439,6 +8607,9 @@ function ipRenderLista(){
     html += '<div class="ip-card" style="text-align:center;color:#999;padding:30px">Sin hileras registradas todavía.</div>';
     return html;
   }
+  // ── Resumen por paño/variedad con opción de actualizar el N° de plantas del paño ──
+  html += ipRenderResumenPanos();
+  html += '<div style="font-weight:800;color:#23303d;margin:14px 0 8px">Hileras registradas ('+regs.length+')</div>';
   html += regs.map(function(s){
     var fecha=(s.fechaInicio||'').slice(0,10);
     var sync = s.sincronizado ? '<span style="color:#0a6e2e;font-weight:700">☁️ Subido</span>' : '<span style="color:#e9730c;font-weight:700">📱 Local</span>';
@@ -9638,8 +9809,21 @@ function sciFbWaitForSync(timeoutMs){
 
 // ══ STATE ══
 var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[],
-  fertirriego: { sectores:[], ordenes:[], oCounter:1, cfg:{ equipos:[], formas:['POR GOTEO','MANUAL'], unidades:['GRS.','C.C','L','kg','mL'], horarios:['08:00 A 17:00','08:00 A 18:00','18:00 A 21:00'] } }
+  fertirriego: { sectores:[], ordenes:[], oCounter:1, cfg:{ equipos:[], formas:['POR GOTEO','MANUAL'], unidades:['GRS.','C.C','L','kg','mL'], horarios:['08:00 A 17:00','08:00 A 18:00','18:00 A 21:00'] } },
+  // % de producción asignado a cada estado de planta (usado en estimaciones de cosecha)
+  prodPorEstado: { sano:100, debil:60, replante:30, muerto:0, falta:0 }
 };
+
+// Valores por defecto del % de producción por estado
+var PROD_ESTADO_DEFAULT = { sano:100, debil:60, replante:30, muerto:0, falta:0 };
+function getProdPorEstado(pano){
+  var base = Object.assign({}, PROD_ESTADO_DEFAULT, (typeof S!=='undefined' && S.prodPorEstado) ? S.prodPorEstado : {});
+  // Si se pasa un paño con su propia configuración, esa tiene prioridad
+  if(pano && pano.prodPct && typeof pano.prodPct==='object'){
+    return Object.assign({}, base, pano.prodPct);
+  }
+  return base;
+}
 
 // Garantiza la estructura de fertirriego (para datos cargados de versiones previas)
 function _ensureFertirriego(){
@@ -10028,6 +10212,8 @@ function fbApplyRemote(data){
       ['panos','registros','productos','ordenes','confirmaciones'].forEach(function(k){
         if(remote[k] !== undefined) S[k] = remote[k];
       });
+      if(remote.fertirriego !== undefined) S.fertirriego = remote.fertirriego;
+      if(remote.prodPorEstado !== undefined) S.prodPorEstado = remote.prodPorEstado;
       if(remote.oCounter !== undefined) S.oCounter = remote.oCounter;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
       // Guardar en localStorage como respaldo
@@ -10069,7 +10255,8 @@ function fbPush(immediate){
     FB.lastVersion = newVersion;
     var payload = JSON.stringify({
       panos: S.panos, registros: S.registros, productos: S.productos,
-      ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter
+      ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter,
+      fertirriego: S.fertirriego, prodPorEstado: S.prodPorEstado
     });
     var userName = '';
     try { if(typeof STATE!=='undefined' && STATE.user){ userName = STATE.user.nombre || STATE.user.id || ''; } }catch(e){}
@@ -14221,6 +14408,88 @@ function delPano(id){
   S.registros=S.registros.filter(function(r){ return r.panoId!=id; });
   save(); renderPanosApp(); renderHeader(); renderChipsReg(); renderOrdenChips();
 }
+// Configuración: % de producción por estado, por paño-variedad (con default global)
+var _cfgProdPanoSel = '__global__';
+function configProdEstado(){
+  var panos = (typeof S!=='undefined' && Array.isArray(S.panos)) ? S.panos : [];
+  // Selector: global (valor por defecto) o un paño específico
+  var opciones = '<option value="__global__">⭐ Valor por defecto (todos los paños)</option>'+
+    panos.map(function(p){
+      var marca = (p.prodPct && Object.keys(p.prodPct).length) ? ' ✓' : '';
+      return '<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.nombre)+' · '+escapeHtml(p.variedad||'')+marca+'</option>';
+    }).join('');
+
+  var sel = _cfgProdPanoSel;
+  var pctActual, esGlobal = (sel==='__global__');
+  if(esGlobal){
+    pctActual = Object.assign({}, PROD_ESTADO_DEFAULT, (S.prodPorEstado||{}));
+  } else {
+    var pano = panos.find(function(p){ return String(p.id)===String(sel); });
+    pctActual = getProdPorEstado(pano);
+  }
+
+  var estados = [
+    {k:'sano', label:'🟢 Sano (normal)', hint:'Plantas en plena producción'},
+    {k:'debil', label:'🟡 Débil', hint:'Producen menos que una sana'},
+    {k:'replante', label:'🔵 Replante', hint:'Plantas nuevas, producción parcial'},
+    {k:'muerto', label:'🔴 Muerto', hint:'No producen'},
+    {k:'falta', label:'⚪ Falla/vacío', hint:'Sin planta'}
+  ];
+
+  var body = '<div class="form-field" style="margin-bottom:14px"><label>Configurar para</label>'+
+    '<select id="pe-pano" onchange="configProdEstadoCambiarPano(this.value)" style="width:100%;padding:10px;border:1px solid var(--bo);border-radius:6px">'+opciones+'</select>'+
+    '<div class="hint">El "valor por defecto" se aplica a todos los paños que no tengan configuración propia. Selecciona un paño para darle porcentajes específicos.</div></div>';
+
+  body += '<div style="font-size:13px;color:#666;margin-bottom:12px">'+(esGlobal?'Porcentajes por defecto para todo el huerto:':'Porcentajes específicos para este paño-variedad:')+'</div>';
+  body += estados.map(function(e){
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--bo);border-radius:8px;margin-bottom:8px">'+
+      '<div style="flex:1"><div style="font-weight:700;color:var(--tx)">'+e.label+'</div><div style="font-size:11px;color:var(--mu)">'+e.hint+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:4px"><input type="number" id="pe-'+e.k+'" value="'+(pctActual[e.k]!=null?pctActual[e.k]:0)+'" min="0" max="100" step="1" style="width:70px;padding:8px;border:1px solid var(--bo);border-radius:6px;text-align:right;font-size:15px;font-weight:700">'+
+      '<span style="font-weight:700;color:var(--mu)">%</span></div>'+
+    '</div>';
+  }).join('');
+  if(!esGlobal){
+    body += '<button type="button" onclick="configProdEstadoUsarDefault()" style="width:100%;padding:9px;background:#f5f5f5;color:#666;border:1px solid #ddd;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">↺ Quitar config propia y usar el valor por defecto</button>';
+  }
+  body += '<div style="font-size:11px;color:var(--mu);margin-top:8px">Ejemplo: 100 plantas (70 sanas + 20 débiles al 60% + 10 muertas) = 70 + 12 + 0 = 82 plantas productivas.</div>';
+
+  showModal('⚙️ % de producción por estado'+(esGlobal?'':' — paño específico'), body,
+    function(){
+      var nuevo = {};
+      ['sano','debil','replante','muerto','falta'].forEach(function(k){
+        var inp=document.getElementById('pe-'+k);
+        nuevo[k] = inp ? (parseFloat(inp.value)||0) : 0;
+      });
+      if(_cfgProdPanoSel==='__global__'){
+        S.prodPorEstado = nuevo;
+      } else {
+        var pano = (S.panos||[]).find(function(p){ return String(p.id)===String(_cfgProdPanoSel); });
+        if(pano){ pano.prodPct = nuevo; }
+      }
+      try{ if(typeof save==='function') save(); }catch(e){}
+      try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      closeModal();
+      toast('Configuración guardada', _cfgProdPanoSel==='__global__'?'Porcentajes por defecto actualizados':'Porcentajes del paño actualizados','success');
+    }, 'Guardar configuración');
+}
+// Cambiar el paño seleccionado dentro del modal (reabre con sus valores)
+function configProdEstadoCambiarPano(val){
+  // Guardar lo que el usuario tenga escrito antes de cambiar
+  _cfgProdPanoSel = val;
+  closeModal();
+  setTimeout(configProdEstado, 50);
+}
+// Quitar config propia de un paño (vuelve al default global)
+function configProdEstadoUsarDefault(){
+  var pano = (S.panos||[]).find(function(p){ return String(p.id)===String(_cfgProdPanoSel); });
+  if(pano && pano.prodPct){ delete pano.prodPct; }
+  try{ if(typeof save==='function') save(); }catch(e){}
+  try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
+  closeModal();
+  setTimeout(configProdEstado, 50);
+  toast('Config eliminada','Este paño usará el valor por defecto','success');
+}
+
 function addPanoApp(){
   if(typeof can==='function' && !can('cuaderno.panos') && !can('cuaderno.editar')){ showNotice('No tiene permiso para crear paños.','err'); return; }
   // Construir lista de paños productivos para el selector de paño padre
