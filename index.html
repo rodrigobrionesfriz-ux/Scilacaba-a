@@ -9996,7 +9996,17 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 /* ═══════════════ INIT ═══════════════ */
 document.getElementById('loginForm').addEventListener('submit',e=>{e.preventDefault();doLogin()});
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
-document.getElementById('modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal()});
+// Cierre del modal al hacer clic en el fondo: solo si el clic EMPIEZA y TERMINA en el backdrop.
+// Esto evita que se cierre al seleccionar texto arrastrando el cursor fuera del modal.
+(function(){
+  var bd=document.getElementById('modalBackdrop');
+  var downOnBackdrop=false;
+  bd.addEventListener('mousedown',e=>{ downOnBackdrop = (e.target.id==='modalBackdrop'); });
+  bd.addEventListener('mouseup',e=>{
+    if(downOnBackdrop && e.target.id==='modalBackdrop'){ closeModal(); }
+    downOnBackdrop=false;
+  });
+})();
 
 (async()=>{
   try{
