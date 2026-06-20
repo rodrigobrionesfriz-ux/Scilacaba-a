@@ -3014,6 +3014,71 @@ async function importBackup(file){
 }
 
 /* ═══════════════ PAGE: DASHBOARD ═══════════════ */
+// Detalle de productos bajo stock mínimo (desde la tarjeta del dashboard)
+function verStockBajo(){
+  var filas=[];
+  STATE.cache.products.forEach(function(p){
+    var min=p.stockMinimo||0;
+    if(min<=0 || p.inventariable===false) return;
+    var regs=STATE.cache.stock.filter(function(s){ return s.codigoInterno===p.codigoInterno; });
+    var totalCant=regs.reduce(function(a,s){ return a+(s.cantidad||0); },0);
+    if(totalCant<=min){
+      filas.push({prod:p, total:totalCant, min:min, regs:regs});
+    }
+  });
+  if(!filas.length){ toast('Sin alertas','No hay productos bajo el stock mínimo','success'); return; }
+  // Ordenar: primero los más críticos (en 0), luego por menor cobertura
+  filas.sort(function(a,b){ return (a.total/a.min) - (b.total/b.min); });
+  var body = '<div style="font-size:13px;color:var(--mu);margin-bottom:12px">'+filas.length+' producto(s) en o por debajo de su stock mínimo. Toque uno para ver su ficha.</div>';
+  body += '<div class="table-wrap"><table class="data"><thead><tr><th>Producto</th><th>UM</th><th class="num">Existencia</th><th class="num">Mínimo</th><th class="num">Faltante</th></tr></thead><tbody>';
+  body += filas.map(function(f){
+    var enCero=f.total<=0;
+    var faltante=Math.max(0, f.min - f.total);
+    return '<tr class="row-link" onclick="closeModal();navigate(\'productos\');setTimeout(function(){if(typeof viewProduct===\'function\')viewProduct(\''+f.prod.codigoInterno+'\')},150)"'+(enCero?' style="background:#fdeaea"':'')+'>'+
+      '<td><strong>'+escapeHtml(f.prod.codigoInterno)+'</strong> · '+escapeHtml(f.prod.descripcion||'')+'</td>'+
+      '<td>'+escapeHtml(f.prod.unidadMedida||'')+'</td>'+
+      '<td class="num"'+(enCero?' style="color:#c0392b;font-weight:700"':'')+'>'+fmtNum(f.total,2)+'</td>'+
+      '<td class="num">'+fmtNum(f.min,2)+'</td>'+
+      '<td class="num" style="color:#c0392b;font-weight:700">'+fmtNum(faltante,2)+'</td>'+
+    '</tr>';
+  }).join('');
+  body += '</tbody></table></div>';
+  showModal('⚠️ Productos bajo stock mínimo', body,
+    '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>'+
+    (can('movimientos.crear')?'<button class="btn btn-success" onclick="closeModal();navigate(\'entradas\')">⬇️ Registrar entrada</button>':''),
+    'lg');
+}
+
+// Detalle de lotes por vencer (desde la tarjeta del dashboard)
+function verPorVencer(){
+  var hoy=new Date();
+  var limite=new Date(Date.now()+30*86400000);
+  var lotes=STATE.cache.lots.filter(function(l){ return l.cantidad>0 && l.fechaVenc && new Date(l.fechaVenc)<limite; });
+  if(!lotes.length){ toast('Sin alertas','No hay lotes por vencer en los próximos 30 días','success'); return; }
+  lotes.sort(function(a,b){ return (a.fechaVenc||'').localeCompare(b.fechaVenc||''); });
+  var body = '<div style="font-size:13px;color:var(--mu);margin-bottom:12px">'+lotes.length+' lote(s) que vencen en los próximos 30 días (o ya vencidos).</div>';
+  body += '<div class="table-wrap"><table class="data"><thead><tr><th>Producto</th><th>Lote</th><th>Bodega</th><th class="num">Cantidad</th><th>Vencimiento</th><th class="center">Días</th></tr></thead><tbody>';
+  body += lotes.map(function(l){
+    var p=getProduct(l.codigoInterno);
+    var b=getWarehouse(l.bodegaId);
+    var dias=Math.ceil((new Date(l.fechaVenc)-hoy)/86400000);
+    var vencido=dias<0;
+    var color=vencido?'#c0392b':(dias<=7?'#e9730c':'#0a6e2e');
+    return '<tr'+(vencido?' style="background:#fdeaea"':(dias<=7?' style="background:#fff7ef"':''))+'>'+
+      '<td><strong>'+escapeHtml(l.codigoInterno)+'</strong> · '+escapeHtml(p?p.descripcion:'')+'</td>'+
+      '<td class="mono">'+escapeHtml(l.lote||'-')+'</td>'+
+      '<td>'+escapeHtml(b?b.nombre:l.bodegaId||'')+'</td>'+
+      '<td class="num">'+fmtNum(l.cantidad,2)+'</td>'+
+      '<td>'+fmtDateOnly(l.fechaVenc)+'</td>'+
+      '<td class="center" style="color:'+color+';font-weight:700">'+(vencido?'Vencido':dias+' d')+'</td>'+
+    '</tr>';
+  }).join('');
+  body += '</tbody></table></div>';
+  showModal('⏰ Lotes por vencer', body,
+    '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>',
+    'lg');
+}
+
 function renderDashboard(c){
   const totalProd=STATE.cache.products.length;
   const totalBod=STATE.cache.warehouses.filter(w=>w.activo).length;
@@ -3079,13 +3144,13 @@ function renderDashboard(c){
         <div class="stat-value">${totalMov}</div>
         <div class="stat-sub">registrados</div>
       </div>
-      <div class="stat-card amber">
-        <div class="stat-label">Stock bajo</div>
+      <div class="stat-card amber" ${(new Set(lowStock.map(s=>s.codigoInterno)).size)>0?'onclick="verStockBajo()" style="cursor:pointer"':''}>
+        <div class="stat-label">Stock bajo ${(new Set(lowStock.map(s=>s.codigoInterno)).size)>0?'<span style="font-size:11px;color:#0a6ed1">› ver</span>':''}</div>
         <div class="stat-value">${new Set(lowStock.map(s=>s.codigoInterno)).size}</div>
         <div class="stat-sub">productos bajo mínimo</div>
       </div>
-      <div class="stat-card red">
-        <div class="stat-label">Por vencer</div>
+      <div class="stat-card red" ${lotsExp.length>0?'onclick="verPorVencer()" style="cursor:pointer"':''}>
+        <div class="stat-label">Por vencer ${lotsExp.length>0?'<span style="font-size:11px;color:#0a6ed1">› ver</span>':''}</div>
         <div class="stat-value">${lotsExp.length}</div>
         <div class="stat-sub">lotes en próximos 30 días</div>
       </div>
