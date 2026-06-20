@@ -372,6 +372,11 @@ table.data .actions{white-space:nowrap;text-align:right}
 
 /* Form */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px}
+/* Dropdown de sugerencias de proveedor/cliente */
+.mv-sug-box{position:absolute;top:100%;left:0;right:0;z-index:50;background:#fff;border:1px solid var(--bo);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;margin-top:2px}
+.mv-sug-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bo)}
+.mv-sug-item:last-child{border-bottom:none}
+.mv-sug-item:hover{background:var(--gp)}
 /* Ficha de producto con pestañas laterales (estilo organizado) */
 .pf-ficha{display:flex;gap:0;border:1px solid var(--bo);border-radius:10px;overflow:hidden;min-height:300px}
 .pf-tabs{display:flex;flex-direction:column;background:var(--gs);border-right:1px solid var(--bo);min-width:190px;padding:8px}
@@ -6190,9 +6195,10 @@ function _renderMovForm(c){
         <div class="card-header"><div class="card-title">🚚 Proveedor</div>${can('proveedores.crear')?`<button class="btn btn-secondary btn-sm" onclick="_captureMovHeader();openProveedorForm(null,{fromMov:true,prefilledCodigo:document.getElementById('mvProvCod')?document.getElementById('mvProvCod').value:''})">+ Crear nuevo</button>`:''}</div>
         <div style="padding:18px">
           <div class="form-grid">
-            <div class="form-field required"><label>Código (RUT sin guión ni DV)</label>
-              <input type="text" id="mvProvCod" value="${escapeHtml(movDraft.proveedorCodigo||'')}" placeholder="Ej: 77684700" maxlength="9" inputmode="numeric" autocomplete="off">
-              <div class="hint">Tabule o haga clic afuera para buscar el proveedor</div>
+            <div class="form-field required" style="position:relative"><label>Código o razón social</label>
+              <input type="text" id="mvProvCod" value="${escapeHtml(movDraft.proveedorCodigo||'')}" placeholder="Ej: 77684700 o nombre del proveedor" autocomplete="off">
+              <div class="hint">Escriba el código (RUT sin guión) o el nombre para buscar</div>
+              <div id="mvProvSug" class="mv-sug-box" style="display:none"></div>
             </div>
             <div class="form-field"><label>Razón social</label>
               <div id="mvProvNomBox" style="padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;min-height:38px;font-size:14px;color:var(--tx);display:flex;align-items:center;gap:8px">
@@ -6209,9 +6215,10 @@ function _renderMovForm(c){
         <div class="card-header"><div class="card-title">👤 Cliente / Destino</div>${can('clientes.crear')?`<button class="btn btn-secondary btn-sm" onclick="_captureMovHeader();openClienteForm(null,{fromMov:true,prefilledCodigo:document.getElementById('mvCliCod')?document.getElementById('mvCliCod').value:''})">+ Crear nuevo</button>`:''}</div>
         <div style="padding:18px">
           <div class="form-grid">
-            <div class="form-field required"><label>Código (RUT sin guión ni DV)</label>
-              <input type="text" id="mvCliCod" value="${escapeHtml(movDraft.clienteCodigo||'')}" placeholder="Ej: 77684700" maxlength="9" inputmode="numeric" autocomplete="off">
-              <div class="hint">Tabule o haga clic afuera para buscar el cliente</div>
+            <div class="form-field required" style="position:relative"><label>Código o razón social</label>
+              <input type="text" id="mvCliCod" value="${escapeHtml(movDraft.clienteCodigo||'')}" placeholder="Ej: 77684700 o nombre del cliente" autocomplete="off">
+              <div class="hint">Escriba el código (RUT sin guión) o el nombre para buscar</div>
+              <div id="mvCliSug" class="mv-sug-box" style="display:none"></div>
             </div>
             <div class="form-field"><label>Razón social</label>
               <div id="mvCliNomBox" style="padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;min-height:38px;font-size:14px;color:var(--tx);display:flex;align-items:center;gap:8px">
@@ -6342,18 +6349,58 @@ function _renderMovForm(c){
   // Proveedor (cuando está visible)
   const provCodEl=document.getElementById('mvProvCod');
   if(provCodEl){
-    provCodEl.addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');});
-    provCodEl.addEventListener('blur',()=>lookupProveedor());
-    provCodEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupProveedor()}});
+    provCodEl.addEventListener('input',e=>{ mvSugerir('prov', e.target.value); });
+    provCodEl.addEventListener('blur',()=>{ setTimeout(()=>{ var s=document.getElementById('mvProvSug'); if(s)s.style.display='none'; lookupProveedor(); },180); });
+    provCodEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();var s=document.getElementById('mvProvSug');if(s)s.style.display='none';lookupProveedor()}});
   }
   // Cliente (cuando está visible)
   const cliCodEl=document.getElementById('mvCliCod');
   if(cliCodEl){
-    cliCodEl.addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');});
-    cliCodEl.addEventListener('blur',()=>lookupCliente());
-    cliCodEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupCliente()}});
+    cliCodEl.addEventListener('input',e=>{ mvSugerir('cli', e.target.value); });
+    cliCodEl.addEventListener('blur',()=>{ setTimeout(()=>{ var s=document.getElementById('mvCliSug'); if(s)s.style.display='none'; lookupCliente(); },180); });
+    cliCodEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();var s=document.getElementById('mvCliSug');if(s)s.style.display='none';lookupCliente()}});
   }
 }
+
+// Muestra sugerencias de proveedores/clientes que coincidan con el texto (código o razón social)
+function mvSugerir(tipo, texto){
+  const esProv = tipo==='prov';
+  const sugBox = document.getElementById(esProv?'mvProvSug':'mvCliSug');
+  if(!sugBox) return;
+  const q = (texto||'').trim().toLowerCase();
+  if(q.length<2){ sugBox.style.display='none'; return; }
+  const lista = esProv ? (STATE.cache.providers||[]) : (STATE.cache.customers||[]);
+  const matches = lista.filter(x=>{
+    const cod=(x.codigo||'').toLowerCase();
+    const rs=(x.razonSocial||'').toLowerCase();
+    const fant=(x.nombreFantasia||'').toLowerCase();
+    return cod.includes(q) || rs.includes(q) || fant.includes(q);
+  }).slice(0,8);
+  if(!matches.length){
+    sugBox.innerHTML='<div style="padding:10px 12px;color:var(--mu);font-size:13px">Sin coincidencias. Puede crear uno nuevo con el botón "+ Crear nuevo".</div>';
+    sugBox.style.display='block';
+    return;
+  }
+  sugBox.innerHTML = matches.map(x=>{
+    const fn = esProv?'mvElegirProv':'mvElegirCli';
+    return '<div class="mv-sug-item" onmousedown="event.preventDefault();'+fn+'(\''+escapeHtml(x.codigo)+'\')">'+
+      '<div style="font-weight:700;color:var(--tx)">'+escapeHtml(x.razonSocial||'(sin razón social)')+'</div>'+
+      '<div style="font-size:12px;color:var(--mu)">'+escapeHtml(x.codigo||'')+(x.nombreFantasia?' · '+escapeHtml(x.nombreFantasia):'')+'</div>'+
+    '</div>';
+  }).join('');
+  sugBox.style.display='block';
+}
+function mvElegirProv(codigo){
+  const el=document.getElementById('mvProvCod');
+  if(el){ el.value=codigo; }
+  const s=document.getElementById('mvProvSug'); if(s)s.style.display='none';
+  lookupProveedor();
+}
+function mvElegirCli(codigo){
+  const el=document.getElementById('mvCliCod');
+  if(el){ el.value=codigo; }
+  const s=document.getElementById('mvCliSug'); if(s)s.style.display='none';
+  lookupCliente();
 
 /* ── Hint del correlativo según tipo de movimiento ── */
 function _movPrefixHint(tipo,tipoMov){
@@ -6409,8 +6456,8 @@ function _captureMovHeader(){
   if(document.getElementById('mvTipoDoc'))movDraft.tipoDoc=get('mvTipoDoc');
   if(document.getElementById('mvNumDoc'))movDraft.numeroDoc=get('mvNumDoc').trim();
   if(document.getElementById('mvVencDoc'))movDraft.fechaVencDoc=get('mvVencDoc');
-  if(document.getElementById('mvProvCod'))movDraft.proveedorCodigo=get('mvProvCod').trim().replace(/\D/g,'');
-  if(document.getElementById('mvCliCod'))movDraft.clienteCodigo=get('mvCliCod').trim().replace(/\D/g,'');
+  if(document.getElementById('mvProvCod'))movDraft.proveedorCodigo=get('mvProvCod').trim();
+  if(document.getElementById('mvCliCod'))movDraft.clienteCodigo=get('mvCliCod').trim();
 }
 
 /* ── Lookup de proveedor desde el form de entrada ── */
