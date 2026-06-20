@@ -3364,25 +3364,17 @@ function openProductForm(codigo=null,opts={}){
             </div>
             <div class="form-field"><label>Impuesto específico combustibles</label>
               <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
-                <span class="switch"><input type="checkbox" id="fpIEC" ${p?.aplicaIEC?'checked':''} onchange="document.getElementById('fpIECDet').style.display=this.checked?'block':'none'"><span class="switch-slider"></span></span>
+                <span class="switch"><input type="checkbox" id="fpIEC" ${p?.aplicaIEC?'checked':''}><span class="switch-slider"></span></span>
                 <span>Aplica impuesto específico</span>
               </label>
-              <div id="fpIECDet" style="display:${p?.aplicaIEC?'block':'none'};margin-top:8px">
-                <label style="font-size:11px;color:var(--mu);font-weight:700">UTM/m³ (tasa)</label>
-                <input type="number" step="0.0001" id="fpIECTasa" value="${p?.iecTasa||0}" placeholder="ej: 1.5" style="width:100%">
-              </div>
-              <div class="hint">Para diésel, gasolina y otros combustibles gravados.</div>
+              <div class="hint">Para diésel, gasolina y otros combustibles. El monto se ingresa al registrar la factura de compra.</div>
             </div>
             <div class="form-field"><label>ILA (bebidas y licores)</label>
               <label style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--gs);border:1px solid var(--bo);border-radius:6px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)">
-                <span class="switch"><input type="checkbox" id="fpILA" ${p?.aplicaILA?'checked':''} onchange="document.getElementById('fpILADet').style.display=this.checked?'block':'none'"><span class="switch-slider"></span></span>
+                <span class="switch"><input type="checkbox" id="fpILA" ${p?.aplicaILA?'checked':''}><span class="switch-slider"></span></span>
                 <span>Aplica ILA</span>
               </label>
-              <div id="fpILADet" style="display:${p?.aplicaILA?'block':'none'};margin-top:8px">
-                <label style="font-size:11px;color:var(--mu);font-weight:700">Tasa ILA (%)</label>
-                <input type="number" step="0.1" id="fpILATasa" value="${p?.ilaTasa||0}" placeholder="ej: 20.5" style="width:100%">
-              </div>
-              <div class="hint">Impuesto a bebidas alcohólicas, analcohólicas y similares.</div>
+              <div class="hint">Impuesto a bebidas alcohólicas, analcohólicas y similares. El monto se ingresa al registrar la factura.</div>
             </div>
           </div>
         </div>
@@ -3433,12 +3425,10 @@ async function saveProduct(codigo,opts){
   const atrib=document.getElementById('fpAtrib').checked;
   const inventariable=document.getElementById('fpInv').checked;
   const stockMin=Number(document.getElementById('fpMin').value)||0;
-  // Impuestos
+  // Impuestos (solo flags; los montos se ingresan al registrar la factura)
   const aplicaIVA=document.getElementById('fpIVA')?document.getElementById('fpIVA').checked:true;
   const aplicaIEC=document.getElementById('fpIEC')?document.getElementById('fpIEC').checked:false;
-  const iecTasa=aplicaIEC?(Number(document.getElementById('fpIECTasa').value)||0):0;
   const aplicaILA=document.getElementById('fpILA')?document.getElementById('fpILA').checked:false;
-  const ilaTasa=aplicaILA?(Number(document.getElementById('fpILATasa').value)||0):0;
 
   // Validar EAN duplicado al crear (si tiene EAN)
   if(!codigo && ean){
@@ -3454,7 +3444,7 @@ async function saveProduct(codigo,opts){
       toast('No se puede cambiar','Ya existen movimientos con este producto. No se puede modificar el manejo de atributos.','error');return;
     }
     p.codigoEAN=ean;p.descripcion=desc;p.unidadMedida=um;p.tipoProducto=tipo;p.grupo=grupo;p.subGrupo=subGrupo;p.manejaAtributos=atrib;p.inventariable=inventariable;p.stockMinimo=stockMin;
-    p.aplicaIVA=aplicaIVA;p.aplicaIEC=aplicaIEC;p.iecTasa=iecTasa;p.aplicaILA=aplicaILA;p.ilaTasa=ilaTasa;
+    p.aplicaIVA=aplicaIVA;p.aplicaIEC=aplicaIEC;p.aplicaILA=aplicaILA;
     p.modificado=new Date().toISOString();
     await dbPut('products',p);
     await audit('producto.editar','Edición de producto',codigo);
@@ -3464,7 +3454,7 @@ async function saveProduct(codigo,opts){
     const np={
       codigoInterno:cod,codigoEAN:ean,descripcion:desc,unidadMedida:um,
       tipoProducto:tipo,grupo:grupo,subGrupo:subGrupo,manejaAtributos:atrib,inventariable:inventariable,
-      aplicaIVA:aplicaIVA,aplicaIEC:aplicaIEC,iecTasa:iecTasa,aplicaILA:aplicaILA,ilaTasa:ilaTasa,
+      aplicaIVA:aplicaIVA,aplicaIEC:aplicaIEC,aplicaILA:aplicaILA,
       stockMinimo:stockMin,activo:true,creado:new Date().toISOString()
     };
     await dbPut('products',np);
