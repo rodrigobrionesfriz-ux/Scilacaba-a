@@ -2160,6 +2160,7 @@ const TIPOS_DOC=['FACTURA','FACTURA EXENTA','GUIA DE DESPACHO','BOLETA','NOTA DE
 
 const TIPOS_MOV_ENT=[
   {tipo:'COMPRA',                prefijo:'COMP',label:'Compra',                       icon:'🛒', reqDoc:true,  reqProv:true,  reqCC:false, validaUnicidadDoc:true},
+  {tipo:'COSECHA A STOCK',       prefijo:'COS', label:'Producto cosechado a stock',   icon:'🍒', reqDoc:false, reqProv:false, reqCC:false, validaUnicidadDoc:false, reqFechaCosecha:true, simple:true},
   {tipo:'DEVOLUCION CC',         prefijo:'DCC', label:'Devolución de centro de costo',icon:'↩️', reqDoc:false, reqProv:false, reqCC:true,  validaUnicidadDoc:false},
   {tipo:'TOMA INVENTARIO ENT',   prefijo:'TIE', label:'Toma de inventario (entrada)', icon:'📋', reqDoc:false, reqProv:false, reqCC:false, validaUnicidadDoc:false},
   {tipo:'MUESTRA GRATIS',        prefijo:'MUE', label:'Muestra gratis',               icon:'🎁', reqDoc:false, reqProv:true,  reqCC:false, validaUnicidadDoc:false}
@@ -5814,7 +5815,7 @@ function renderMovimientosTable(){
           <span class="badge ${m.tipo==='ENT'?'badge-green':'badge-amber'}">${tipoLabel(m.tipo)}</span>
           ${m.tipoMovimiento?`<div style="font-size:11px;color:var(--mu);margin-top:2px;line-height:1.3">${escapeHtml(tipoMovLabel(m))}</div>`:''}
         </td>
-        <td>${fmtDate(m.fecha)}</td>
+        <td>${fmtDate(m.fecha)}${m.fechaCosecha?`<div style="font-size:11px;color:#0a6e2e;margin-top:2px">🍒 Cosecha: ${fmtDateOnly(m.fechaCosecha)}</div>`:''}</td>
         <td>${escapeHtml(b?b.nombre:m.bodegaId)}</td>
         <td class="mono">${m.tipoDoc?escapeHtml((m.tipoDoc==='GUIA DE DESPACHO'?'GD':m.tipoDoc==='FACTURA'?'FAC':m.tipoDoc==='FACTURA EXENTA'?'FAC.EX':m.tipoDoc==='BOLETA'?'BOL':m.tipoDoc==='NOTA DE CREDITO'?'NC':m.tipoDoc==='NOTA DE DEBITO'?'ND':m.tipoDoc)+' '+(m.numeroDoc||'')):escapeHtml(m.documento||(m.centroCosto?'CC: '+m.centroCosto:'-'))}</td>
         <td>${(()=>{
@@ -5851,6 +5852,7 @@ function viewMovimiento(numero){
     `<div class="form-grid">
       ${m.tipoMovimiento?`<div class="form-field span-2"><label>Tipo de movimiento</label><div><strong style="color:var(--gd)">${escapeHtml(tipoMovLabel(m))}</strong></div></div>`:''}
       <div class="form-field"><label>${isEnt?'Fecha de ingreso':isSal?'Fecha de salida':'Fecha'}</label><div>${fmtDate(m.fecha)}</div></div>
+      ${m.fechaCosecha?`<div class="form-field"><label>🍒 Fecha de cosecha</label><div><strong>${fmtDateOnly(m.fechaCosecha)}</strong></div></div>`:''}
       <div class="form-field"><label>Bodega ${bDest?'origen':''}</label><div>${escapeHtml(b?b.nombre:m.bodegaId)}</div></div>
       ${bDest?`<div class="form-field span-2"><label>Bodega destino</label><div><strong>${escapeHtml(bDest.nombre)}</strong></div></div>`:''}
       ${m.centroCosto?`<div class="form-field span-2"><label>Centro de costo</label><div>${(()=>{
@@ -6038,6 +6040,8 @@ function _renderMovForm(c){
               </select>
               <div class="hint">Debe ser distinta a la bodega origen</div>
             </div>`:''}
+            ${cfg.reqFechaCosecha?`
+            <div class="form-field span-2 required"><label>🍒 Fecha de cosecha</label><input type="date" id="mvFechaCosecha" value="${escapeHtml(movDraft.fechaCosecha||fecha)}"><div class="hint">Fecha en que se cosechó el producto que ingresa a stock</div></div>`:''}
           </div>
         </div>
       </div>
@@ -6194,6 +6198,7 @@ function _renderMovForm(c){
       if(document.getElementById('mvFecha'))movDraft.fecha=document.getElementById('mvFecha').value;
       if(document.getElementById('mvBodId'))movDraft.bodegaId=document.getElementById('mvBodId').value;
       if(document.getElementById('mvBodDest'))movDraft.bodegaDestinoId=document.getElementById('mvBodDest').value;
+      if(document.getElementById('mvFechaCosecha'))movDraft.fechaCosecha=document.getElementById('mvFechaCosecha').value;
       if(document.getElementById('mvObs'))movDraft.observaciones=document.getElementById('mvObs').value;
       if(document.getElementById('mvCC'))movDraft.centroCosto=document.getElementById('mvCC').value;
       if(movDraft.editId&&document.getElementById('mvMot'))movDraft.motivo=document.getElementById('mvMot').value;
@@ -6277,6 +6282,7 @@ function _captureMovHeader(){
   if(document.getElementById('mvFecha'))movDraft.fecha=get('mvFecha');
   if(document.getElementById('mvBodId'))movDraft.bodegaId=get('mvBodId');
   if(document.getElementById('mvBodDest'))movDraft.bodegaDestinoId=get('mvBodDest');
+  if(document.getElementById('mvFechaCosecha'))movDraft.fechaCosecha=get('mvFechaCosecha');
   if(document.getElementById('mvObs'))movDraft.observaciones=get('mvObs');
   if(document.getElementById('mvMot'))movDraft.motivo=get('mvMot');
   if(document.getElementById('mvCC'))movDraft.centroCosto=get('mvCC');
@@ -6475,6 +6481,11 @@ async function saveMovimiento(){
     if(movDraft.bodegaDestinoId===movDraft.bodegaId){toast('Bodegas iguales','La bodega destino debe ser distinta a la origen','error');return}
   }
 
+  // Fecha de cosecha (producto cosechado a stock)
+  if(cfg.reqFechaCosecha){
+    if(!movDraft.fechaCosecha){toast('Falta fecha de cosecha','Indique la fecha de cosecha del producto','error');return}
+  }
+
   // Documento tributario (cuando aplica)
   if(cfg.reqDoc){
     if(!movDraft.tipoDoc){toast('Falta tipo de documento','Seleccione el tipo de documento','error');return}
@@ -6668,6 +6679,9 @@ async function saveMovimiento(){
       };
       // Tipo de movimiento (motivo) y campos contextuales
       m.tipoMovimiento=movDraft.tipoMovimiento;
+      if(cfg.reqFechaCosecha){
+        m.fechaCosecha=movDraft.fechaCosecha||null;
+      }
       if(cfg.reqDoc){
         m.tipoDoc=movDraft.tipoDoc;
         m.numeroDoc=movDraft.numeroDoc;
@@ -6884,6 +6898,7 @@ async function exportMovimientosExcel(){
       data.push({
         'N°':m.numero,'Tipo':tipoLabel(m.tipo),'Tipo Movimiento':tipoMovLabel(m),
         'Fecha':fmtDate(m.fecha),
+        'Fecha Cosecha':m.fechaCosecha?fmtDateOnly(m.fechaCosecha):'',
         'Bodega':b?.nombre||'',
         'Bodega Destino':bDest?.nombre||'',
         'Centro Costo':m.centroCosto||'',
