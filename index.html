@@ -14454,7 +14454,12 @@ function configProdEstado(){
   body += '<div style="font-size:11px;color:var(--mu);margin-top:8px">Ejemplo: 100 plantas (70 sanas + 20 débiles al 60% + 10 muertas) = 70 + 12 + 0 = 82 plantas productivas.</div>';
 
   showModal('⚙️ % de producción por estado'+(esGlobal?'':' — paño específico'), body,
-    function(){
+    '<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>'+
+    '<button class="btn btn-primary" id="peGuardarBtn">Guardar configuración</button>',
+    'md');
+  var btn = document.getElementById('peGuardarBtn');
+  if(btn){
+    btn.onclick = function(){
       var nuevo = {};
       ['sano','debil','replante','muerto','falta'].forEach(function(k){
         var inp=document.getElementById('pe-'+k);
@@ -14470,7 +14475,8 @@ function configProdEstado(){
       try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
       closeModal();
       toast('Configuración guardada', _cfgProdPanoSel==='__global__'?'Porcentajes por defecto actualizados':'Porcentajes del paño actualizados','success');
-    }, 'Guardar configuración');
+    };
+  }
 }
 // Cambiar el paño seleccionado dentro del modal (reabre con sus valores)
 function configProdEstadoCambiarPano(val){
