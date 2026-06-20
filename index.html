@@ -373,7 +373,9 @@ table.data .actions{white-space:nowrap;text-align:right}
 /* Form */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px}
 /* Dropdown de sugerencias de proveedor/cliente */
-.mv-sug-box{position:absolute;top:100%;left:0;right:0;z-index:50;background:#fff;border:1px solid var(--bo);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;margin-top:2px}
+.mv-sug-box{position:absolute;top:100%;left:0;right:0;z-index:9999;background:#fff;border:1px solid var(--bo);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.22);max-height:280px;overflow-y:auto;margin-top:2px}
+/* La tarjeta que contiene un autocompletado no debe recortar el dropdown */
+.card.card-autocomplete{overflow:visible}
 .mv-sug-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bo)}
 .mv-sug-item:last-child{border-bottom:none}
 .mv-sug-item:hover{background:var(--gp)}
@@ -6191,11 +6193,11 @@ function _renderMovForm(c){
 
       ${cfg.reqProv?`
       <!-- 2b. Proveedor (cuando aplica) -->
-      <div class="card" style="margin-top:14px">
+      <div class="card card-autocomplete" style="margin-top:14px">
         <div class="card-header"><div class="card-title">🚚 Proveedor</div>${can('proveedores.crear')?`<button class="btn btn-secondary btn-sm" onclick="_captureMovHeader();openProveedorForm(null,{fromMov:true,prefilledCodigo:document.getElementById('mvProvCod')?document.getElementById('mvProvCod').value:''})">+ Crear nuevo</button>`:''}</div>
         <div style="padding:18px">
           <div class="form-grid">
-            <div class="form-field required" style="position:relative"><label>Código o razón social</label>
+            <div class="form-field required" style="position:relative;z-index:100"><label>Código o razón social</label>
               <input type="text" id="mvProvCod" value="${escapeHtml(movDraft.proveedorCodigo||'')}" placeholder="Ej: 77684700 o nombre del proveedor" autocomplete="off">
               <div class="hint">Escriba el código (RUT sin guión) o el nombre para buscar</div>
               <div id="mvProvSug" class="mv-sug-box" style="display:none"></div>
@@ -6211,11 +6213,11 @@ function _renderMovForm(c){
 
       ${cfg.reqCli?`
       <!-- 2c. Cliente (cuando aplica) -->
-      <div class="card" style="margin-top:14px">
+      <div class="card card-autocomplete" style="margin-top:14px">
         <div class="card-header"><div class="card-title">👤 Cliente / Destino</div>${can('clientes.crear')?`<button class="btn btn-secondary btn-sm" onclick="_captureMovHeader();openClienteForm(null,{fromMov:true,prefilledCodigo:document.getElementById('mvCliCod')?document.getElementById('mvCliCod').value:''})">+ Crear nuevo</button>`:''}</div>
         <div style="padding:18px">
           <div class="form-grid">
-            <div class="form-field required" style="position:relative"><label>Código o razón social</label>
+            <div class="form-field required" style="position:relative;z-index:100"><label>Código o razón social</label>
               <input type="text" id="mvCliCod" value="${escapeHtml(movDraft.clienteCodigo||'')}" placeholder="Ej: 77684700 o nombre del cliente" autocomplete="off">
               <div class="hint">Escriba el código (RUT sin guión) o el nombre para buscar</div>
               <div id="mvCliSug" class="mv-sug-box" style="display:none"></div>
