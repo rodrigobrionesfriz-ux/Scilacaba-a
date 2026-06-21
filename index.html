@@ -365,6 +365,28 @@ table.data .num{text-align:right;font-family:'IBM Plex Mono',monospace;font-size
 table.data .center{text-align:center}
 table.data .actions{white-space:nowrap;text-align:right}
 
+/* ─── Ajustes para móvil (teléfono) ─── */
+@media(max-width:640px){
+  /* Tarjetas del dashboard: 2 de ancho (con 6 tarjetas = 2×3) y texto compacto */
+  .stats-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px;margin-bottom:14px}
+  .stat-card{padding:10px 11px}
+  .stat-card::before{height:2px}
+  .stat-label{font-size:9px;letter-spacing:.3px;margin-bottom:3px;line-height:1.2}
+  .stat-value{font-size:17px;letter-spacing:-.3px}
+  .stat-sub{font-size:9.5px;margin-top:2px;line-height:1.2}
+  /* Listado de productos / tablas: fuente y padding reducidos para que quepan en una línea */
+  table.data{font-size:11px}
+  table.data th{padding:6px 7px;font-size:9px;letter-spacing:.2px}
+  table.data td{padding:6px 7px}
+  table.data .num{font-size:10.5px}
+}
+@media(max-width:380px){
+  .stat-value{font-size:15px}
+  .stat-label{font-size:8.5px}
+  table.data{font-size:10px}
+  table.data td{padding:5px 5px}
+}
+
 .empty-state{
   padding:60px 20px;text-align:center;
   color:var(--mu);
