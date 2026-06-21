@@ -3616,7 +3616,7 @@ async function exportProductosExcel(){
 }
 
 /* ═══════════════ CARGA MASIVA DE PRODUCTOS ═══════════════ */
-const PLANTILLA_HEADERS=['EAN','Descripcion','UM','Tipo','Grupo','SubGrupo','ManejaAtributos','Inventariable','StockMinimo'];
+const PLANTILLA_HEADERS=['EAN','Descripcion','UM','Tipo','Grupo','SubGrupo','ManejaAtributos','Inventariable','StockMinimo','IVA','ImpuestoEspecifico','ILA'];
 const UM_VALIDAS=['UN','KG','GR','LT','ML','MT','M2','M3','CJ','PQ','TON','PZ','MR'];
 
 function downloadPlantillaProductos(){
@@ -3624,13 +3624,13 @@ function downloadPlantillaProductos(){
   var empresaCfg = (STATE.cache && STATE.cache.config && STATE.cache.config.empresa) || {};
   // Hoja 1: Productos (con encabezados + 2 filas de ejemplo)
   const ejemplos=[
-    {EAN:'7801234567890',Descripcion:'PRODUCTO DE EJEMPLO 1',UM:'UN',Tipo:'MERCADERIA',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'NO',Inventariable:'SI',StockMinimo:0},
-    {EAN:'',Descripcion:'PRODUCTO DE EJEMPLO 2 CON LOTE',UM:'KG',Tipo:'MATERIA PRIMA',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'SI',Inventariable:'SI',StockMinimo:10},
-    {EAN:'',Descripcion:'SERVICIO DE EJEMPLO (NO INVENTARIABLE)',UM:'UN',Tipo:'SERVICIO',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'NO',Inventariable:'NO',StockMinimo:0}
+    {EAN:'7801234567890',Descripcion:'PRODUCTO DE EJEMPLO 1',UM:'UN',Tipo:'MERCADERIA',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'NO',Inventariable:'SI',StockMinimo:0,IVA:'SI',ImpuestoEspecifico:'NO',ILA:'NO'},
+    {EAN:'',Descripcion:'DIÉSEL (EJEMPLO COMBUSTIBLE)',UM:'LT',Tipo:'MATERIA PRIMA',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'NO',Inventariable:'SI',StockMinimo:200,IVA:'SI',ImpuestoEspecifico:'SI',ILA:'NO'},
+    {EAN:'',Descripcion:'SERVICIO DE EJEMPLO (NO INVENTARIABLE)',UM:'UN',Tipo:'SERVICIO',Grupo:'GENERAL',SubGrupo:'',ManejaAtributos:'NO',Inventariable:'NO',StockMinimo:0,IVA:'SI',ImpuestoEspecifico:'NO',ILA:'NO'}
   ];
   const ws1=XLSX.utils.json_to_sheet(ejemplos,{header:PLANTILLA_HEADERS});
   // Anchos de columna razonables
-  ws1['!cols']=[{wch:16},{wch:42},{wch:6},{wch:22},{wch:18},{wch:18},{wch:16},{wch:13}];
+  ws1['!cols']=[{wch:16},{wch:42},{wch:6},{wch:22},{wch:18},{wch:18},{wch:16},{wch:13},{wch:11},{wch:6},{wch:18},{wch:6}];
 
   // Hoja 2: Instrucciones
   const ahora=new Date().toLocaleDateString('es-CL');
@@ -3660,6 +3660,9 @@ function downloadPlantillaProductos(){
     ['ManejaAtributos','No','SI / NO. Si es SI, las entradas pedirán lote y vencimiento.'],
     ['Inventariable','No','SI / NO. Si es NO, el producto no lleva control de stock (servicios). Default SI.'],
     ['StockMinimo','No','Número. Para alertas de bajo stock. Default 0.'],
+    ['IVA','No','SI / NO. Si el producto es afecto a IVA (19%). Default SI.'],
+    ['ImpuestoEspecifico','No','SI / NO. Si aplica impuesto específico a combustibles (diésel, gasolina). Default NO. El monto se ingresa al registrar la factura.'],
+    ['ILA','No','SI / NO. Si aplica ILA (bebidas y licores). Default NO. El monto se ingresa al registrar la factura.'],
     [],
     ['REGLAS'],
     ['• Productos con EAN duplicado serán rechazados.'],
@@ -3788,10 +3791,15 @@ function _validateBulkRows(rows){
       if(isNaN(n))warns.push(`Stock mínimo "${r.StockMinimo}" no es numérico, se usará 0`);
       else stockMin=n;
     }
+    // Impuestos: IVA default SI; específico e ILA default NO
+    var ivaRaw=(r.IVA==null?'':String(r.IVA)).trim();
+    var aplicaIVA = ivaRaw==='' ? true : _normalizaSI(r.IVA);
+    var aplicaIEC = _normalizaSI(r.ImpuestoEspecifico);
+    var aplicaILA = _normalizaSI(r.ILA);
 
     const item={
       fila,
-      data:{ean,descripcion:desc,unidadMedida:um,tipoProducto:tipoCanon,grupo:grupoNombre,subGrupo,manejaAtributos:manejaAtrib,inventariable:inventariable,stockMinimo:stockMin},
+      data:{ean,descripcion:desc,unidadMedida:um,tipoProducto:tipoCanon,grupo:grupoNombre,subGrupo,manejaAtributos:manejaAtrib,inventariable:inventariable,stockMinimo:stockMin,aplicaIVA:aplicaIVA,aplicaIEC:aplicaIEC,aplicaILA:aplicaILA},
       errors:errs,warnings:warns
     };
     if(errs.length>0)invalidas.push(item);else validas.push(item);
@@ -3880,6 +3888,9 @@ async function _executeBulkImport(){
         manejaAtributos:!!it.data.manejaAtributos,
         inventariable:it.data.inventariable!==false,
         stockMinimo:it.data.stockMinimo||0,
+        aplicaIVA:it.data.aplicaIVA!==false,
+        aplicaIEC:!!it.data.aplicaIEC,
+        aplicaILA:!!it.data.aplicaILA,
         activo:true,
         creado:new Date().toISOString(),
         cargaMasiva:true
