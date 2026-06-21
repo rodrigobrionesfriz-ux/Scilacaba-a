@@ -3337,6 +3337,17 @@ function renderProductos(c){
 }
 function renderProductosTable(){
   const w=document.getElementById('prodTableWrap');
+  // Si no hay búsqueda ni filtros activos, no listar todos (pueden ser muchos): invitar a buscar
+  const hayFiltro = prodFilter.search || prodFilter.grupo || prodFilter.tipo;
+  if(!hayFiltro){
+    w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
+      '<div class="empty-state-icon">🔍</div>'+
+      '<div class="empty-state-title">Busca o filtra productos</div>'+
+      '<div class="empty-state-text">Usa el buscador (código, EAN o descripción) o los filtros de grupo y tipo para encontrar productos.<br>Hay <strong>'+STATE.cache.products.length+'</strong> productos registrados.</div>'+
+      (can('productos.crear')?'<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openProductForm()">+ Nuevo producto</button>':'')+
+    '</div>';
+    return;
+  }
   let prods=STATE.cache.products;
   if(prodFilter.search){
     const s=prodFilter.search.toLowerCase();
@@ -3345,8 +3356,8 @@ function renderProductosTable(){
   if(prodFilter.grupo)prods=prods.filter(p=>p.grupo===prodFilter.grupo);
   if(prodFilter.tipo)prods=prods.filter(p=>p.tipoProducto===prodFilter.tipo);
   prods=prods.sort((a,b)=>a.codigoInterno.localeCompare(b.codigoInterno));
-  if(prods.length===0){w.innerHTML='<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">Sin productos</div><div class="empty-state-text">'+(STATE.cache.products.length===0?'Crea tu primer producto':'No hay coincidencias con los filtros')+'</div></div>';return}
-  w.innerHTML=`<table class="data">
+  if(prods.length===0){w.innerHTML='<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">Sin coincidencias</div><div class="empty-state-text">No hay productos que coincidan con la búsqueda o filtros.</div></div>';return}
+  w.innerHTML=`<div style="font-size:12px;color:var(--mu);margin-bottom:8px">${prods.length} producto(s) encontrado(s)</div><table class="data">
     <thead><tr>
       <th>Código</th><th>EAN</th><th>Descripción</th><th>UM</th><th>Tipo</th><th>Grupo / Sub-Grupo</th>
       <th class="center">Lote</th><th class="num">Stock total</th><th class="num">Costo PPP</th><th class="actions">Acciones</th>
