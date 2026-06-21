@@ -165,11 +165,20 @@ a{color:var(--gm);text-decoration:none}
 /* ─────────── APP LAYOUT ─────────── */
 #app{display:none;height:100vh;grid-template-columns:240px 1fr;grid-template-rows:56px 1fr;grid-template-areas:"sidebar topbar" "sidebar main"}
 #app.show{display:grid}
-/* OP. CONTEOS: modo solo-conteos a pantalla completa (móvil en terreno) */
-body.solo-conteos #app{grid-template-columns:1fr;grid-template-rows:1fr;grid-template-areas:"main"}
-body.solo-conteos .sidebar{display:none!important}
+/* OP. CONTEOS: barra lateral compacta con solo sus módulos (Conteos e Inventario de huerto) */
 body.solo-conteos .topbar{display:none!important}
+body.solo-conteos #app{grid-template-rows:1fr;grid-template-areas:"sidebar main"}
+body.solo-conteos .sidebar{width:auto}
 body.solo-conteos #main, body.solo-conteos .main{padding:0!important}
+@media(max-width:680px){
+  /* En móvil: barra lateral angosta solo con iconos para aprovechar el espacio */
+  body.solo-conteos #app{grid-template-columns:60px 1fr}
+  body.solo-conteos .sidebar-brand-text{display:none}
+  body.solo-conteos .nav-section .nav-label{display:none}
+  body.solo-conteos .nav-item{justify-content:center;padding:14px 0;font-size:0!important}
+  body.solo-conteos .nav-item-icon{font-size:22px!important;margin:0!important}
+  body.solo-conteos .sidebar-footer{display:none}
+}
 .sidebar{
   grid-area:sidebar;
   background:var(--gd);
@@ -210,6 +219,14 @@ body.solo-conteos #main, body.solo-conteos .main{padding:0!important}
   color:rgba(255,255,255,.4);text-transform:uppercase;
   padding:10px 12px 6px;
 }
+.nav-label-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;user-select:none;border-radius:var(--radius-sm);transition:all .12s;
+}
+.nav-label-toggle:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.05)}
+.nav-chevron{font-size:10px;opacity:.7;transition:transform .15s}
+.nav-section-items{overflow:hidden;transition:max-height .2s ease;max-height:600px}
+.nav-section.nav-collapsed .nav-section-items{max-height:0}
 .nav-item{
   display:flex;align-items:center;gap:11px;
   padding:9px 12px;
@@ -2387,19 +2404,37 @@ function renderSidebar(){
   PAGES.forEach(sec=>{
     const visibleItems=sec.items.filter(it=>{
       if(it.adminOnly && STATE.user.role!=='admin')return false;
+      // OP. CONTEOS solo ve sus módulos de terreno (no el Dashboard ni otros)
+      if(STATE.user.role==='opconteos' && it.id!=='conteos' && it.id!=='invplantas')return false;
       return !it.perm || can(it.perm);
     });
     if(visibleItems.length===0)return;
-    html+=`<div class="nav-section"><div class="nav-label">${sec.section}</div>`;
+    // ¿Esta sección contiene la página activa? Si sí, forzar expandida
+    const tieneActiva = visibleItems.some(it=>it.id===STATE.page);
+    const colapsada = _navColapsadas[sec.section] && !tieneActiva;
+    html+=`<div class="nav-section ${colapsada?'nav-collapsed':''}" data-section="${escapeHtml(sec.section)}">`+
+      `<div class="nav-label nav-label-toggle" onclick="toggleNavSection('${escapeHtml(sec.section)}')">`+
+        `<span>${sec.section}</span><span class="nav-chevron">${colapsada?'▸':'▾'}</span>`+
+      `</div>`+
+      `<div class="nav-section-items">`;
     visibleItems.forEach(it=>{
       html+=`<div class="nav-item ${STATE.page===it.id?'active':''}" onclick="navigate('${it.id}')">
         <span class="nav-item-icon">${it.icon}</span>${it.label}
       </div>`;
     });
-    html+=`</div>`;
+    html+=`</div></div>`;
   });
   html+=`<div class="nav-section" style="margin-top:auto"><div class="nav-item" onclick="logout()" style="color:rgba(255,180,180,.85)"><span class="nav-item-icon">🚪</span>Cerrar sesión</div></div>`;
   nav.innerHTML=html;
+}
+// Estado de secciones colapsadas (persiste en localStorage)
+var _navColapsadas = (function(){
+  try{ return JSON.parse(localStorage.getItem('sci_nav_colapsadas')||'{}'); }catch(e){ return {}; }
+})();
+function toggleNavSection(seccion){
+  _navColapsadas[seccion] = !_navColapsadas[seccion];
+  try{ localStorage.setItem('sci_nav_colapsadas', JSON.stringify(_navColapsadas)); }catch(e){}
+  renderSidebar();
 }
 
 function navigate(page){
