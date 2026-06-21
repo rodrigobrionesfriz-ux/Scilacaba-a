@@ -12427,6 +12427,9 @@ function renderResumen(){
         var hijos=S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(p.id); });
         var plantasHijos=hijos.reduce(function(s,h){ return s+_plantasDe(h); },0);
         var total=propio+plantasHijos;
+        // Superficie total del paño = hectáreas del principal + las de sus polinizantes
+        var hasTotal=(parseFloat(p.hectareas)||0)+hijos.reduce(function(s,h){ return s+(parseFloat(h.hectareas)||0); },0);
+        var riegoTotal=(parseFloat(p.has_riego)||0)+hijos.reduce(function(s,h){ return s+(parseFloat(h.has_riego)||0); },0);
         var detVar='<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;font-size:11.5px">'+
           '<div style="display:flex;justify-content:space-between"><span style="color:#0a6ed1;font-weight:700">\u{1F333} '+escapeHtml(p.variedad||'Principal')+'</span><strong style="color:#0a6ed1">'+propio.toLocaleString('es-CL')+'</strong></div>';
         hijos.forEach(function(h){
@@ -12439,8 +12442,8 @@ function renderResumen(){
         return '<div class="cc-res-pano" style="flex:1;min-width:170px;background:#fafafa;border-radius:7px;padding:10px;border-left:4px solid '+p.color+'">'+
           '<div style="font-weight:700;font-size:13px;line-height:1.2">'+escapeHtml(p.nombre)+'</div>'+
           '<div style="margin-top:5px;font-size:11px;display:flex;gap:8px;flex-wrap:wrap;color:#555">'+
-            '<span style="font-weight:700">\u{1F331} '+p.hectareas+' h\u00e1</span>'+
-            '<span style="color:#1a5a8a;font-weight:700">\u{1F4A7} '+(p.has_riego||0)+'</span>'+
+            '<span style="font-weight:700">\u{1F331} '+(Math.round(hasTotal*100)/100)+' h\u00e1</span>'+
+            '<span style="color:#1a5a8a;font-weight:700">\u{1F4A7} '+(Math.round(riegoTotal*100)/100)+'</span>'+
             '<span style="color:#5a3a8a;font-weight:700">\u{1F33F} '+(p.densidad||0)+'</span>'+
             '<span style="color:#888">'+r+' aplic.</span></div>'+
           detVar+'</div>';
