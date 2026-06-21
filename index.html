@@ -803,6 +803,14 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
 .cc-stat-c{background:#fff;border:1px solid #e5e5e5;border-radius:9px;padding:16px;text-align:center;box-shadow:var(--cc-sh)}
 .cc-stat-c .cc-n{font-size:30px;font-weight:700;color:#354a5f}
 .cc-stat-c .cc-l{font-size:12px;color:#a0a0a0;margin-top:3px}
+/* Móvil: stats 2x2 y tarjetas de paño compactas */
+@media(max-width:640px){
+  .cc-stat-g{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+  .cc-stat-c{padding:11px 8px}
+  .cc-stat-c .cc-n{font-size:21px}
+  .cc-stat-c .cc-l{font-size:10px;margin-top:1px}
+  .cc-res-pano{min-width:0!important;flex:1 1 calc(50% - 5px)!important}
+}
 
 /* ─── CHIPS ─── */
 .cc-chip{padding:8px 12px;border-radius:7px;border:2px solid #ddd;background:#fafafa;color:#6a7889;cursor:pointer;font-size:12px;font-family:Arial;transition:all .15s;text-align:left}
@@ -12399,40 +12407,35 @@ function renderResumen(){
   }
   var ry=document.getElementById('cc-res-years');
   ry.innerHTML=['2018','2024','2026'].map(function(y){
-    var ps=(typeof ordenarPanosPadreHijo==='function')?ordenarPanosPadreHijo(S.panos.filter(function(p){ return p.anio===y; })):S.panos.filter(function(p){ return p.anio===y; });
+    var todosDelAnio=S.panos.filter(function(p){ return p.anio===y; });
+    var ps=(typeof ordenarPanosPadreHijo==='function')?ordenarPanosPadreHijo(todosDelAnio):todosDelAnio;
+    // Mostrar solo paños PRINCIPALES (los polinizantes se integran dentro de su padre)
+    ps = ps.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
     if(!ps.length) return '';
-    return '<div class="cc-card" style="margin-bottom:0"><div class="cc-card-ttl">🌱 Plantación '+y+'</div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:10px">'+ps.map(function(p){
+    return '<div class="cc-card" style="margin-bottom:0"><div class="cc-card-ttl">\u{1F331} Plantaci\u00f3n '+y+'</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px">'+ps.map(function(p){
         var r=S.registros.filter(function(x){ return x.panoId==p.id; }).length;
-        var esPolin=(p.tipo||'Productivo')==='Polinizante';
-        // Calcular plantas y total
         var propio=_plantasDe(p);
         var hijos=S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(p.id); });
         var plantasHijos=hijos.reduce(function(s,h){ return s+_plantasDe(h); },0);
         var total=propio+plantasHijos;
-        // Línea de plantas según tipo
-        var lineaPlantas='';
-        if(esPolin){
-          var pad=p.panoPadre?S.panos.find(function(x){ return String(x.id)===String(p.panoPadre); }):null;
-          lineaPlantas='<div style="margin-top:5px;font-size:12px"><span style="color:#92600a;font-weight:700">🐝 '+propio.toLocaleString('es-CL')+' plantas polinizante</span>'+(pad?'<span style="color:#888;font-size:11px"> → '+pad.nombre+'</span>':'')+'</div>';
-        } else if(plantasHijos>0){
-          lineaPlantas='<div style="margin-top:5px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap">'+
-            '<span style="color:#0a6ed1;font-weight:700">🌳 '+propio.toLocaleString('es-CL')+' '+(p.variedad||'principal')+'</span>'+
-            '<span style="color:#92600a;font-weight:700">🐝 '+plantasHijos.toLocaleString('es-CL')+' polin.</span>'+
-            '<span style="color:#354a5f;font-weight:800">Σ '+total.toLocaleString('es-CL')+' totales</span></div>';
-        } else {
-          lineaPlantas='<div style="margin-top:5px;font-size:12px"><span style="color:#0a6ed1;font-weight:700">🌳 '+propio.toLocaleString('es-CL')+' plantas</span></div>';
+        var detVar='<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;font-size:11.5px">'+
+          '<div style="display:flex;justify-content:space-between"><span style="color:#0a6ed1;font-weight:700">\u{1F333} '+escapeHtml(p.variedad||'Principal')+'</span><strong style="color:#0a6ed1">'+propio.toLocaleString('es-CL')+'</strong></div>';
+        hijos.forEach(function(h){
+          detVar+='<div style="display:flex;justify-content:space-between"><span style="color:#92600a;font-weight:700">\u{1F41D} '+escapeHtml(h.variedad||h.nombre)+'</span><strong style="color:#92600a">'+_plantasDe(h).toLocaleString('es-CL')+'</strong></div>';
+        });
+        if(plantasHijos>0){
+          detVar+='<div style="display:flex;justify-content:space-between;border-top:1px dashed #ddd;padding-top:3px;margin-top:1px"><span style="color:#354a5f;font-weight:800">\u03a3 Total</span><strong style="color:#354a5f">'+total.toLocaleString('es-CL')+'</strong></div>';
         }
-        var polBadge=esPolin?'<span style="background:#fef3c7;color:#92600a;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:6px">🐝 POLIN.</span>':'';
-        return '<div style="flex:1;min-width:150px;background:#fafafa;border-radius:7px;padding:12px;border-left:4px solid '+p.color+'">'+
-          '<div style="font-weight:700">'+p.nombre+polBadge+'</div>'+
-          '<div style="font-size:12px;color:#888;font-style:italic">'+p.variedad+'</div>'+
-          '<div style="margin-top:7px;font-size:12px;display:flex;gap:12px;flex-wrap:wrap">'+
-          '<span style="color:#354a5f;font-weight:700">🌱 '+p.hectareas+' há</span>'+
-          '<span style="color:#1a5a8a;font-weight:700">💧 '+(p.has_riego||0)+' há</span>'+
-          '<span style="color:#5a3a8a;font-weight:700">🌿 '+(p.densidad||0)+' pl/há</span>'+
-          '<span style="color:#888">'+r+' aplic.</span></div>'+
-          lineaPlantas+'</div>';
+        detVar+='</div>';
+        return '<div class="cc-res-pano" style="flex:1;min-width:170px;background:#fafafa;border-radius:7px;padding:10px;border-left:4px solid '+p.color+'">'+
+          '<div style="font-weight:700;font-size:13px;line-height:1.2">'+escapeHtml(p.nombre)+'</div>'+
+          '<div style="margin-top:5px;font-size:11px;display:flex;gap:8px;flex-wrap:wrap;color:#555">'+
+            '<span style="font-weight:700">\u{1F331} '+p.hectareas+' h\u00e1</span>'+
+            '<span style="color:#1a5a8a;font-weight:700">\u{1F4A7} '+(p.has_riego||0)+'</span>'+
+            '<span style="color:#5a3a8a;font-weight:700">\u{1F33F} '+(p.densidad||0)+'</span>'+
+            '<span style="color:#888">'+r+' aplic.</span></div>'+
+          detVar+'</div>';
       }).join('')+'</div></div>';
   }).join('');
 
