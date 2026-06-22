@@ -17108,6 +17108,10 @@ function processExcel(file) {
     return;
   }
   setStatus('⏳ Leyendo archivo...', 'loading');
+  // Marcar que hay una actualización local en curso: evita que un snapshot de
+  // Firebase (que aún puede traer datos anteriores) pise lo que estamos
+  // cargando desde el Excel. El flag se libera cuando el push a la nube confirma.
+  try{ if(typeof PZFB!=='undefined') PZFB._localEditing = true; }catch(e){}
 
   const reader = new FileReader();
   reader.onload = function(e) {
@@ -17269,10 +17273,15 @@ function processExcel(file) {
       // subir TODO el dataset a presupuesto/main (reemplazo total). ──
       try{
         if(typeof can==='function' && can('presupuesto.editar')){
-          // Diferir para que los inputs KPI (rb-kg/rb-tc) ya estén actualizados.
-          setTimeout(function(){ try{ pzFbPush(); }catch(e){ console.error(e); } }, 400);
+          // Diferir brevemente para que los inputs KPI (rb-kg/rb-tc) ya estén
+          // actualizados, luego subir. El flag _localEditing se libera al
+          // confirmar el push (o si Firebase no está disponible).
+          setTimeout(function(){ try{ pzFbPush(); }catch(e){ console.error(e); if(typeof PZFB!=='undefined') PZFB._localEditing=false; } }, 200);
+        } else {
+          // Sin permiso de edición: no se sube. Liberar el flag local.
+          if(typeof PZFB!=='undefined') PZFB._localEditing = false;
         }
-      }catch(e){}
+      }catch(e){ if(typeof PZFB!=='undefined') PZFB._localEditing = false; }
 
       // ── Reload Detalle Gastos from new file if sheet exists ──
       const detalleSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'detalle gastos');
@@ -18244,7 +18253,7 @@ function downloadDashboard() {
    completo en la nube; los demás roles leen en tiempo real vía onSnapshot.
    Solo el admin (permiso presupuesto.editar) puede subir. */
 var PZFB = {
-  ready:false, online:false, applyingRemote:false,
+  ready:false, online:false, applyingRemote:false, _localEditing:false,
   clientId: 'p_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
   lastVersion: 0, unsubscribe: null, listenerStarted:false
 };
@@ -18269,6 +18278,10 @@ function pzSerializeDataset(){
    re-renderiza. No vuelve a subir (se marca applyingRemote). */
 function pzLoadDataset(obj){
   if(!obj || typeof obj!=='object') return;
+  // Si el usuario acaba de subir un Excel localmente, NO pisar sus datos con
+  // un snapshot remoto que aún puede traer el valor anterior. La ventana se
+  // libera cuando el push local confirma.
+  if(PZFB._localEditing){ return; }
   try{
     PZFB.applyingRemote = true;
     if(Array.isArray(obj.rows) && obj.rows.length){ ACTIVE_DATA = obj.rows; }
@@ -18293,7 +18306,7 @@ function pzLoadDataset(obj){
 /* pzFbPush(): sube TODO el dataset a presupuesto/main (replace-all). */
 function pzFbPush(){
   var ref = pzFbDocRef();
-  if(!ref){ return; }
+  if(!ref){ if(typeof PZFB!=='undefined') PZFB._localEditing = false; return; }
   if(PZFB.applyingRemote){ return; }
   try{
     var version = Date.now();
@@ -18309,9 +18322,11 @@ function pzFbPush(){
       _updatedAt: (firebase.firestore.FieldValue ? firebase.firestore.FieldValue.serverTimestamp() : version)
     }).then(function(){
       PZFB.online = true;
+      PZFB._localEditing = false;
       try{ setStatus('☁️ Datos del presupuesto guardados en la nube.', 'ok'); }catch(e){}
     }).catch(function(err){
       PZFB.online = false;
+      PZFB._localEditing = false;
       console.error('[PZ-Firebase] Error al guardar:', err);
       try{ setStatus('⚠️ No se pudo guardar en la nube (datos locales OK).', 'error'); }catch(e){}
     });
@@ -18441,7 +18456,8 @@ window.PZ = {
   serializeDataset: pzSerializeDataset,
   loadDataset: pzLoadDataset,
   fbInit: pzFbInit,
-  fbPush: pzFbPush
+  fbPush: pzFbPush,
+  _fbState: function(){ return PZFB; }
 };
 })(); }
 </script>
