@@ -2544,6 +2544,21 @@ function toggleNavSection(seccion){
   renderSidebar();
 }
 
+/* ── Puente: superficie total (ha) de cerezos Plantación 2018 del Cuaderno ──
+   El módulo de presupuesto está encapsulado y no ve S.panos directamente; esta
+   función global le permite obtener la suma de hectáreas de los paños 2018. */
+function pzSumaHa2018(){
+  try{
+    var panos = (typeof S!=='undefined' && S && Array.isArray(S.panos)) ? S.panos : null;
+    if(!panos){ try{ if(typeof load==='function'){ /* el Cuaderno carga S bajo demanda */ } }catch(e){} }
+    if(!panos || !panos.length) return null;
+    var suma = panos.filter(function(p){ return String(p.anio)==='2018'; })
+                    .reduce(function(s,p){ return s + (parseFloat(p.hectareas)||0); }, 0);
+    return (suma>0) ? suma : null;
+  }catch(e){ return null; }
+}
+window.pzSumaHa2018 = pzSumaHa2018;
+
 /* ── OP. CONTEOS: mostrar la barra lateral con las 2 opciones para elegir ── */
 function mostrarMenuConteos(){
   STATE.page = null;                 // ninguna página activa todavía
@@ -3416,6 +3431,13 @@ function renderPresupuesto(main){
     <div class="rb-sub" id="rb-saldo-sub">Sobre presupuesto ✗</div>
   </div>
 
+  <div class="rb-item">
+    <div class="rb-label">Kilos Estimados</div>
+    <div class="rb-value teal">
+      <input class="rb-input" id="rb-kg-est" type="text" value="—" title="Estimado · proviene del Excel (celda U1)">
+    </div>
+    <div class="rb-sub">Kg estimados temporada</div>
+  </div>
   <div class="rb-item">
     <div class="rb-label">Kilos Cosechados</div>
     <div class="rb-value orange">
@@ -8741,6 +8763,78 @@ async function saveEmpresaForm(){
   }
 }
 
+/* ═══════════════ INDICADORES DIARIOS (config) ═══════════════ */
+/* Estructura persistida en store 'config' con key 'indicadoresDiarios':
+   { key:'indicadoresDiarios', meses:{ MAYO:{usd,utm,uf}, JUNIO:{...}, ... } } */
+var PZ_MESES_TEMP = ['MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE','ENERO','FEBRERO','MARZO','ABRIL'];
+function getIndicadores(){
+  try{
+    var c = (STATE.cache.config && STATE.cache.config.indicadoresDiarios) || null;
+    return (c && c.meses) ? c.meses : {};
+  }catch(e){ return {}; }
+}
+/* Devuelve el indicador de un mes (objeto {usd,utm,uf}) o null. */
+function getIndicadorMes(mes){
+  if(!mes) return null;
+  var m = getIndicadores();
+  var key = String(mes).toUpperCase().trim();
+  return m[key] || null;
+}
+function _fmtIndic(v){
+  if(v==null || v==='' || isNaN(v)) return '';
+  return Number(v).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function renderIndicadoresRows(){
+  var datos = getIndicadores();
+  var editable = (typeof can==='function') && can('config.editar');
+  var ro = editable ? '' : ' readonly';
+  return PZ_MESES_TEMP.map(function(mes){
+    var d = datos[mes] || {};
+    var inp = function(campo, val){
+      return '<input type="text" data-mes="'+mes+'" data-campo="'+campo+'" value="'+(_fmtIndic(val))+'"'+ro+
+             ' style="width:120px;padding:6px 8px;border:1px solid var(--bo);border-radius:6px;font-size:13px" placeholder="—">';
+    };
+    return '<tr style="border-bottom:1px solid var(--bo)">'+
+      '<td style="padding:6px 10px;font-weight:600">'+mes+'</td>'+
+      '<td style="padding:6px 10px">'+inp('usd', d.usd)+'</td>'+
+      '<td style="padding:6px 10px">'+inp('utm', d.utm)+'</td>'+
+      '<td style="padding:6px 10px">'+inp('uf', d.uf)+'</td>'+
+      '</tr>';
+  }).join('');
+}
+function _parseIndic(str){
+  if(str==null) return null;
+  var v = String(str).trim().replace(/\./g,'').replace(',', '.').replace(/[^0-9.\-]/g,'');
+  if(v==='') return null;
+  var n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+async function saveIndicadores(){
+  if(!can('config.editar')){ return; }
+  try{
+    var inputs = document.querySelectorAll('#indicadores-tbody input[data-mes]');
+    var meses = {};
+    inputs.forEach(function(inp){
+      var mes = inp.getAttribute('data-mes');
+      var campo = inp.getAttribute('data-campo');
+      var val = _parseIndic(inp.value);
+      if(!meses[mes]) meses[mes] = {};
+      if(val!=null) meses[mes][campo] = val;
+    });
+    var obj = { key:'indicadoresDiarios', meses: meses, _updatedAt: new Date().toISOString() };
+    await dbPut('config', obj);
+    STATE.cache.config = STATE.cache.config || {};
+    STATE.cache.config.indicadoresDiarios = obj;
+    if(typeof showNotice==='function') showNotice('\u2713 Indicadores diarios guardados.', 'ok');
+    else if(typeof toast==='function') toast('Indicadores guardados');
+  }catch(e){
+    console.error('saveIndicadores error:', e);
+    if(typeof showNotice==='function') showNotice('\u274c No se pudieron guardar los indicadores.', 'error');
+  }
+}
+window.getIndicadorMes = getIndicadorMes;
+window.getIndicadores = getIndicadores;
+
 function renderConfig(c){
   const groups=STATE.cache.groups;
   const tipos=(STATE.cache.productTypes||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
@@ -8779,6 +8873,34 @@ function renderConfig(c){
               <div style="font-size:11px;color:var(--mu)">Estilo anterior</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-header">
+          <div class="card-title">📈 Indicadores Diarios</div>
+          ${can('config.editar')?`<button class="btn btn-primary btn-sm" onclick="saveIndicadores()">💾 Guardar indicadores</button>`:''}
+        </div>
+        <div style="padding:14px 18px">
+          <div style="font-size:13px;color:var(--mu);margin-bottom:12px">
+            Valores mensuales de los principales indicadores económicos. Se usan como respaldo en otros módulos
+            (por ejemplo, el Tipo de Cambio del Control de Presupuesto toma el <strong>Valor USD</strong> del mes
+            cuando el Excel no lo trae). Edite y presione «Guardar indicadores».
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data-table" id="indicadores-table" style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="text-align:left;border-bottom:2px solid var(--bo)">
+                  <th style="padding:8px 10px">Mes</th>
+                  <th style="padding:8px 10px">Valor USD ($/USD)</th>
+                  <th style="padding:8px 10px">UTM ($)</th>
+                  <th style="padding:8px 10px">UF ($)</th>
+                </tr>
+              </thead>
+              <tbody id="indicadores-tbody">${renderIndicadoresRows()}</tbody>
+            </table>
+          </div>
+          <div class="hint" style="margin-top:8px;line-height:1.4">Temporada Mayo 2025 – Abril 2026. Deje en blanco los meses sin dato.</div>
         </div>
       </div>
 
@@ -16996,16 +17118,27 @@ function processExcel(file) {
 
       const ws = wb.Sheets[sheetName];
 
-      // ── Read Kilos Cosechados from cell T1 of Base sheet ──
-      // T1 = column 20 (T is the 20th letter, 1-indexed)
-      const t1Cell = ws['T1'];
-      if (t1Cell != null && t1Cell.v != null && t1Cell.v !== '') {
-        const t1Val = parseFloat(t1Cell.v);
-        if (!isNaN(t1Val) && t1Val > 0) {
+      // ── Read Kilos Cosechados from cell W1 of Base sheet ──
+      // (antes se leía de T1; ahora el dato de kilos cosechados está en W1)
+      const w1Cell = ws['W1'];
+      if (w1Cell != null && w1Cell.v != null && w1Cell.v !== '') {
+        const w1Val = parseFloat(w1Cell.v);
+        if (!isNaN(w1Val) && w1Val > 0) {
           const kgInput = document.getElementById('rb-kg');
           if (kgInput) {
-            // Format with es-CL style: thousands separated by dots, no decimals (kilos are integer)
-            kgInput.value = Math.round(t1Val).toLocaleString('es-CL');
+            // Formato es-CL: miles separados por punto, sin decimales (kilos enteros)
+            kgInput.value = Math.round(w1Val).toLocaleString('es-CL');
+          }
+        }
+      }
+      // ── Read Kilos Estimados from cell U1 of Base sheet ──
+      const u1Cell = ws['U1'];
+      if (u1Cell != null && u1Cell.v != null && u1Cell.v !== '') {
+        const u1Val = parseFloat(u1Cell.v);
+        if (!isNaN(u1Val) && u1Val > 0) {
+          const kgEstInput = document.getElementById('rb-kg-est');
+          if (kgEstInput) {
+            kgEstInput.value = Math.round(u1Val).toLocaleString('es-CL');
           }
         }
       }
@@ -17107,8 +17240,21 @@ function processExcel(file) {
       );
       const lastTC = lastMesReal ? parseFloat(lastMesReal['TC']) : null;
       if (lastTC) {
+        // El Excel manda: si trae TC, ese se usa.
         const tcInput = document.getElementById('rb-tc');
         if (tcInput) tcInput.value = lastTC.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      } else {
+        // Respaldo: si el Excel no trae TC, usar el Valor USD del último mes con
+        // datos desde Indicadores Diarios (Configuración del SCI).
+        try{
+          if(typeof window.getIndicadorMes==='function'){
+            const indic = window.getIndicadorMes(lastMes);
+            if(indic && indic.usd){
+              const tcInput = document.getElementById('rb-tc');
+              if(tcInput) tcInput.value = Number(indic.usd).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+          }
+        }catch(e){}
       }
 
       // Update global data
@@ -18230,6 +18376,38 @@ function pzInit(){
     try{
       var _btn = document.getElementById('pz-btn-upload');
       if(_btn){ _btn.style.display = (typeof can==='function' && can('presupuesto.editar')) ? '' : 'none'; }
+    }catch(e){}
+    // Tipo de Cambio por defecto desde Indicadores Diarios (respaldo): si existe
+    // un Valor USD para el último mes con datos reales, usarlo como referencia
+    // cuando el dashboard arranca sin un TC traído por Excel en esta sesión.
+    try{
+      if(typeof window.getIndicadorMes==='function'){
+        var mesesReales = (window.MONTHS_WITH_REAL || (typeof MONTHS_WITH_REAL!=='undefined'?MONTHS_WITH_REAL:[])) || [];
+        var ultimoMes = mesesReales.length ? mesesReales[mesesReales.length-1] : null;
+        var indic = ultimoMes ? window.getIndicadorMes(ultimoMes) : null;
+        var tcInput = document.getElementById('rb-tc');
+        if(indic && indic.usd && tcInput){
+          // Solo si el usuario no ha modificado manualmente (heurística: marcar).
+          if(!tcInput.dataset.pzUserEdited){
+            tcInput.value = Number(indic.usd).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+          }
+        }
+      }
+    }catch(e){}
+    // Superficie CZ 2018: tomar la suma de hectáreas de los paños 2018 del
+    // Cuaderno de Campo. Si existe, se rellena y se marca como derivada.
+    try{
+      if(typeof window.pzSumaHa2018==='function'){
+        var ha2018 = window.pzSumaHa2018();
+        var haInput = document.getElementById('rb-ha');
+        if(haInput && ha2018!=null && ha2018>0){
+          haInput.value = (Math.round(ha2018*100)/100).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+          haInput.readOnly = true;
+          haInput.title = 'Calculado: suma de hectáreas de paños Plantación 2018 (Cuaderno de Campo)';
+          var sub = haInput.closest('.rb-item') ? haInput.closest('.rb-item').querySelector('.rb-sub') : null;
+          if(sub) sub.textContent = 'Ha · suma paños 2018 (Cuaderno)';
+        }
+      }
     }catch(e){}
   }catch(e){ console.error('PZ init error:', e); }
 }
