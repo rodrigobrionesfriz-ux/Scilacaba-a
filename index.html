@@ -17248,25 +17248,44 @@ function renderAll(data) {
 
 // Populate filters
 function populateFilters() {
-  const meses = [...new Set(RAW.map(d => d.MES))].sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
-  const tipos = [...new Set(RAW.map(d => d["TIPO DE COSTO"].trim()))].sort();
-  const subgrupos = [...new Set(RAW.map(d => d["SUB-GRUPO"]))].sort();
-  const descs = [...new Set(RAW.map(d => d.DESCRIPCION))].sort();
+  // Generar las opciones desde los datos vigentes (los de la nube si existen,
+  // si no la semilla). Antes se usaba solo RAW, lo que dejaba los filtros
+  // desfasados respecto a los datos reales.
+  const datos = (typeof ACTIVE_DATA !== 'undefined' && ACTIVE_DATA && ACTIVE_DATA.length) ? ACTIVE_DATA : RAW;
+  const mesesReales = (typeof MONTHS_WITH_REAL !== 'undefined' ? (window.MONTHS_WITH_REAL || MONTHS_WITH_REAL) : []) || [];
 
-  const addOptions = (sel, arr) => arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
-  addOptions(document.getElementById('f-mes'), meses);
-  addOptions(document.getElementById('f-tipo'), tipos);
-  addOptions(document.getElementById('f-subgrupo'), subgrupos);
-  addOptions(document.getElementById('f-desc'), descs);
+  const meses = [...new Set(datos.map(d => d.MES))].sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+  const tipos = [...new Set(datos.map(d => (d["TIPO DE COSTO"]||'').trim()).filter(Boolean))].sort();
+  const subgrupos = [...new Set(datos.map(d => d["SUB-GRUPO"]).filter(Boolean))].sort();
+  const descs = [...new Set(datos.map(d => d.DESCRIPCION).filter(Boolean))].sort();
 
-  // Set month chips
+  // Limpiar el <select> dejando SOLO la opción "Todos" (value="") antes de
+  // rellenar. Esto evita opciones duplicadas: el HTML ya trae opciones y, sin
+  // esta limpieza, populateFilters las agregaba de nuevo en cada entrada.
+  const fillSelect = (id, arr) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const prev = sel.value;                 // conservar la selección actual si existe
+    sel.innerHTML = '<option value="">Todos</option>';
+    arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+    if(prev && arr.includes(prev)) sel.value = prev;
+  };
+  fillSelect('f-mes', meses);
+  fillSelect('f-tipo', tipos);
+  fillSelect('f-subgrupo', subgrupos);
+  fillSelect('f-desc', descs);
+
+  // Chips de meses: vaciar antes de rellenar (el HTML ya trae chips).
   const chips = document.getElementById('month-chips');
-  MONTH_ORDER.forEach(m => {
-    const chip = document.createElement('div');
-    chip.className = 'month-chip ' + (MONTHS_WITH_REAL.includes(m) ? 'chip-real' : 'chip-pending');
-    chip.textContent = m.slice(0,3);
-    chips.appendChild(chip);
-  });
+  if(chips){
+    chips.innerHTML = '';
+    MONTH_ORDER.forEach(m => {
+      const chip = document.createElement('div');
+      chip.className = 'month-chip ' + (mesesReales.includes(m) ? 'chip-real' : 'chip-pending');
+      chip.textContent = m.slice(0,3);
+      chips.appendChild(chip);
+    });
+  }
 
   refreshLastUpdate();
 }
