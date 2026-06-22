@@ -10402,6 +10402,43 @@ function ipMostrarMapaGeneral(){
   '</div>';
 
   var body='<div style="flex:1;overflow:auto;padding:20px;background:#f4f6f8">';
+
+  // ── Resumen de cantidades de plantas por estado (parte superior) ──
+  // Recorre todas las plantas de todas las hileras de los cuarteles
+  // seleccionados y cuenta cuántas hay en cada estado (Sano, Débil, Muerto,
+  // Replante, Falla/vacío).
+  var conteoEstados = { sano:0, debil:0, muerto:0, replante:0, falta:0 };
+  var totalPlantas = 0;
+  regs.forEach(function(r){
+    (r.plantas||[]).forEach(function(p){
+      var est = (p && p.estado) ? p.estado : 'sano';
+      if(conteoEstados[est]===undefined) conteoEstados[est] = 0;
+      conteoEstados[est]++;
+      totalPlantas++;
+    });
+  });
+  body += '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:14px 16px;margin-bottom:16px">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">'+
+      '<div style="font-size:14px;font-weight:800;color:#23303d">📊 Resumen de plantas por estado</div>'+
+      '<div style="font-size:13px;color:#3a4a5a">Total: <strong style="color:#23303d;font-size:15px">'+totalPlantas.toLocaleString('es-CL')+'</strong> plantas</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+      Object.keys(IP_ESTADOS).map(function(k){
+        var e = IP_ESTADOS[k];
+        var n = conteoEstados[k]||0;
+        var pct = totalPlantas>0 ? Math.round((n/totalPlantas)*1000)/10 : 0;
+        return '<div style="flex:1;min-width:120px;background:#f8fafb;border:1px solid #e3e8ee;border-left:4px solid '+e.color+';border-radius:8px;padding:10px 12px">'+
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
+            '<span style="width:11px;height:11px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+
+            '<span style="font-size:12px;color:#3a4a5a;font-weight:600">'+e.label+'</span>'+
+          '</div>'+
+          '<div style="font-size:22px;font-weight:800;color:#23303d;line-height:1.1">'+n.toLocaleString('es-CL')+'</div>'+
+          '<div style="font-size:11px;color:#7a8794">'+pct+'% del total</div>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
   // Leyenda de estados
   body += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;background:#fff;border:1px solid #e3e8ee;padding:10px 14px;border-radius:8px">'+
     Object.keys(IP_ESTADOS).map(function(k){var e=IP_ESTADOS[k];return '<span style="display:inline-flex;align-items:center;gap:5px;color:#3a4a5a;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+'</span>';}).join('')+
