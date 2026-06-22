@@ -2165,9 +2165,11 @@ function sciSeedHistory(){
   // Siembra el estado base al iniciar sesión (idempotente).
   try{
     if(STATE && STATE.user){
-      var p = STATE.page || 'dashboard';
+      // Para OP. CONTEOS la raíz es el MENÚ (no el dashboard): usamos el marcador
+      // '__menu__' para que el botón atrás vuelva al menú de elección, no al dashboard.
+      var p = (STATE.user.role==='opconteos') ? '__menu__' : (STATE.page || 'dashboard');
       _sciNavStack = [p];
-      history.replaceState({sciPage:p, depth:0}, '', location.pathname + location.search + '#' + p);
+      history.replaceState({sciPage:p, depth:0}, '', location.pathname + location.search + '#' + (p==='__menu__'?'menu':p));
     }
   }catch(e){}
 }
@@ -2178,13 +2180,17 @@ window.addEventListener('popstate', function(ev){
   if(_sciNavStack.length > 1){
     _sciNavStack.pop();
     var anterior = _sciNavStack[_sciNavStack.length - 1] || 'dashboard';
-    try{ navigate(anterior, true); }catch(e){ try{ navigate('dashboard', true); }catch(_e){} }
+    try{
+      if(anterior==='__menu__'){ if(typeof mostrarMenuConteos==='function') mostrarMenuConteos(); }
+      else { navigate(anterior, true); }
+    }catch(e){ try{ navigate('dashboard', true); }catch(_e){} }
     // Reflejar la profundidad actual en el history (sin volver a apilar página).
     try{ history.replaceState({sciPage:anterior, depth:_sciNavStack.length-1}, '', location.pathname + location.search + '#' + anterior); }catch(e){}
   } else {
     // En la raíz: re-apilar para mantener la app abierta (atrás no la cierra).
     var raiz = _sciNavStack[0] || 'dashboard';
-    try{ history.pushState({sciPage:raiz, depth:0}, '', location.pathname + location.search + '#' + raiz); }catch(e){}
+    if(raiz==='__menu__' && typeof mostrarMenuConteos==='function'){ mostrarMenuConteos(); }
+    try{ history.pushState({sciPage:raiz, depth:0}, '', location.pathname + location.search + '#' + (raiz==='__menu__'?'menu':raiz)); }catch(e){}
   }
 });
 
@@ -2429,18 +2435,10 @@ async function doLogin(){
   // Conteos en terreno / Inventario de Huerto) para que elija qué conteo
   // realizar. En escritorio el menú ya es visible, así que entra a conteos.
   if(STATE.user && STATE.user.role==='opconteos'){
-    var esMovil = window.innerWidth < 880;
-    if(esMovil){
-      // No entrar a ningún módulo aún: dejar el menú abierto para elegir.
-      STATE.page = null;
-      renderSidebar();
-      var _sb = document.getElementById('sidebar');
-      if(_sb) _sb.classList.add('open');
-      var _tt = document.getElementById('topTitle');
-      if(_tt) _tt.textContent = 'Elige el tipo de conteo';
-    } else {
-      navigate('conteos');
-    }
+    // OP. CONTEOS SIEMPRE ve primero la barra lateral con sus 2 opciones
+    // (Conteos en terreno / Inventario de Huerto). No entra a ningún módulo
+    // ni al dashboard. Funciona igual en móvil y escritorio.
+    mostrarMenuConteos();
   } else {
     navigate('dashboard');
   }
@@ -2545,7 +2543,29 @@ function toggleNavSection(seccion){
   renderSidebar();
 }
 
+/* ── OP. CONTEOS: mostrar la barra lateral con las 2 opciones para elegir ── */
+function mostrarMenuConteos(){
+  STATE.page = null;                 // ninguna página activa todavía
+  if(typeof renderSidebar==='function') renderSidebar();
+  var _sb = document.getElementById('sidebar');
+  if(_sb) _sb.classList.add('open'); // abrir el menú (en móvil estaba oculto)
+  var _tt = document.getElementById('topTitle');
+  if(_tt) _tt.textContent = 'Elige el tipo de conteo';
+  var _mc = document.getElementById('mainContent');
+  if(_mc) _mc.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--mu)">'
+    + '<div style="font-size:40px;margin-bottom:10px">📋</div>'
+    + '<div style="font-size:16px;font-weight:600;color:var(--tx);margin-bottom:6px">Elige el tipo de conteo</div>'
+    + '<div style="font-size:13px">Abre el menú ☰ y selecciona <b>Conteos en terreno</b> o <b>Inventario de Huerto</b>.</div>'
+    + '</div>';
+}
+
 function navigate(page, fromHistory){
+  // ── Guard OP. CONTEOS: solo puede entrar a 'conteos' o 'invplantas'.
+  // Cualquier otro destino (p.ej. 'dashboard') lo devuelve al menú. ──
+  if(STATE.user && STATE.user.role==='opconteos' && page!=='conteos' && page!=='invplantas'){
+    mostrarMenuConteos();
+    return;
+  }
   // Refrescar alerta de backup en cada navegación
   setTimeout(refreshBackupAlert,50);
   STATE.page=page;
@@ -4348,6 +4368,11 @@ function verPorVencer(){
 }
 
 function renderDashboard(c){
+  // OP. CONTEOS no tiene acceso al dashboard: mostrar su menú de conteos.
+  if(STATE.user && STATE.user.role==='opconteos'){
+    if(typeof mostrarMenuConteos==='function') mostrarMenuConteos();
+    return;
+  }
   const totalProd=STATE.cache.products.length;
   const totalBod=STATE.cache.warehouses.filter(w=>w.activo).length;
   const totalMov=STATE.cache.movements.filter(m=>!m.anulado).length;
