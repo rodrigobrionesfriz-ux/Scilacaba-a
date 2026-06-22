@@ -1768,6 +1768,16 @@ function dbPutLocal(store,obj){
 // Versión pública: guarda local Y sincroniza a la nube
 function dbPut(store,obj){
   return new Promise((res,rej)=>{
+    // Sellar marca de modificación en registros acumulativos: permite a la
+    // fusión saber qué versión es más reciente cuando dos dispositivos editan
+    // el mismo registro. No se aplica al aplicar un cambio remoto (para no
+    // re-sellar lo que ya viene de la nube).
+    try{
+      var ACUM = {'invplantas':1,'conteos':1,'estimaciones':1,'movements':1,'mantenciones':1,'inventoryCounts':1,'lots':1};
+      if(ACUM[store] && obj && typeof obj==='object' && !(typeof SCIFB!=='undefined' && SCIFB.applyingRemote)){
+        obj._mod = Date.now();
+      }
+    }catch(e){}
     const r=tx(store,'readwrite').put(obj);
     r.onsuccess=()=>{
       // Disparar sincronización a la nube (si está lista, no aplicando remoto, y no en arranque)
@@ -2000,12 +2010,23 @@ async function sciFbApplyRemote(data){
     SCIFB.applyingRemote = true;
     if(data.payload){
       var remote = (typeof data.payload === 'string') ? JSON.parse(data.payload) : data.payload;
-      // Reemplazar cada store con los datos remotos
+      // Stores acumulativos: registros que se agregan con el tiempo y donde
+      // perder uno es grave (conteos de plantas, conteos, estimaciones,
+      // movimientos, mantenciones, tomas de inventario, auditoría, lotes).
+      // Para estos hacemos FUSIÓN por clave en vez de reemplazo, de modo que si
+      // dos dispositivos tienen registros distintos, ninguno borre al otro.
+      var STORES_ACUMULATIVOS = {
+        'invplantas':1,'conteos':1,'estimaciones':1,'movements':1,
+        'mantenciones':1,'inventoryCounts':1,'audit':1,'lots':1
+      };
+      // mapa store→clave primaria (para fusionar por id correcto)
+      var STORE_KEYS = {};
+      try{ STORES.forEach(function(s){ STORE_KEYS[s[0]] = s[1]; }); }catch(e){}
       for(var i=0;i<SCIFB.stores.length;i++){
         var store = SCIFB.stores[i];
         if(remote[store] !== undefined && Array.isArray(remote[store])){
           // Protección: si el store remoto llega VACÍO pero localmente hay datos,
-          // no borrar (evita perder OT/movimientos por una sincronización cruzada incompleta).
+          // no borrar (evita perder datos por una sincronización incompleta).
           if(remote[store].length===0){
             try{
               const localActual = await dbAll(store);
@@ -2015,9 +2036,40 @@ async function sciFbApplyRemote(data){
               }
             }catch(e){}
           }
-          await dbClear(store);
-          for(var j=0;j<remote[store].length;j++){
-            try{ await dbPutLocal(store, remote[store][j]); }catch(e){}
+          if(STORES_ACUMULATIVOS[store]){
+            // ── FUSIÓN por clave: unir local + remoto sin perder registros ──
+            var key = STORE_KEYS[store] || 'id';
+            var localArr = [];
+            try{ localArr = await dbAll(store); }catch(e){ localArr = []; }
+            var mapa = {};
+            // 1) Partimos del estado local (conserva lo que este equipo tiene,
+            //    incluidos registros recién creados aún no confirmados en la nube).
+            localArr.forEach(function(rec){ if(rec && rec[key]!==undefined) mapa[rec[key]] = rec; });
+            // 2) Incorporamos el remoto. Ante misma clave, preferimos la versión
+            //    con marca de modificación (_mod) más reciente; si no hay _mod,
+            //    el remoto se aplica salvo que el local tenga _mod más nuevo.
+            remote[store].forEach(function(rrec){
+              if(!rrec || rrec[key]===undefined) return;
+              var ex = mapa[rrec[key]];
+              if(!ex){ mapa[rrec[key]] = rrec; return; }
+              var lm = (ex && ex._mod) ? ex._mod : 0;
+              var rm = (rrec && rrec._mod) ? rrec._mod : 0;
+              // Si el local fue modificado más recientemente, lo conservamos;
+              // en cualquier otro caso tomamos el remoto (datos más nuevos o iguales).
+              mapa[rrec[key]] = (lm > rm) ? ex : rrec;
+            });
+            var fusionado = Object.keys(mapa).map(function(k){ return mapa[k]; });
+            await dbClear(store);
+            for(var j=0;j<fusionado.length;j++){
+              try{ await dbPutLocal(store, fusionado[j]); }catch(e){}
+            }
+          } else {
+            // Stores de catálogo/configuración: reemplazo directo (los administra
+            // un flujo más controlado; rara vez hay ediciones simultáneas).
+            await dbClear(store);
+            for(var j2=0;j2<remote[store].length;j2++){
+              try{ await dbPutLocal(store, remote[store][j2]); }catch(e){}
+            }
           }
         }
       }
@@ -2400,6 +2452,7 @@ async function doLogin(){
   if(hash!==u.passwordHash){errEl.textContent='Contraseña incorrecta';errEl.classList.add('show');return}
   STATE.user=u;
   await audit('login','Inicio de sesión',u.id);
+  try{ _startInactivityWatch(); }catch(e){}
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').classList.add('show');
   // OP. CONTEOS: modo pantalla completa para móvil (oculta menú lateral y barra superior)
@@ -2457,7 +2510,46 @@ async function logout(){
   await _doLogout();
 }
 
+/* ═══════════════ AUTO-CIERRE POR INACTIVIDAD (5 min) ═══════════════ */
+/* Cierra la sesión automáticamente tras 5 minutos sin actividad del usuario.
+   Antes de cerrar, fuerza el guardado de cualquier dato pendiente en la nube,
+   para no perder información. La actividad (mouse, teclado, toque, scroll)
+   reinicia el contador. */
+var INACTIVITY_MS = 5 * 60 * 1000; // 5 minutos
+var _inactivityTimer = null;
+var _inactivityBound = false;
+function _resetInactivityTimer(){
+  if(!STATE.user) return; // solo cuenta si hay sesión activa
+  if(_inactivityTimer){ clearTimeout(_inactivityTimer); }
+  _inactivityTimer = setTimeout(_autoLogoutPorInactividad, INACTIVITY_MS);
+}
+async function _autoLogoutPorInactividad(){
+  if(!STATE.user) return;
+  // Antes de cerrar, intentar subir lo pendiente a la nube (no perder datos).
+  try{ if(typeof sciFbPush==='function' && typeof SCIFB!=='undefined' && SCIFB.ready){ sciFbPush(true); } }catch(e){}
+  try{ if(typeof fbPush==='function' && typeof FB!=='undefined' && FB.ready){ fbPush(true); } }catch(e){}
+  // Pequeña espera para dar tiempo al guardado, luego cerrar.
+  setTimeout(async function(){
+    try{ await _doLogout(); }catch(e){}
+    try{ if(typeof toast==='function'){ toast('Sesión cerrada','Tu sesión se cerró automáticamente por inactividad (5 min).','info'); } }catch(e){}
+  }, 600);
+}
+function _startInactivityWatch(){
+  if(!_inactivityBound){
+    _inactivityBound = true;
+    var ev = ['mousemove','mousedown','keydown','touchstart','scroll','click'];
+    ev.forEach(function(e){
+      try{ document.addEventListener(e, _resetInactivityTimer, { passive:true, capture:true }); }catch(err){}
+    });
+  }
+  _resetInactivityTimer();
+}
+function _stopInactivityWatch(){
+  if(_inactivityTimer){ clearTimeout(_inactivityTimer); _inactivityTimer = null; }
+}
+
 async function _doLogout(){
+  try{ _stopInactivityWatch(); }catch(e){}
   if(STATE.user)await audit('logout','Cierre de sesión',STATE.user.id);
   STATE.user=null;
   document.getElementById('app').classList.remove('show');
