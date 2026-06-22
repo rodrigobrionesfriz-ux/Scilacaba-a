@@ -2231,6 +2231,7 @@ const PERMISSIONS=[
   ['cuaderno.confirmar','Confirmar aplicaciones de órdenes'],
   ['cuaderno.panos','Gestionar paños (crear, editar, eliminar)'],
   ['presupuesto.ver','Ver Control de Presupuesto (Huerto Cerezos)'],
+  ['presupuesto.editar','Actualizar datos del Control de Presupuesto (subir Excel)'],
   ['mantenciones.ver','Ver módulo de Servicio y Mantención'],
   ['mantenciones.crear','Crear y editar órdenes de trabajo'],
   ['mantenciones.facturar','Registrar facturas de servicio y mantención'],
@@ -3377,7 +3378,7 @@ function renderPresupuesto(main){
       <button class="cur-btn" id="btn-usd" onclick="PZ.setCurrency('USD')">USD</button>
     </div>
     <button class="btn-pdf" onclick="PZ.imprimirPDF()">🖨 Imprimir PDF</button>
-    <button class="btn-upload" onclick="document.getElementById('file-input').click()">⬆ Actualizar datos</button>
+    <button class="btn-upload" id="pz-btn-upload" onclick="document.getElementById('file-input').click()">⬆ Actualizar datos</button>
     <input type="file" id="file-input" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onchange="PZ.handleFileSelect(event)" style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;left:-9999px;top:-9999px;">
   </div>
 </div>
@@ -3731,7 +3732,10 @@ function renderPresupuesto(main){
   // Inicializar / re-inicializar el dashboard sobre el DOM recién inyectado.
   if(window.PZ && typeof window.PZ.init === 'function'){
     // pequeño defer para asegurar layout antes de medir canvas
-    setTimeout(function(){ try{ window.PZ.init(); }catch(e){ console.error(e); } }, 30);
+    setTimeout(function(){ try{ window.PZ.init(); }catch(e){ console.error(e); }
+      // Iniciar sincronización en la nube del presupuesto (lectura en tiempo real).
+      try{ if(window.PZ && typeof window.PZ.fbInit==='function'){ window.PZ.fbInit(); } }catch(e){ console.error(e); }
+    }, 30);
   }
 }
 
@@ -17110,6 +17114,14 @@ function processExcel(file) {
       // Update global data
       ACTIVE_DATA = merged;
       window.MONTHS_WITH_REAL = mesesConReal;
+      // ── Persistencia en la nube (Parte 2): si el usuario puede editar,
+      // subir TODO el dataset a presupuesto/main (reemplazo total). ──
+      try{
+        if(typeof can==='function' && can('presupuesto.editar')){
+          // Diferir para que los inputs KPI (rb-kg/rb-tc) ya estén actualizados.
+          setTimeout(function(){ try{ pzFbPush(); }catch(e){ console.error(e); } }, 400);
+        }
+      }catch(e){}
 
       // ── Reload Detalle Gastos from new file if sheet exists ──
       const detalleSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'detalle gastos');
@@ -18056,6 +18068,132 @@ function downloadDashboard() {
 }
 
 
+/* ═══════════════ PERSISTENCIA FIREBASE DEL PRESUPUESTO ═══════════════ */
+/* Doc único 'presupuesto/main' (mismo patrón que sci/main del SCI).
+   Estrategia: REEMPLAZAR TODO. Cada Excel que sube el admin pisa el dataset
+   completo en la nube; los demás roles leen en tiempo real vía onSnapshot.
+   Solo el admin (permiso presupuesto.editar) puede subir. */
+var PZFB = {
+  ready:false, online:false, applyingRemote:false,
+  clientId: 'p_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
+  lastVersion: 0, unsubscribe: null, listenerStarted:false
+};
+function pzFbDocRef(){
+  if(typeof firebase==='undefined' || !firebase.apps || !firebase.apps.length) return null;
+  try{ return firebase.firestore().collection('presupuesto').doc('main'); }catch(e){ return null; }
+}
+/* serializeDataset(): arma el objeto persistible con TODO el estado actual del
+   dashboard (filas mensuales, detalle de gastos y los KPIs editables). */
+function pzSerializeDataset(){
+  function num(id){ var el=document.getElementById(id); if(!el) return null;
+    var v=(el.value||'').toString().replace(/\./g,'').replace(',', '.').replace(/[^0-9.\-]/g,'');
+    var n=parseFloat(v); return isNaN(n)?null:n; }
+  return {
+    rows: (ACTIVE_DATA || RAW) || [],
+    detalle: (window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS) || {},
+    monthsWithReal: (window.MONTHS_WITH_REAL || MONTHS_WITH_REAL) || [],
+    kpis: { kg: num('rb-kg'), tc: num('rb-tc'), ha: num('rb-ha') }
+  };
+}
+/* loadDataset(obj): aplica datos provenientes de Firebase al dashboard y
+   re-renderiza. No vuelve a subir (se marca applyingRemote). */
+function pzLoadDataset(obj){
+  if(!obj || typeof obj!=='object') return;
+  try{
+    PZFB.applyingRemote = true;
+    if(Array.isArray(obj.rows) && obj.rows.length){ ACTIVE_DATA = obj.rows; }
+    if(obj.detalle && typeof obj.detalle==='object'){ window.DETALLE_GASTOS_LIVE = obj.detalle; }
+    if(Array.isArray(obj.monthsWithReal)){ window.MONTHS_WITH_REAL = obj.monthsWithReal; }
+    // KPIs editables
+    if(obj.kpis){
+      var k=obj.kpis;
+      var kg=document.getElementById('rb-kg'); if(kg && k.kg!=null) kg.value = Math.round(k.kg).toLocaleString('es-CL');
+      var tc=document.getElementById('rb-tc'); if(tc && k.tc!=null) tc.value = k.tc.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+      var ha=document.getElementById('rb-ha'); if(ha && k.ha!=null) ha.value = k.ha.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+    }
+    // Reconstruir filtros y re-render con los datos nuevos
+    try{ rebuildFilters(ACTIVE_DATA || RAW); }catch(e){}
+    try{ populateFilters(); }catch(e){}
+    try{ render(); }catch(e){}
+    try{ updateBanner(); }catch(e){}
+    try{ refreshLastUpdate(); }catch(e){}
+  }catch(e){ console.error('PZ loadDataset error:', e); }
+  finally{ PZFB.applyingRemote = false; }
+}
+/* pzFbPush(): sube TODO el dataset a presupuesto/main (replace-all). */
+function pzFbPush(){
+  var ref = pzFbDocRef();
+  if(!ref){ return; }
+  if(PZFB.applyingRemote){ return; }
+  try{
+    var version = Date.now();
+    PZFB.lastVersion = version;
+    var data = pzSerializeDataset();
+    var userName = '';
+    try{ if(typeof STATE!=='undefined' && STATE.user){ userName = STATE.user.nombre || STATE.user.id || ''; } }catch(e){}
+    ref.set({
+      payload: JSON.stringify(data),
+      _version: version,
+      _clientId: PZFB.clientId,
+      _updatedBy: userName,
+      _updatedAt: (firebase.firestore.FieldValue ? firebase.firestore.FieldValue.serverTimestamp() : version)
+    }).then(function(){
+      PZFB.online = true;
+      try{ setStatus('☁️ Datos del presupuesto guardados en la nube.', 'ok'); }catch(e){}
+    }).catch(function(err){
+      PZFB.online = false;
+      console.error('[PZ-Firebase] Error al guardar:', err);
+      try{ setStatus('⚠️ No se pudo guardar en la nube (datos locales OK).', 'error'); }catch(e){}
+    });
+  }catch(e){ console.error('[PZ-Firebase] push error:', e); }
+}
+/* pzFbStartListener(): escucha presupuesto/main en tiempo real. */
+function pzFbStartListener(){
+  var ref = pzFbDocRef();
+  if(!ref) return;
+  if(PZFB.unsubscribe){ try{ PZFB.unsubscribe(); }catch(e){} }
+  PZFB.unsubscribe = ref.onSnapshot({includeMetadataChanges:false}, function(doc){
+    PZFB.online = true;
+    if(!doc.exists){
+      // La nube está vacía. Si este usuario puede editar, sembramos la semilla
+      // local actual para inicializar el documento remoto (una sola vez).
+      try{
+        if(typeof can==='function' && can('presupuesto.editar')){ pzFbPush(); }
+      }catch(e){}
+      return;
+    }
+    var d = doc.data() || {};
+    // Ignorar el eco de nuestra propia escritura.
+    if(d._clientId === PZFB.clientId && d._version === PZFB.lastVersion){ return; }
+    if(!d.payload) return;
+    var obj;
+    try{ obj = JSON.parse(d.payload); }catch(e){ console.error('[PZ-Firebase] payload inválido'); return; }
+    pzLoadDataset(obj);
+  }, function(err){
+    console.error('[PZ-Firebase] onSnapshot error:', err);
+  });
+}
+/* pzFbInit(): inicializa la sincronización del presupuesto. Reusa la app de
+   Firebase ya inicializada por el SCI/Cuaderno. */
+function pzFbInit(){
+  try{
+    if(typeof firebase === 'undefined'){ console.warn('[PZ-Firebase] SDK no disponible. Presupuesto solo local.'); return; }
+    if(!firebase.apps || !firebase.apps.length){ console.warn('[PZ-Firebase] App Firebase no inicializada aún.'); return; }
+    PZFB.ready = true;
+    if(!PZFB.listenerStarted){
+      PZFB.listenerStarted = true;
+      // Si hay auth, esperar a que esté lista; si no, arrancar directo.
+      if(firebase.auth){
+        var started=false;
+        firebase.auth().onAuthStateChanged(function(u){ if(u && !started){ started=true; pzFbStartListener(); } });
+        setTimeout(function(){ if(!started){ started=true; pzFbStartListener(); } }, 6000);
+      } else {
+        pzFbStartListener();
+      }
+    }
+  }catch(e){ console.error('[PZ-Firebase] init error:', e); }
+}
+
 var _pzReady = false;
 function pzInit(){
   // (Re)inicializa el dashboard sobre el DOM ya inyectado.
@@ -18069,6 +18207,11 @@ function pzInit(){
     }
     render();
     updateBanner();
+    // Botón 'Actualizar datos': solo visible para quien puede editar (admin).
+    try{
+      var _btn = document.getElementById('pz-btn-upload');
+      if(_btn){ _btn.style.display = (typeof can==='function' && can('presupuesto.editar')) ? '' : 'none'; }
+    }catch(e){}
   }catch(e){ console.error('PZ init error:', e); }
 }
 function pzReset(){ _pzReady = false; }
@@ -18092,7 +18235,11 @@ window.PZ = {
   closeUploadModal: closeUploadModal,
   closeDetalleModal: closeDetalleModal,
   filterDetalleTable: filterDetalleTable,
-  openDetalleModal: openDetalleModal
+  openDetalleModal: openDetalleModal,
+  serializeDataset: pzSerializeDataset,
+  loadDataset: pzLoadDataset,
+  fbInit: pzFbInit,
+  fbPush: pzFbPush
 };
 })(); }
 </script>
