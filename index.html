@@ -10944,11 +10944,22 @@ function ipEditarPlanta(idx){
     return '<button onclick="ipSetEstadoPlanta('+idx+',\''+k+'\')" style="display:flex;align-items:center;gap:10px;width:100%;padding:14px;margin-bottom:8px;border:2px solid '+(p.estado===k?e.color:'#e5e5e5')+';border-radius:10px;background:'+(p.estado===k?e.color+'22':'#fff')+';cursor:pointer;font-size:15px;font-weight:700;color:#333">'+
       '<span style="width:18px;height:18px;border-radius:50%;background:'+e.color+'"></span>'+e.label+'</button>';
   }).join('');
-  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px">'+
+  var insertarBtns = '';
+  if(_ipEsAdmin()){
+    insertarBtns = '<div style="border-top:1px dashed #ddd;margin-top:10px;padding-top:12px">'+
+      '<div style="font-size:12px;color:#888;margin-bottom:8px">Administrador: corregir conteo si falta una planta</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button onclick="ipInsertarPlantaDialog('+idx+',\'antes\')" style="flex:1;padding:11px;border:2px solid #1a7e3e;border-radius:10px;background:#fff;color:#1a7e3e;cursor:pointer;font-size:13px;font-weight:700">➕ Insertar antes</button>'+
+        '<button onclick="ipInsertarPlantaDialog('+idx+',\'despues\')" style="flex:1;padding:11px;border:2px solid #1a7e3e;border-radius:10px;background:#fff;color:#1a7e3e;cursor:pointer;font-size:13px;font-weight:700">Insertar después ➕</button>'+
+      '</div>'+
+    '</div>';
+  }
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px;max-height:90vh;overflow:auto">'+
     '<div style="font-size:17px;font-weight:800;color:#23303d;margin-bottom:4px">Planta '+escapeHtml(p.codigo)+'</div>'+
     '<div style="font-size:13px;color:#888;margin-bottom:14px">'+(p.tipo==='poliniz'?'🐝 Polinizante':'🌳 Principal')+'</div>'+
     botones+
     '<button onclick="document.getElementById(\'ip-edit-modal\').remove()" style="width:100%;padding:12px;margin-top:6px;border:none;border-radius:10px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cancelar</button>'+
+    insertarBtns+
   '</div>';
   document.body.appendChild(modal);
 }
@@ -10962,6 +10973,104 @@ async function ipSetEstadoPlanta(idx, estado){
   var m=document.getElementById('ip-edit-modal'); if(m)m.remove();
   ipRender();
   toast('Estado actualizado', p.codigo+' → '+(IP_ESTADOS[estado]?IP_ESTADOS[estado].label:estado),'success');
+}
+
+/* ─── Inserción de plantas (SOLO ADMINISTRADOR) ───────────────────────────
+   Permite agregar una planta que faltaba en una posición concreta de la
+   hilera. Al insertarla, todas las plantas siguientes se recorren una
+   posición (su número de secuencia aumenta en 1), se recalculan los códigos
+   y se reinterpolan las coordenadas GPS a lo largo de la hilera. */
+function _ipEsAdmin(){
+  try{ return STATE.user && STATE.user.role==='admin'; }catch(e){ return false; }
+}
+// Abre un pequeño diálogo para elegir tipo y estado de la planta a insertar.
+function ipInsertarPlantaDialog(idx, donde){
+  if(!_ipEsAdmin()){ toast('Sin permiso','Solo el administrador puede insertar plantas','error'); return; }
+  var s=_ipMapaReg; if(!s) return;
+  var ref = s.plantas[idx];
+  var posTexto = (donde==='antes') ? ('antes de la planta '+ (ref?ref.seq:'')) : ('después de la planta '+ (ref?ref.seq:''));
+  var em=document.getElementById('ip-edit-modal'); if(em) em.remove();
+  var modal=document.createElement('div');
+  modal.id='ip-insert-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px';
+  var estadosBtns = Object.keys(IP_ESTADOS).map(function(k){
+    var e=IP_ESTADOS[k];
+    return '<label style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:2px solid #e5e5e5;border-radius:9px;margin-bottom:6px;cursor:pointer">'+
+      '<input type="radio" name="ip-ins-estado" value="'+k+'"'+(k==='sano'?' checked':'')+'>'+
+      '<span style="width:15px;height:15px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+'</label>';
+  }).join('');
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:20px;max-height:90vh;overflow:auto">'+
+    '<div style="font-size:17px;font-weight:800;color:#23303d;margin-bottom:4px">➕ Insertar planta</div>'+
+    '<div style="font-size:13px;color:#0854a0;background:#f0f7ff;padding:8px;border-radius:8px;margin-bottom:14px">Se insertará <strong>'+posTexto+'</strong>. Las plantas siguientes se recorrerán una posición.</div>'+
+    '<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:6px">Tipo de planta</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+      '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;border:2px solid #e5e5e5;border-radius:9px;cursor:pointer"><input type="radio" name="ip-ins-tipo" value="principal" checked> 🌳 Principal</label>'+
+      '<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;border:2px solid #e5e5e5;border-radius:9px;cursor:pointer"><input type="radio" name="ip-ins-tipo" value="poliniz"> 🐝 Poliniz.</label>'+
+    '</div>'+
+    '<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:6px">Estado</div>'+
+    estadosBtns+
+    '<div style="display:flex;gap:8px;margin-top:14px">'+
+      '<button onclick="document.getElementById(\'ip-insert-modal\').remove()" style="flex:1;padding:12px;border:none;border-radius:10px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cancelar</button>'+
+      '<button onclick="ipInsertarPlantaConfirm('+idx+',\''+donde+'\')" style="flex:1;padding:12px;border:none;border-radius:10px;background:#1a7e3e;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Insertar</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+}
+async function ipInsertarPlantaConfirm(idx, donde){
+  if(!_ipEsAdmin()){ toast('Sin permiso','Solo el administrador puede insertar plantas','error'); return; }
+  var s=_ipMapaReg; if(!s || !Array.isArray(s.plantas)) return;
+  var tipoEl = document.querySelector('input[name="ip-ins-tipo"]:checked');
+  var estEl = document.querySelector('input[name="ip-ins-estado"]:checked');
+  var tipo = tipoEl ? tipoEl.value : 'principal';
+  var estado = estEl ? estEl.value : 'sano';
+  // Posición de inserción (índice en el array): antes = idx; después = idx+1
+  var insertAt = (donde==='antes') ? idx : idx+1;
+  if(insertAt<0) insertAt=0;
+  if(insertAt>s.plantas.length) insertAt=s.plantas.length;
+
+  // Crear la planta nueva (sin código aún; se renumeran todas abajo).
+  var nueva = {
+    seq: 0,
+    codigo: '',
+    tipo: tipo,
+    lat: null, lng: null,
+    estado: estado,
+    insertada: true,
+    insertadaPor: STATE.user?(STATE.user.nombre||STATE.user.id):'',
+    insertadaFecha: new Date().toISOString()
+  };
+  s.plantas.splice(insertAt, 0, nueva);
+
+  // Renumerar secuencia y recalcular códigos para TODAS las plantas.
+  // Reinterpolar GPS a lo largo de la hilera (inicio→fin) según la nueva cantidad.
+  var total = s.plantas.length;
+  var ini = s.gpsInicio, fin = s.gpsFin;
+  for(var i=0;i<total;i++){
+    var p = s.plantas[i];
+    p.seq = i+1;
+    p.codigo = s.codigoBase + '-' + String(i+1).padStart(6,'0');
+    var frac = total>1 ? i/(total-1) : 0;
+    if(ini && fin){
+      p.lat = ini.lat + (fin.lat-ini.lat)*frac;
+      p.lng = ini.lng + (fin.lng-ini.lng)*frac;
+    } else if(ini){ p.lat=ini.lat; p.lng=ini.lng; }
+  }
+
+  // Actualizar los contadores del registro según los tipos resultantes.
+  s.countPrincipal = s.plantas.filter(function(p){ return p.tipo!=='poliniz'; }).length;
+  s.countPoliniz   = s.plantas.filter(function(p){ return p.tipo==='poliniz'; }).length;
+  s.total = s.plantas.length;
+  // Mantener la secuencia de caminata coherente con el nuevo orden de tipos.
+  s.secuencia = s.plantas.map(function(p){ return p.tipo; });
+
+  try{
+    await dbPut('invplantas', s);
+    STATE.cache.invplantas = await dbAll('invplantas');
+  }catch(e){ console.error(e); toast('Error','No se pudo guardar la inserción','error'); return; }
+
+  var m=document.getElementById('ip-insert-modal'); if(m) m.remove();
+  ipRender();
+  toast('Planta insertada', 'Se agregó una planta en la posición '+(insertAt+1)+' y se recorrió el resto.','success');
 }
 
 
