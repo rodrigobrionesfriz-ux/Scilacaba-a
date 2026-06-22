@@ -10217,13 +10217,19 @@ function ipRenderResumenPanos(){
   var grupos = {};
   regs.forEach(function(r){
     var key = (r.cuartel||'')+'||'+(r.variedad||'');
-    if(!grupos[key]) grupos[key] = { cuartel:r.cuartel||'', variedad:r.variedad||'', total:0, hileras:0, principal:0, poliniz:{} };
+    if(!grupos[key]) grupos[key] = { cuartel:r.cuartel||'', variedad:r.variedad||'', total:0, hileras:0, principal:0, poliniz:{}, estados:{ sano:0, debil:0, muerto:0, replante:0, falta:0 } };
     var cp = r.countPrincipal||0, cz = r.countPoliniz||0;
     grupos[key].total += (r.total || cp+cz);
     grupos[key].principal += cp;
     // Acumular polinizantes por nombre de variedad
     var nomPol = (r.polinizante||'').trim() || 'Polinizante';
     if(cz>0){ grupos[key].poliniz[nomPol] = (grupos[key].poliniz[nomPol]||0) + cz; }
+    // Acumular conteo de plantas por estado (Sano, Débil, Muerto, Replante, Falla)
+    (r.plantas||[]).forEach(function(p){
+      var est = (p && p.estado) ? p.estado : 'sano';
+      if(grupos[key].estados[est]===undefined) grupos[key].estados[est] = 0;
+      grupos[key].estados[est]++;
+    });
     grupos[key].hileras += 1;
   });
   var keys = Object.keys(grupos);
@@ -10252,6 +10258,30 @@ function ipRenderResumenPanos(){
       });
     }
     desglose += '</div>';
+
+    // Desglose por estado (Sano, Débil, Muerto, Replante, Falla/vacío)
+    var totalEstados = 0;
+    Object.keys(IP_ESTADOS).forEach(function(kk){ totalEstados += (g.estados[kk]||0); });
+    var estadosHtml = '';
+    if(totalEstados>0){
+      estadosHtml = '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #dbe7f3">'+
+        '<div style="font-size:11px;color:#5a7da0;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Estado de las plantas</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          Object.keys(IP_ESTADOS).map(function(kk){
+            var e = IP_ESTADOS[kk];
+            var n = g.estados[kk]||0;
+            return '<div style="flex:1;min-width:78px;background:#f8fafb;border:1px solid #e3e8ee;border-left:3px solid '+e.color+';border-radius:7px;padding:6px 8px">'+
+              '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'+
+                '<span style="width:9px;height:9px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+
+                '<span style="font-size:10.5px;color:#5a7da0;font-weight:600">'+e.label+'</span>'+
+              '</div>'+
+              '<div style="font-size:16px;font-weight:800;color:#23303d;line-height:1.1">'+n.toLocaleString('es-CL')+'</div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>';
+    }
+    desglose += estadosHtml;
     return '<div style="background:#fff;border:1px solid #dbe7f3;border-radius:10px;padding:11px 13px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:start">'+
         '<div><div style="font-weight:800;color:#23303d">'+escapeHtml(g.cuartel)+' · '+escapeHtml(g.variedad)+'</div>'+
