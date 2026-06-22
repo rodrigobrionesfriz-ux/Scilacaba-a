@@ -9182,6 +9182,10 @@ function cteVariedades(){
 async function renderConteos(c){
   // Asegurar que los paños del Cuaderno estén cargados (necesarios para seleccionar)
   try{ if(typeof load==='function' && (typeof S==='undefined' || !S.panos || !S.panos.length)){ load(); } }catch(e){}
+  // Iniciar la sincronización del Cuaderno con Firebase si aún no está activa.
+  // Necesario en dispositivos nuevos: los paños viven en la nube (cuaderno/main)
+  // y sin esto no se cargarían hasta abrir el módulo Cuaderno de Campo.
+  try{ if((typeof FB==='undefined' || !FB.ready) && typeof fbInit==='function'){ fbInit(); } }catch(e){}
   // Cargar conteos del cache
   if(!STATE.cache.conteos){ try{ STATE.cache.conteos = await dbAll('conteos'); }catch(e){ STATE.cache.conteos=[]; } }
   // Cargar estimaciones guardadas (hoja de estimación propia)
@@ -9865,6 +9869,9 @@ function ipVariedadesLista(){
 
 async function renderInvPlantas(c){
   try{ if(typeof load==='function' && (typeof S==='undefined' || !S.panos || !S.panos.length)){ load(); } }catch(e){}
+  // Iniciar sincronización del Cuaderno con Firebase si no está activa (los paños
+  // viven en la nube; en un dispositivo nuevo no están en localStorage todavía).
+  try{ if((typeof FB==='undefined' || !FB.ready) && typeof fbInit==='function'){ fbInit(); } }catch(e){}
   if(!STATE.cache.invplantas){ try{ STATE.cache.invplantas = await dbAll('invplantas'); }catch(e){ STATE.cache.invplantas=[]; } }
   ipRender(c);
 }
@@ -12008,6 +12015,17 @@ function fbApplyRemote(data){
           try{ if(typeof initApp==='function') initApp(); }catch(e){}
         }
       }
+      // Si el usuario está viendo Conteos en terreno o Inventario de Huerto y los
+      // paños recién llegaron desde la nube (típico al abrir en un dispositivo
+      // nuevo, sin datos en localStorage), re-renderizar esa vista para que los
+      // paños aparezcan sin tener que entrar antes al Cuaderno de Campo.
+      try{
+        if(typeof STATE!=='undefined' && STATE.page){
+          var main = document.getElementById('mainContent');
+          if(STATE.page==='conteos' && typeof cteRender==='function'){ cteRender(main); }
+          else if(STATE.page==='invplantas' && typeof ipRender==='function'){ ipRender(main); }
+        }
+      }catch(e){}
       // Refrescar la vista actual del Cuaderno
       fbRefreshUI();
       fbUpdateIndicator('online', 'Actualizado desde la nube · ' + fbTimeStr());
