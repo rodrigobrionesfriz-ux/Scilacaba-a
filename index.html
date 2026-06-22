@@ -2010,18 +2010,8 @@ async function sciFbApplyRemote(data){
     SCIFB.applyingRemote = true;
     if(data.payload){
       var remote = (typeof data.payload === 'string') ? JSON.parse(data.payload) : data.payload;
-      // Stores acumulativos: registros que se agregan con el tiempo y donde
-      // perder uno es grave (conteos de plantas, conteos, estimaciones,
-      // movimientos, mantenciones, tomas de inventario, auditoría, lotes).
-      // Para estos hacemos FUSIÓN por clave en vez de reemplazo, de modo que si
-      // dos dispositivos tienen registros distintos, ninguno borre al otro.
-      var STORES_ACUMULATIVOS = {
-        'invplantas':1,'conteos':1,'estimaciones':1,'movements':1,
-        'mantenciones':1,'inventoryCounts':1,'audit':1,'lots':1
-      };
-      // mapa store→clave primaria (para fusionar por id correcto)
-      var STORE_KEYS = {};
-      try{ STORES.forEach(function(s){ STORE_KEYS[s[0]] = s[1]; }); }catch(e){}
+      // Stores acumulativos: fusión por clave (definido globalmente en
+      // SCI_STORES_ACUMULATIVOS) para que ningún dispositivo borre datos de otro.
       for(var i=0;i<SCIFB.stores.length;i++){
         var store = SCIFB.stores[i];
         if(remote[store] !== undefined && Array.isArray(remote[store])){
@@ -2036,36 +2026,17 @@ async function sciFbApplyRemote(data){
               }
             }catch(e){}
           }
-          if(STORES_ACUMULATIVOS[store]){
-            // ── FUSIÓN por clave: unir local + remoto sin perder registros ──
-            var key = STORE_KEYS[store] || 'id';
+          if(SCI_STORES_ACUMULATIVOS[store]){
+            var key = _sciStoreKey(store);
             var localArr = [];
             try{ localArr = await dbAll(store); }catch(e){ localArr = []; }
-            var mapa = {};
-            // 1) Partimos del estado local (conserva lo que este equipo tiene,
-            //    incluidos registros recién creados aún no confirmados en la nube).
-            localArr.forEach(function(rec){ if(rec && rec[key]!==undefined) mapa[rec[key]] = rec; });
-            // 2) Incorporamos el remoto. Ante misma clave, preferimos la versión
-            //    con marca de modificación (_mod) más reciente; si no hay _mod,
-            //    el remoto se aplica salvo que el local tenga _mod más nuevo.
-            remote[store].forEach(function(rrec){
-              if(!rrec || rrec[key]===undefined) return;
-              var ex = mapa[rrec[key]];
-              if(!ex){ mapa[rrec[key]] = rrec; return; }
-              var lm = (ex && ex._mod) ? ex._mod : 0;
-              var rm = (rrec && rrec._mod) ? rrec._mod : 0;
-              // Si el local fue modificado más recientemente, lo conservamos;
-              // en cualquier otro caso tomamos el remoto (datos más nuevos o iguales).
-              mapa[rrec[key]] = (lm > rm) ? ex : rrec;
-            });
-            var fusionado = Object.keys(mapa).map(function(k){ return mapa[k]; });
+            var fusionado = _sciMergeArrays(localArr, remote[store], key);
             await dbClear(store);
             for(var j=0;j<fusionado.length;j++){
               try{ await dbPutLocal(store, fusionado[j]); }catch(e){}
             }
           } else {
-            // Stores de catálogo/configuración: reemplazo directo (los administra
-            // un flujo más controlado; rara vez hay ediciones simultáneas).
+            // Stores de catálogo/configuración: reemplazo directo.
             await dbClear(store);
             for(var j2=0;j2<remote[store].length;j2++){
               try{ await dbPutLocal(store, remote[store][j2]); }catch(e){}
@@ -2089,6 +2060,33 @@ async function sciFbApplyRemote(data){
 }
 
 // Envía todo el estado del SCI a la nube
+/* Mapa de stores acumulativos (donde perder un registro es grave) y sus claves.
+   Compartido por la recepción (applyRemote) y la subida (push) para que ningún
+   dispositivo borre datos que otro creó. */
+var SCI_STORES_ACUMULATIVOS = {
+  'invplantas':1,'conteos':1,'estimaciones':1,'movements':1,
+  'mantenciones':1,'inventoryCounts':1,'audit':1,'lots':1
+};
+function _sciStoreKey(store){
+  try{ for(var i=0;i<STORES.length;i++){ if(STORES[i][0]===store) return STORES[i][1]; } }catch(e){}
+  return 'id';
+}
+/* Fusiona dos arrays de registros por clave, conservando todos. Ante misma
+   clave, gana el de _mod más reciente (o el segundo si no hay _mod). */
+function _sciMergeArrays(localArr, remoteArr, key){
+  var mapa = {};
+  (localArr||[]).forEach(function(rec){ if(rec && rec[key]!==undefined) mapa[rec[key]] = rec; });
+  (remoteArr||[]).forEach(function(rrec){
+    if(!rrec || rrec[key]===undefined) return;
+    var ex = mapa[rrec[key]];
+    if(!ex){ mapa[rrec[key]] = rrec; return; }
+    var lm = (ex && ex._mod) ? ex._mod : 0;
+    var rm = (rrec && rrec._mod) ? rrec._mod : 0;
+    mapa[rrec[key]] = (lm > rm) ? ex : rrec;
+  });
+  return Object.keys(mapa).map(function(k){ return mapa[k]; });
+}
+
 async function sciFbPush(immediate){
   var ref = sciFbDocRef();
   if(!ref){ return; }
@@ -2097,13 +2095,42 @@ async function sciFbPush(immediate){
   var doSave = async function(){
     try {
       sciFbIndicator('syncing', 'Guardando inventario en la nube...');
+      // ── Leer primero el documento remoto actual y FUSIONAR con lo local ──
+      // Esto evita que este dispositivo borre registros que otro creó y que
+      // aún no hemos recibido. Para los stores acumulativos se fusiona por
+      // clave; el resto se sube tal cual está localmente.
+      var remoteObj = null;
+      try{
+        var snap = await ref.get();
+        if(snap && snap.exists){
+          var rdata = snap.data();
+          if(rdata && rdata.payload){
+            remoteObj = (typeof rdata.payload==='string') ? JSON.parse(rdata.payload) : rdata.payload;
+          }
+        }
+      }catch(e){ /* si no se puede leer, se sube lo local */ }
+
       var newVersion = Date.now();
       SCIFB.lastVersion = newVersion;
-      // Recolectar todas las tablas
       var payloadObj = {};
       for(var i=0;i<SCIFB.stores.length;i++){
         var store = SCIFB.stores[i];
-        payloadObj[store] = await dbAll(store);
+        var localData = await dbAll(store);
+        if(remoteObj && SCI_STORES_ACUMULATIVOS[store] && Array.isArray(remoteObj[store])){
+          // Fusionar local + remoto: no perder lo que el otro dispositivo subió.
+          payloadObj[store] = _sciMergeArrays(localData, remoteObj[store], _sciStoreKey(store));
+          // Reflejar la fusión también en la base local, para quedar consistentes.
+          try{
+            if(payloadObj[store].length !== localData.length){
+              SCIFB.applyingRemote = true;
+              await dbClear(store);
+              for(var m=0;m<payloadObj[store].length;m++){ try{ await dbPutLocal(store, payloadObj[store][m]); }catch(e){} }
+              SCIFB.applyingRemote = false;
+            }
+          }catch(e){ SCIFB.applyingRemote = false; }
+        } else {
+          payloadObj[store] = localData;
+        }
       }
       var payload = JSON.stringify(payloadObj);
       var userName = '';
@@ -2117,6 +2144,8 @@ async function sciFbPush(immediate){
       });
       SCIFB.online = true;
       sciFbIndicator('online', 'Inventario guardado en la nube');
+      // Si fusionamos algo nuevo desde la nube, refrescar el cache y la vista.
+      try{ if(typeof reloadCache==='function'){ await reloadCache(); } }catch(e){}
     } catch(err){
       SCIFB.online = false;
       console.error('[SCI-Firebase] Error al guardar:', err);
