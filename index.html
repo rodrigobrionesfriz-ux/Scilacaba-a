@@ -9658,10 +9658,30 @@ async function cteFinalizarSesion(){
   _cteSesion.sincronizado = online;
   if(online) _cteSesion.fechaSync = new Date().toISOString();
   // Guardar local SIEMPRE (offline-first). dbPut sincroniza a Firebase si hay conexión.
-  try{
-    await dbPut('conteos', _cteSesion);
-    STATE.cache.conteos = await dbAll('conteos');
-  }catch(e){ console.error('Error guardando conteo:',e); toast('Error','No se pudo guardar localmente','error'); return; }
+  // Blindaje para terreno: garantizar id, y si el guardado falla, reintentar y
+  // NUNCA perder el conteo en silencio.
+  if(!_cteSesion.id){ try{ _cteSesion.id = uid(); }catch(e){ _cteSesion.id = 'cte_'+Date.now()+'_'+Math.random().toString(36).slice(2); } }
+  var _guardadoOk = false;
+  for(var _intento=0; _intento<2 && !_guardadoOk; _intento++){
+    try{
+      await dbPut('conteos', _cteSesion);
+      STATE.cache.conteos = await dbAll('conteos');
+      _guardadoOk = true;
+    }catch(e){
+      console.error('Error guardando conteo (intento '+(_intento+1)+'):', e);
+      if(_intento===0){ try{ _cteSesion.id = (_cteSesion.id||'cte')+'_r'+Date.now(); }catch(_){} }
+    }
+  }
+  if(!_guardadoOk){
+    // Último recurso: avisar fuerte y conservar la sesión en memoria para que el
+    // operador pueda reintentar (no se borra _cteSesion).
+    if(typeof confirmDialog==='function'){
+      confirmDialog('⚠️ No se pudo guardar','El conteo NO se guardó en el dispositivo. Anote los datos y reintente. ¿Reintentar ahora?', function(){ cteFinalizarSesion(); }, 'Reintentar', true);
+    } else {
+      toast('Error','No se pudo guardar el conteo. No cierre la app, reintente.','error');
+    }
+    return;
+  }
   var prom = _cteSesion.promedioCentros.toFixed(1);
   var nA = _cteSesion.nArboles;
   _cteSesion = null; _cteVista='inicio';
@@ -10348,10 +10368,27 @@ async function _ipDoGuardarHilera(){
   var online = navigator.onLine;
   s.sincronizado = online;
   if(online) s.fechaSync=new Date().toISOString();
-  try{
-    await dbPut('invplantas', s);
-    STATE.cache.invplantas = await dbAll('invplantas');
-  }catch(e){ console.error(e); toast('Error','No se pudo guardar','error'); return; }
+  // Blindaje para terreno: garantizar id y reintentar; nunca perder la hilera en silencio.
+  if(!s.id){ try{ s.id = uid(); }catch(e){ s.id = 'ip_'+Date.now()+'_'+Math.random().toString(36).slice(2); } }
+  var _ipOk = false;
+  for(var _it=0; _it<2 && !_ipOk; _it++){
+    try{
+      await dbPut('invplantas', s);
+      STATE.cache.invplantas = await dbAll('invplantas');
+      _ipOk = true;
+    }catch(e){
+      console.error('Error guardando hilera (intento '+(_it+1)+'):', e);
+      if(_it===0){ try{ s.id = (s.id||'ip')+'_r'+Date.now(); }catch(_){} }
+    }
+  }
+  if(!_ipOk){
+    if(typeof confirmDialog==='function'){
+      confirmDialog('⚠️ No se pudo guardar','La hilera NO se guardó en el dispositivo. Anote los datos y reintente. ¿Reintentar ahora?', function(){ _ipDoGuardarHilera(); }, 'Reintentar', true);
+    } else {
+      toast('Error','No se pudo guardar la hilera. No cierre la app, reintente.','error');
+    }
+    return;
+  }
   var cod=s.codigoBase, tot=s.total;
   // Guardar los datos del cuartel para la posible siguiente hilera
   var datosCuartel = {
