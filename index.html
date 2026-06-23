@@ -10619,26 +10619,36 @@ function ipMostrarMapaGeneral(){
 }
 
 // Render de un cuartel como conjunto de hileras (líneas horizontales con plantas)
+// El SVG usa viewBox + width:100% para AJUSTARSE al ancho del contenedor, de
+// modo que el cuartel completo se ve sin scroll, tanto en PC como en móvil.
 function ipRenderCuartelSVG(cuartel, hileras){
   var maxPlantas = Math.max.apply(null, hileras.map(function(h){ return (h.plantas||[]).length; }).concat([1]));
   var filas = hileras.length;
-  var anchoPlanta = 22, altoFila = 34, margenIzq = 90, margenSup = 10;
-  var ancho = margenIzq + maxPlantas*anchoPlanta + 40;
-  var alto = margenSup*2 + filas*altoFila + 20;
+  // Tamaños base del sistema de coordenadas interno (viewBox). El SVG luego se
+  // escala al ancho real disponible, así que estos valores son relativos.
+  var anchoPlanta = 22, altoFila = 30, margenIzq = 56, margenSup = 8, margenDer = 24;
+  var ancho = margenIzq + maxPlantas*anchoPlanta + margenDer;
+  var alto = margenSup*2 + filas*altoFila + 16;
 
-  var svg = '<svg width="'+ancho+'" height="'+alto+'" style="display:block">';
+  // Resume el nombre de la hilera a su último campo (ej: "C1-REGINA-H1" → "H1").
+  function nombreCorto(h){
+    var base = h.codigoBase || ('H'+h.hilera);
+    var partes = String(base).split(/[-_\s]+/);
+    return partes[partes.length-1] || base;
+  }
+
+  var svg = '<svg viewBox="0 0 '+ancho+' '+alto+'" preserveAspectRatio="xMidYMid meet" '+
+            'style="display:block;width:100%;height:auto;max-height:62vh" xmlns="http://www.w3.org/2000/svg">';
   hileras.forEach(function(h, fi){
     var y = margenSup + fi*altoFila + altoFila/2;
     var plantas = h.plantas||[];
-    // GPS de inicio (primera planta) y fin (última planta) de la hilera
     var gpsIni = h.gpsInicio || (plantas[0] && plantas[0].lat!=null ? {lat:plantas[0].lat,lng:plantas[0].lng} : null);
     var gpsFin = h.gpsFin || (plantas.length && plantas[plantas.length-1].lat!=null ? {lat:plantas[plantas.length-1].lat,lng:plantas[plantas.length-1].lng} : null);
     var tieneGps = gpsIni || gpsFin;
-    // Etiqueta de hilera (solo informativa, ya no es el enlace)
-    svg += '<text x="6" y="'+(y+5)+'" fill="#1a5288" font-size="13" font-weight="700">'+escapeHtml(h.codigoBase||('H'+h.hilera))+(tieneGps?' 📍':'')+'</text>';
+    // Etiqueta de hilera resumida (solo el último campo, ej: H1)
+    svg += '<text x="4" y="'+(y+4)+'" fill="#1a5288" font-size="12" font-weight="700">'+escapeHtml(nombreCorto(h))+(tieneGps?' 📍':'')+'</text>';
     // Línea base de la hilera
     svg += '<line x1="'+margenIzq+'" y1="'+y+'" x2="'+(margenIzq+plantas.length*anchoPlanta)+'" y2="'+y+'" stroke="#5b9bd5" stroke-width="2"/>';
-    // Plantas como círculos. Solo la primera (inicio) y última (fin) enlazan a Google Maps.
     var ultIdx = plantas.length - 1;
     plantas.forEach(function(p, pi){
       var cx = margenIzq + pi*anchoPlanta + anchoPlanta/2;
@@ -10650,18 +10660,17 @@ function ipRenderCuartelSVG(cuartel, hileras){
       var link='', cursor='', extraTitle='';
       if(esInicio){ link='onclick="ipAbrirMapaPunto('+gpsIni.lat+','+gpsIni.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🟢 INICIO (toque para Google Maps)'; }
       else if(esFin){ link='onclick="ipAbrirMapaPunto('+gpsFin.lat+','+gpsFin.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🔴 FIN (toque para Google Maps)'; }
-      var r = (esInicio||esFin) ? 9 : 8;
+      var r = (esInicio||esFin) ? 8.5 : 7.5;
       svg += '<circle cx="'+cx+'" cy="'+y+'" r="'+r+'" fill="'+e.color+'" stroke="'+stroke+'" stroke-width="'+sw+'" '+link+' style="'+cursor+'"><title>'+escapeHtml(p.codigo)+' · '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:'')+extraTitle+'</title></circle>';
-      // Marcadores de inicio/fin sobre los círculos extremos
-      if(esInicio){ svg += '<text x="'+cx+'" y="'+(y-12)+'" fill="#1565c0" font-size="9" font-weight="700" text-anchor="middle">▶</text>'; }
-      else if(esFin){ svg += '<text x="'+cx+'" y="'+(y-12)+'" fill="#1565c0" font-size="9" font-weight="700" text-anchor="middle">■</text>'; }
+      if(esInicio){ svg += '<text x="'+cx+'" y="'+(y-11)+'" fill="#1565c0" font-size="8" font-weight="700" text-anchor="middle">▶</text>'; }
+      else if(esFin){ svg += '<text x="'+cx+'" y="'+(y-11)+'" fill="#1565c0" font-size="8" font-weight="700" text-anchor="middle">■</text>'; }
     });
   });
   svg += '</svg>';
 
   return '<div style="margin-bottom:22px">'+
     '<div style="color:#23303d;font-size:16px;font-weight:800;margin-bottom:8px">📍 '+escapeHtml(cuartel)+' <span style="font-size:12px;font-weight:400;opacity:.7">— '+hileras.length+' hileras</span></div>'+
-    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px;overflow-x:auto">'+svg+
+    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px">'+svg+
       '<div style="font-size:11px;color:#7a8794;margin-top:8px">▶ Inicio de hilera · ■ Fin de hilera — toque esos puntos para abrir Google Maps</div>'+
     '</div>'+
   '</div>';
