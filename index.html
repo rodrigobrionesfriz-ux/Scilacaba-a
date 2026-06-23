@@ -3477,6 +3477,8 @@ function pzEnsureAssets(){
 #pz-root #subgrupo-legend span[style*='#cbd5e1']{ color:var(--text)!important; }
 /* filas de Top Desviaciones con color claro */
 #pz-root #top-dev-body td[style*='#cbd5e1']{ color:var(--text)!important; }
+#pz-root .dev-row-click{ transition:background .12s; }
+#pz-root .dev-row-click:hover{ background:#eef4fb; }
 `;
   document.head.appendChild(st);
   _PZ_CSS_INJECTED = true;
@@ -18283,8 +18285,8 @@ function renderDevChart(data) {
   const labels  = items.map(x => x.label);
   const devVals = items.map(x => Math.round(x.dev));
 
-  // Dynamic height — more compact
-  const h = Math.max(160, items.length * 22);
+  // Dynamic height — barras más gruesas para mejor lectura
+  const h = Math.max(220, items.length * 32);
   const wrap = document.querySelector('.chart-dev-wrap');
   if (wrap) wrap.style.height = h + 'px';
 
@@ -18297,13 +18299,15 @@ function renderDevChart(data) {
         label: 'Desviación (Real − Ppto)',
         data: devVals,
         backgroundColor: devVals.map(v => v > 0
-          ? 'rgba(239,68,68,0.75)'
-          : 'rgba(22,199,132,0.75)'
+          ? 'rgba(239,68,68,0.92)'
+          : 'rgba(22,163,74,0.92)'
         ),
-        borderColor: devVals.map(v => v > 0 ? '#ef4444' : '#16c784'),
+        borderColor: devVals.map(v => v > 0 ? '#dc2626' : '#15803d'),
         borderWidth: 1,
-        borderRadius: 3,
+        borderRadius: 4,
         borderSkipped: false,
+        barPercentage: 0.78,
+        categoryPercentage: 0.82,
       }]
     },
     options: {
@@ -18331,14 +18335,14 @@ function renderDevChart(data) {
       scales: {
         x: {
           ticks: {
-            color: '#64748b', font: {size:8},
+            color: '#475569', font: {size:10},
             callback: v => fmtVal(v)
           },
-          grid: { color: 'rgba(30,45,69,0.4)' },
-          border: { color: '#334155' }
+          grid: { color: 'rgba(148,163,184,0.25)' },
+          border: { color: '#cbd5e1' }
         },
         y: {
-          ticks: { color: '#38bdf8', font: { size: 8.5, weight: '600' }, padding: 4 },
+          ticks: { color: '#0369a1', font: { size: 11, weight: '600' }, padding: 6 },
           grid: { display: false }
         }
       }
@@ -18362,18 +18366,33 @@ function renderDevChart(data) {
     }, {
       id: 'devValueLabels',
       afterDatasetsDraw(chart) {
-        const { ctx } = chart;
+        const { ctx, scales } = chart;
+        const xZero = scales.x.getPixelForValue(0);
         ctx.save();
         chart.getDatasetMeta(0).data.forEach((bar, i) => {
           const v = devVals[i];
           if (v === 0) return;
-          const { x, y } = bar.tooltipPosition();
-          const label = (v >= 0 ? '+' : '-') + fmtVal(Math.abs(v));
-          ctx.font         = '600 8px Roboto, Inter, sans-serif';
-          ctx.fillStyle    = '#e2e8f0';
+          const itm = items[i];
+          const pct = itm.p ? Math.round((v / Math.abs(itm.p)) * 100) : null;
+          const montoTxt = (v >= 0 ? '+' : '-') + fmtVal(Math.abs(v));
+          const pctTxt = (pct === null) ? '' : '  (' + (pct >= 0 ? '+' : '') + pct + '%)';
+          const label = montoTxt + pctTxt;
+          const y = bar.tooltipPosition().y;
+          ctx.font = '700 10px Roboto, Inter, sans-serif';
           ctx.textBaseline = 'middle';
-          ctx.textAlign    = v >= 0 ? 'left' : 'right';
-          ctx.fillText(label, v >= 0 ? x + 5 : x - 5, y);
+          // Colocar la etiqueta SIEMPRE del lado del cero, hacia afuera de la
+          // barra, para que no se encime con el color de la barra y se lea bien.
+          if (v >= 0) {
+            // barra crece a la derecha → etiqueta a la izquierda del cero
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#b91c1c';
+            ctx.fillText(label, xZero - 6, y);
+          } else {
+            // barra crece a la izquierda → etiqueta a la derecha del cero
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#15803d';
+            ctx.fillText(label, xZero + 6, y);
+          }
         });
         ctx.restore();
       }
@@ -18463,8 +18482,13 @@ function renderTopDev(data, byDesc) {
     const label = over ? '▲ +'+fmtVal(r.dev) : '▼ '+fmtVal(r.dev);
     const cls = over ? 'pill-over' : 'pill-under';
     const pctLabel = r.p ? (over ? '+' : '') + pct + '%' : '—';
-    return `<tr>
-      <td style="font-size:10.5px;color:#cbd5e1;">${r.k.length > 24 ? r.k.slice(0,24)+'…' : r.k}</td>
+    const nombre = r.k.length > 24 ? r.k.slice(0,24)+'…' : r.k;
+    // Cada fila es clicable: abre el detalle de gastos de esa descripción.
+    // El tooltip (title) muestra el presupuesto y el real completos.
+    const tip = 'Presupuesto: ' + fmtVal(r.p) + ' · Real: ' + fmtVal(r.r) + ' · Desv: ' + pctLabel + ' — Clic para ver el detalle';
+    const safeKey = (r.k || '').replace(/'/g, "\\'");
+    return `<tr class="dev-row-click" onclick="window.PZ.openDetalleModal('${safeKey}')" title="${tip.replace(/"/g,'&quot;')}" style="cursor:pointer">
+      <td style="font-size:10.5px;color:#cbd5e1;">${nombre}</td>
       <td><span class="dev-pill ${cls}">${label}</span></td>
       <td style="color:${over?'#ef4444':'#16c784'};font-weight:600;">${pctLabel}</td>
     </tr>`;
