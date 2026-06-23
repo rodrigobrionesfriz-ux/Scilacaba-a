@@ -14518,16 +14518,24 @@ function renderChipsReg(){
   var el=document.getElementById('cc-reg-chips'); if(!el) return;
   el.innerHTML=''; selPanosReg=[];
   ['2018','2024','2026'].forEach(function(y){
-    var ps=(typeof ordenarPanosPadreHijo==='function')?ordenarPanosPadreHijo(S.panos.filter(function(p){ return p.anio===y; })):S.panos.filter(function(p){ return p.anio===y; });
-    if(!ps.length) return;
+    var psAnio=S.panos.filter(function(p){ return p.anio===y; });
+    var productivos=psAnio.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
+    var polinizantes=psAnio.filter(function(p){ return (p.tipo||'Productivo')==='Polinizante'; });
+    var huerfanos=polinizantes.filter(function(pol){ return !productivos.some(function(prod){ return String(pol.panoPadre)===String(prod.id); }); });
+    var chips=productivos.concat(huerfanos);
+    if(!chips.length) return;
     var lbl=document.createElement('div'); lbl.className='cc-grp-lbl'; lbl.innerHTML='🌱 Plantación '+y;
     el.appendChild(lbl);
     var div=document.createElement('div'); div.className='cc-chips';
-    ps.forEach(function(p){
-      var btn=document.createElement('button'); btn.className='cc-chip'; btn.dataset.id=p.id;
+    chips.forEach(function(p){
       var esPolin=(p.tipo||'Productivo')==='Polinizante';
+      var grupoIds=[p.id]; var hijosPol=[];
+      if(!esPolin){ hijosPol=polinizantes.filter(function(pol){ return String(pol.panoPadre)===String(p.id); }); hijosPol.forEach(function(h){ grupoIds.push(h.id); }); }
+      var haGrupo=grupoIds.reduce(function(s,gid){ var px=getPano(gid); return s+(px?(parseFloat(px.hectareas)||0):0); },0);
+      var btn=document.createElement('button'); btn.className='cc-chip'; btn.dataset.id=p.id; btn.dataset.grupo=grupoIds.join(',');
+      var polInfo=hijosPol.length?' <span style="background:#fef3c7;color:#92600a;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">🐝 +'+hijosPol.length+' polin.</span>':'';
       var polBadge=esPolin?' <span style="background:#fef3c7;color:#92600a;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">🐝 POL</span>':'';
-      btn.innerHTML='<span class="cc-cn">'+p.nombre+polBadge+'</span><span class="cc-cs">'+p.variedad+' · 🌱'+p.hectareas+' há · 💧'+(p.has_riego||0)+' há · 🌿'+(p.densidad||0)+' pl/há</span>';
+      btn.innerHTML='<span class="cc-cn">'+p.nombre+polBadge+polInfo+'</span><span class="cc-cs">'+p.variedad+' · 🌱'+(Math.round(haGrupo*100)/100)+' há'+(hijosPol.length?' total':'')+' · 🌿'+(p.densidad||0)+' pl/há</span>';
       btn.onclick=function(){ toggleRegChip(btn,p); };
       div.appendChild(btn);
     });
@@ -14535,16 +14543,24 @@ function renderChipsReg(){
   });
 }
 function toggleRegChip(btn,p){
-  var idx=selPanosReg.indexOf(p.id);
-  if(idx>=0){ selPanosReg.splice(idx,1); btn.classList.remove('cc-sel'); btn.style.cssText=''; }
-  else{ selPanosReg.push(p.id); btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color; }
+  var grupo=(btn.dataset.grupo||p.id).split(',');
+  var yaSel=selPanosReg.indexOf(p.id)>=0;
+  if(yaSel){
+    grupo.forEach(function(gid){ var i=selPanosReg.indexOf(gid); if(i>=0) selPanosReg.splice(i,1); });
+    btn.classList.remove('cc-sel'); btn.style.cssText='';
+  } else {
+    grupo.forEach(function(gid){ if(selPanosReg.indexOf(gid)<0) selPanosReg.push(gid); });
+    btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
+  }
   calcRegTotal();
 }
 function calcRegTotal(){
   var el=document.getElementById('cc-reg-info'); if(!el) return;
   if(!selPanosReg.length){ el.textContent=''; return; }
   var tHa=selPanosReg.reduce(function(s,id){ var p=getPano(id); return s+(p?p.hectareas:0); },0);
-  el.textContent='✓ '+selPanosReg.length+' paño(s) · '+tHa.toFixed(2)+' há';
+  // Contar cuarteles (grupos), no paños sueltos.
+  var cuarteles={}; selPanosReg.forEach(function(id){ var p=getPano(id); if(p){ var k=(p.tipo||'Productivo')==='Polinizante'?(p.panoPadre||id):id; cuarteles[k]=1; } });
+  el.textContent='✓ '+Object.keys(cuarteles).length+' cuartel(es) · '+tHa.toFixed(2)+' há';
 }
 function showAC(inputId,listId){
   var q=document.getElementById(inputId).value.toLowerCase();
@@ -14732,22 +14748,48 @@ function renderOrdenChips(){
   var el=document.getElementById('cc-o-chips'); if(!el) return;
   el.innerHTML=''; selPanosOrden=[];
   ['2018','2024','2026'].forEach(function(y){
-    var ps=ordenarPanosPadreHijo(S.panos.filter(function(p){ return p.anio===y; }));
-    if(!ps.length) return;
+    var psAnio=S.panos.filter(function(p){ return p.anio===y; });
+    // Mostrar SOLO los productivos como chips (un chip = un cuartel/grupo). Al
+    // seleccionar un grupo se incluyen también sus polinizantes en el cálculo.
+    var productivos=psAnio.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
+    var polinizantes=psAnio.filter(function(p){ return (p.tipo||'Productivo')==='Polinizante'; });
+    // Polinizantes huérfanos (sin productivo padre del mismo año): mostrarlos solos.
+    var huerfanos=polinizantes.filter(function(pol){ return !productivos.some(function(prod){ return String(pol.panoPadre)===String(prod.id); }); });
+    var chips=productivos.concat(huerfanos);
+    if(!chips.length) return;
     var lbl=document.createElement('div'); lbl.className='cc-grp-lbl'; lbl.innerHTML='🌱 Plantación '+y;
     el.appendChild(lbl);
     var div=document.createElement('div'); div.className='cc-chips';
-    ps.forEach(function(p){
-      var btn=document.createElement('button'); btn.className='cc-chip'; btn.dataset.id=p.id;
+    chips.forEach(function(p){
       var esPolin=(p.tipo||'Productivo')==='Polinizante';
+      // IDs del grupo: el productivo + sus polinizantes (para sumar superficie).
+      var grupoIds=[p.id];
+      var hijosPol=[];
+      if(!esPolin){
+        hijosPol=polinizantes.filter(function(pol){ return String(pol.panoPadre)===String(p.id); });
+        hijosPol.forEach(function(h){ grupoIds.push(h.id); });
+      }
+      var haGrupo=grupoIds.reduce(function(s,gid){ var px=getPano(gid); return s+(px?(parseFloat(px.hectareas)||0):0); },0);
+      var btn=document.createElement('button'); btn.className='cc-chip'; btn.dataset.id=p.id; btn.dataset.grupo=grupoIds.join(',');
+      var polInfo=hijosPol.length?' <span style="background:#fef3c7;color:#92600a;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">🐝 +'+hijosPol.length+' polin.</span>':'';
       var polBadge=esPolin?' <span style="background:#fef3c7;color:#92600a;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">🐝 POL</span>':'';
-      btn.innerHTML='<span class="cc-cn">'+p.nombre+polBadge+'</span><span class="cc-cs">'+p.variedad+' · 🌱'+p.hectareas+' há · 💧'+(p.has_riego||0)+' há · 🌿'+(p.densidad||0)+' pl/há</span>';
+      btn.innerHTML='<span class="cc-cn">'+p.nombre+polBadge+polInfo+'</span><span class="cc-cs">'+p.variedad+' · 🌱'+(Math.round(haGrupo*100)/100)+' há'+(hijosPol.length?' total':'')+' · 🌿'+(p.densidad||0)+' pl/há</span>';
       btn.onclick=function(){
-        var idx=selPanosOrden.indexOf(p.id);
-        if(idx>=0){ selPanosOrden.splice(idx,1); btn.classList.remove('cc-sel'); btn.style.cssText=''; }
-        else{ selPanosOrden.push(p.id); btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color; }
+        var grupo=(btn.dataset.grupo||p.id).split(',');
+        var yaSel=selPanosOrden.indexOf(p.id)>=0;
+        if(yaSel){
+          // Deseleccionar: quitar todo el grupo
+          grupo.forEach(function(gid){ var i=selPanosOrden.indexOf(gid); if(i>=0) selPanosOrden.splice(i,1); });
+          btn.classList.remove('cc-sel'); btn.style.cssText='';
+        } else {
+          // Seleccionar: añadir todo el grupo (productivo + polinizantes)
+          grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
+          btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
+        }
         var tHa=selPanosOrden.reduce(function(s,id){ var px=getPano(id); return s+getHas(px); },0);
-        document.getElementById('cc-o-chips-info').textContent=selPanosOrden.length?'✓ '+selPanosOrden.length+' paño(s) · '+tHa.toFixed(2)+' há':'';
+        // Contar grupos seleccionados (productivos visibles), no paños individuales.
+        var gruposSel=chips.filter(function(c){ return selPanosOrden.some(function(sid){ return String(sid)===String(c.id); }); }).length;
+        document.getElementById('cc-o-chips-info').textContent=selPanosOrden.length?'✓ '+gruposSel+' cuartel(es) · '+tHa.toFixed(2)+' há':'';
         calcDist();
       };
       div.appendChild(btn);
@@ -14971,6 +15013,52 @@ function _calcProdQty(dosis, unidad, has, mojT){
   return 0;
 }
 
+/* Recalcula la distribución de agua y producto de una orden de forma
+   PROPORCIONAL A LAS HECTÁREAS ACTUALES de cada paño, usando la dosis y el
+   mojamiento guardados en la orden. Esto corrige las órdenes antiguas cuyo
+   reparto quedó "congelado" con valores previos: el informe siempre refleja el
+   reparto por hectárea. Devuelve un objeto {filas, tHas, tAgua, tProd}. */
+function _recalcDistribucionOrden(o){
+  if(!o) return { filas:[], tHas:0, tAgua:0, tProd:0 };
+  var mojT = parseFloat(o.mojT)||0;
+  // Productos de la orden (compat: si no hay array, usar el principal).
+  var productos = (o.productos && o.productos.length) ? o.productos
+                  : [{nombre:o.producto, dosis:o.dosis, unidad:o.unidad, unitS:unitBase(o.unidad||'')}];
+  // IDs de paños: preferir panoIds; si no, derivar de la distribución guardada.
+  var ids = (o.panoIds && o.panoIds.length) ? o.panoIds
+            : (o.distribucion||[]).map(function(r){ return r.panoId; });
+  var esFerti = (o.tipoApp==='Fertirriego');
+  var filas = []; var tHas=0,tAgua=0,tProd=0;
+  ids.forEach(function(pid){
+    var p = getPano(pid);
+    // hectáreas actuales (riego o plantadas según el tipo de aplicación)
+    var has = p ? (esFerti ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0)) : 0;
+    // respaldo: si el paño ya no existe, usar las há guardadas en la distribución
+    if((!p || has===0)){
+      var guardado = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); });
+      if(guardado && guardado.has>0) has = parseFloat(guardado.has)||0;
+    }
+    var agua = mojT * has;
+    var prodsByPano = productos.map(function(ap){
+      return { nombre:ap.nombre, unidad:ap.unidad, dosis:ap.dosis,
+               unitS:(ap.unitS||unitBase(ap.unidad||'')),
+               qty:_calcProdQty(ap.dosis, ap.unidad, has, mojT) };
+    });
+    var prodPrincipal = prodsByPano.length ? prodsByPano[0].qty : 0;
+    var datosP = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); }) || {};
+    filas.push({
+      panoId:pid,
+      panoNombre: (p&&p.nombre) || datosP.panoNombre || '—',
+      variedad: (p&&p.variedad) || datosP.variedad || '—',
+      anio: (p&&p.anio) || datosP.anio || '—',
+      color: (p&&p.color) || datosP.color || '#888',
+      has:has, agua:agua, prod:prodPrincipal, prods:prodsByPano
+    });
+    tHas+=has; tAgua+=agua; tProd+=prodPrincipal;
+  });
+  return { filas:filas, tHas:tHas, tAgua:tAgua, tProd:tProd };
+}
+
 function emitirOrden(){
   var tipo=ordenTipoApp, fecha=document.getElementById('cc-o-fecha').value;
   var fenol=document.getElementById('cc-o-fenol').value, prod=document.getElementById('cc-o-prod').value.trim();
@@ -15156,7 +15244,7 @@ function renderOrdenesList(){
           '<th>Paño</th><th>Variedad</th><th>Año</th><th>Há base</th><th>Agua (L)</th>'+
           prods.map(function(ap){ return '<th>'+escapeHtml(ap.nombre||'Prod')+' ('+(ap.unitS||unitBase(ap.unidad||''))+')</th>'; }).join('')+
         '</tr></thead><tbody>'+
-        (o.distribucion||[]).map(function(r){
+        (function(){ var _r=_recalcDistribucionOrden(o); return (_r.filas.length?_r.filas:(o.distribucion||[])); })().map(function(r){
           var prodCells;
           if(r.prods && r.prods.length){
             prodCells = r.prods.map(function(rp){ return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(rp.qty||0,(rp.unitS||unitBase(rp.unidad||'')),3)+'</td>'; }).join('');
@@ -16300,8 +16388,11 @@ function openPM(id){
     var unitS = prods[0].unitS || unitBase(prods[0].unidad||'');
     var isRiego=o.tipoApp==='Fertirriego';
     var pNoms=(o.panoIds||[]).map(function(pid){ var p=getPano(pid); return p?p.nombre:'?'; }).join(', ');
+    // Recalcular la distribución por hectáreas ACTUALES (corrige órdenes viejas).
+    var _rec = _recalcDistribucionOrden(o);
+    var _distrib = _rec.filas.length ? _rec.filas : (o.distribucion||[]);
     // Filas de la tabla: una fila por paño con una columna por producto
-    var filas=(o.distribucion||[]).map(function(r){
+    var filas=_distrib.map(function(r){
       var prodCells;
       if(r.prods && r.prods.length){
         prodCells = r.prods.map(function(rp, idxP){
@@ -16621,17 +16712,27 @@ function renderPanosApp(){
   var el=document.getElementById('cc-panos-app'); if(!el) return;
   var psAll=S.panos.filter(function(p){ return p.anio===appPanoYear; });
   if(!psAll.length){ el.innerHTML='<div class="cc-no-data"><span>&#x1F5FA;</span>Sin panos para '+appPanoYear+'.</div>'; return; }
-  // Ordenar: cada paño productivo seguido inmediatamente de sus polinizantes hijos
-  var ps=[];
-  var productivos=psAll.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
-  var polinizantes=psAll.filter(function(p){ return (p.tipo||'Productivo')==='Polinizante'; });
-  productivos.forEach(function(prod){
-    ps.push(prod);
-    // Agregar los polinizantes vinculados a este productivo
-    polinizantes.filter(function(pol){ return String(pol.panoPadre)===String(prod.id); }).forEach(function(pol){ ps.push(pol); });
-  });
-  // Polinizantes huérfanos (sin padre o con padre de otro año) al final
-  polinizantes.filter(function(pol){ return !ps.includes(pol); }).forEach(function(pol){ ps.push(pol); });
+  // AGRUPACIÓN POR CUARTEL: se muestra SOLO el paño productivo (variedad
+  // principal) como un grupo. La superficie y las plantas suman las de sus
+  // polinizantes vinculados. Los polinizantes no se listan como tarjetas
+  // separadas, pero siguen existiendo y se pueden editar al expandir el grupo.
+  var ps = psAll.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
+  // Polinizantes huérfanos (sin padre productivo del mismo año): se muestran
+  // igualmente para no esconderlos por completo si quedaron sueltos.
+  var polinizantes = psAll.filter(function(p){ return (p.tipo||'Productivo')==='Polinizante'; });
+  polinizantes.filter(function(pol){
+    return !ps.some(function(prod){ return String(pol.panoPadre)===String(prod.id); });
+  }).forEach(function(pol){ ps.push(pol); });
+  // Helper: polinizantes vinculados a un productivo.
+  function _polinizantesDe(prodId){
+    return S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(prodId); });
+  }
+  // Helper: superficie total del grupo (principal + polinizantes).
+  function _superficieGrupo(p){
+    var ha = parseFloat(p.hectareas)||0;
+    _polinizantesDe(p.id).forEach(function(h){ ha += parseFloat(h.hectareas)||0; });
+    return ha;
+  }
   el.innerHTML='';
   ps.forEach(function(p){
     var r=S.registros.filter(function(x){ return x.panoId==p.id; }).length;
@@ -16650,7 +16751,18 @@ function renderPanosApp(){
       +(esPolin?'<span style="background:#fef3c7;color:#92600a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">\ud83d\udc1d POLINIZANTE'+(padreNom?' \u2192 '+padreNom:'')+'</span>':'')
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:14px;font-size:13px;color:#888">'
-      +'<span>&#x1F331; '+p.hectareas+' ha</span>'
+      +(function(){
+          // Superficie: para productivos con polinizantes, mostrar el TOTAL del grupo.
+          if(!esPolin){
+            var haGrupo=_superficieGrupo(p);
+            var hijos=_polinizantesDe(p.id);
+            if(hijos.length>0){
+              return '<span title="Superficie total del grupo (principal + polinizantes)">&#x1F331; '+ (Math.round(haGrupo*100)/100) +' ha total</span>';
+            }
+            return '<span>&#x1F331; '+p.hectareas+' ha</span>';
+          }
+          return '<span>&#x1F331; '+p.hectareas+' ha</span>';
+        })()
       +'<span>&#x1F4A7; '+(p.has_riego||0)+' ha</span>'
       +'<span>&#x1F33F; '+(p.densidad||0)+' pl/ha</span>'
       +(function(){
@@ -16755,6 +16867,41 @@ function renderPanosApp(){
     body.appendChild(cdiv);
     var hidColor=document.createElement('input'); hidColor.type='hidden'; hidColor.id='cc-pec-'+p.id; hidColor.value=p.color;
     body.appendChild(hidColor);
+
+    // ── Polinizantes del grupo (editables aquí, ya que no se listan aparte) ──
+    if((p.tipo||'Productivo')!=='Polinizante'){
+      var hijosPol = _polinizantesDe(p.id);
+      if(hijosPol.length>0){
+        var polWrap=document.createElement('div');
+        polWrap.style.cssText='margin:6px 0 12px;padding:10px;background:#fffaf0;border:1px solid #fde8c0;border-radius:8px';
+        var polTit=document.createElement('div');
+        polTit.style.cssText='font-size:12px;font-weight:800;color:#92600a;margin-bottom:8px';
+        polTit.innerHTML='&#x1F41D; Polinizantes de este cuartel ('+hijosPol.length+')';
+        polWrap.appendChild(polTit);
+        hijosPol.forEach(function(pol){
+          var row=document.createElement('div');
+          row.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px;padding-bottom:7px;border-bottom:1px dashed #fde8c0';
+          var mkMini=function(lbl,val,id,w){
+            var d=document.createElement('div'); d.style.cssText='display:flex;flex-direction:column;gap:2px';
+            var l=document.createElement('label'); l.style.cssText='font-size:10px;color:#92600a;font-weight:700'; l.textContent=lbl; d.appendChild(l);
+            var inp=document.createElement('input'); inp.type='text'; inp.value=(val!=null?val:''); inp.id=id; inp.style.cssText='width:'+(w||'90px')+';padding:5px 7px;border:1px solid #e3c890;border-radius:6px;font-size:12px'; d.appendChild(inp);
+            return d;
+          };
+          row.appendChild(mkMini('Variedad', pol.variedad, 'cc-polv-'+pol.id, '110px'));
+          row.appendChild(mkMini('Há', pol.hectareas, 'cc-polh-'+pol.id, '70px'));
+          row.appendChild(mkMini('Densidad', pol.densidad, 'cc-pold-'+pol.id, '80px'));
+          row.appendChild(mkMini('N° plantas', pol.plantas, 'cc-polpl-'+pol.id, '90px'));
+          var bSaveP=document.createElement('button'); bSaveP.className='cc-btn cc-btn-g cc-btn-sm'; bSaveP.style.cssText='align-self:flex-end'; bSaveP.textContent='Guardar';
+          bSaveP.onclick=(function(polId){ return function(){ savePolinizanteEdit(polId); }; })(pol.id);
+          var bDelP=document.createElement('button'); bDelP.className='cc-btn cc-btn-r cc-btn-sm'; bDelP.style.cssText='align-self:flex-end'; bDelP.textContent='✕';
+          bDelP.onclick=(function(polId){ return function(){ delPano(polId); }; })(pol.id);
+          row.appendChild(bSaveP); row.appendChild(bDelP);
+          polWrap.appendChild(row);
+        });
+        body.appendChild(polWrap);
+      }
+    }
+
     // Buttons
     var btns=document.createElement('div'); btns.className='cc-gr';
     var bSave=document.createElement('button'); bSave.className='cc-btn cc-btn-g cc-btn-sm'; bSave.textContent='Guardar';
@@ -16791,6 +16938,18 @@ function savePanoEdit(id){
   p.color=document.getElementById('cc-pec-'+id).value||p.color;
   save(); renderPanosApp(); renderHeader(); renderChipsReg(); renderOrdenChips();
   showNotice('✓ Paño actualizado.','ok');
+}
+// Guarda la edición rápida de un paño polinizante desde la tarjeta de su grupo.
+function savePolinizanteEdit(id){
+  if(typeof can==='function' && !can('cuaderno.panos') && !can('cuaderno.editar')){ showNotice('No tiene permiso para editar paños.','err'); return; }
+  var p=S.panos.find(function(x){ return String(x.id)===String(id); }); if(!p) return;
+  function num(v){ var n=parseFloat(String(v||'').replace(',','.')); return isNaN(n)?null:n; }
+  var v=document.getElementById('cc-polv-'+id); if(v && v.value.trim()) p.variedad=v.value.trim();
+  var h=document.getElementById('cc-polh-'+id); var hn=h?num(h.value):null; if(hn!=null) p.hectareas=hn;
+  var d=document.getElementById('cc-pold-'+id); var dn=d?num(d.value):null; if(dn!=null) p.densidad=dn;
+  var pl=document.getElementById('cc-polpl-'+id); var pln=pl?num(pl.value):null; if(pln!=null) p.plantas=pln;
+  save(); renderPanosApp(); renderHeader(); renderChipsReg(); renderOrdenChips();
+  showNotice('✓ Polinizante actualizado.','ok');
 }
 function delPano(id){
   if(typeof can==='function' && !can('cuaderno.panos') && !can('cuaderno.editar')){ showNotice('No tiene permiso para eliminar paños.','err'); return; }
