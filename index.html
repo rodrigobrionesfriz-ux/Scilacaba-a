@@ -10540,6 +10540,7 @@ function ipFiltroTodos(val){
 
 // Paso 2: mostrar el mapa con las hileras seleccionadas
 function ipMostrarMapaGeneral(){
+  _ipMapZoom = 100; // reiniciar zoom al abrir
   var seleccionados = [];
   document.querySelectorAll('.ip-cuartel-chk:checked').forEach(function(c){ seleccionados.push(c.value); });
   if(!seleccionados.length){ toast('Seleccione','Marque al menos un cuartel','error'); return; }
@@ -10558,7 +10559,14 @@ function ipMostrarMapaGeneral(){
   var header='<div style="background:#354a5f;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'+
     '<div><div style="font-size:18px;font-weight:800">🗺️ Mapa general del huerto</div>'+
       '<div style="font-size:12px;opacity:.85">'+seleccionados.length+' cuartel(es) · '+regs.length+' hilera(s)</div></div>'+
-    '<button onclick="document.getElementById(\'ip-mapagen-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:26px;cursor:pointer;width:44px;height:44px;border-radius:8px">×</button>'+
+    '<div style="display:flex;align-items:center;gap:8px">'+
+      '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.12);border-radius:10px;padding:3px">'+
+        '<button onclick="ipMapZoom(-1)" title="Reducir" style="background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;cursor:pointer;width:38px;height:38px;border-radius:8px;line-height:1">−</button>'+
+        '<span id="ip-map-zoom-label" style="font-size:12px;min-width:42px;text-align:center;font-weight:700">100%</span>'+
+        '<button onclick="ipMapZoom(1)" title="Aumentar" style="background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;cursor:pointer;width:38px;height:38px;border-radius:8px;line-height:1">+</button>'+
+      '</div>'+
+      '<button onclick="document.getElementById(\'ip-mapagen-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:26px;cursor:pointer;width:44px;height:44px;border-radius:8px">×</button>'+
+    '</div>'+
   '</div>';
 
   var body='<div style="flex:1;overflow:auto;padding:20px;background:#f4f6f8">';
@@ -10618,6 +10626,20 @@ function ipMostrarMapaGeneral(){
   document.body.appendChild(modal);
 }
 
+// Nivel de zoom del mapa general (porcentaje del ancho base). El contenedor
+// padre tiene overflow:auto, así que al ampliar aparece scroll para recorrer.
+var _ipMapZoom = 100;
+function ipMapZoom(delta){
+  _ipMapZoom += (delta>0 ? 20 : -20);
+  if(_ipMapZoom < 40) _ipMapZoom = 40;
+  if(_ipMapZoom > 300) _ipMapZoom = 300;
+  document.querySelectorAll('.ip-map-svg-wrap').forEach(function(wrap){
+    wrap.style.width = _ipMapZoom + '%';
+  });
+  var lbl = document.getElementById('ip-map-zoom-label');
+  if(lbl) lbl.textContent = _ipMapZoom + '%';
+}
+
 // Render de un cuartel como conjunto de hileras (líneas horizontales con plantas)
 // El SVG usa viewBox + width:100% para AJUSTARSE al ancho del contenedor, de
 // modo que el cuartel completo se ve sin scroll, tanto en PC como en móvil.
@@ -10630,15 +10652,20 @@ function ipRenderCuartelSVG(cuartel, hileras){
   var ancho = margenIzq + maxPlantas*anchoPlanta + margenDer;
   var alto = margenSup*2 + filas*altoFila + 16;
 
-  // Resume el nombre de la hilera a su último campo (ej: "C1-REGINA-H1" → "H1").
+  // Resume el nombre de la hilera a su último campo: el "H+número" final.
+  // Los códigos vienen concatenados sin separador (ej: "C1REGH1"), así que
+  // extraemos el patrón H seguido de dígitos al final del nombre.
   function nombreCorto(h){
-    var base = h.codigoBase || ('H'+h.hilera);
-    var partes = String(base).split(/[-_\s]+/);
-    return partes[partes.length-1] || base;
+    var base = String(h.codigoBase || ('H'+h.hilera));
+    var m = base.match(/H\d+$/i);
+    if(m) return m[0].toUpperCase();
+    // Respaldo: si no calza, usar el número de hilera.
+    if(h.hilera!=null) return 'H'+String(h.hilera).replace(/[^0-9]/g,'');
+    return base;
   }
 
   var svg = '<svg viewBox="0 0 '+ancho+' '+alto+'" preserveAspectRatio="xMidYMid meet" '+
-            'style="display:block;width:100%;height:auto;max-height:62vh" xmlns="http://www.w3.org/2000/svg">';
+            'style="display:block;width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">';
   hileras.forEach(function(h, fi){
     var y = margenSup + fi*altoFila + altoFila/2;
     var plantas = h.plantas||[];
@@ -10670,7 +10697,8 @@ function ipRenderCuartelSVG(cuartel, hileras){
 
   return '<div style="margin-bottom:22px">'+
     '<div style="color:#23303d;font-size:16px;font-weight:800;margin-bottom:8px">📍 '+escapeHtml(cuartel)+' <span style="font-size:12px;font-weight:400;opacity:.7">— '+hileras.length+' hileras</span></div>'+
-    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px">'+svg+
+    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px;overflow:auto">'+
+      '<div class="ip-map-svg-wrap" style="width:100%;margin:0 auto">'+svg+'</div>'+
       '<div style="font-size:11px;color:#7a8794;margin-top:8px">▶ Inicio de hilera · ■ Fin de hilera — toque esos puntos para abrir Google Maps</div>'+
     '</div>'+
   '</div>';
