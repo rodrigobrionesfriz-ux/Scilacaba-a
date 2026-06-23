@@ -17233,6 +17233,7 @@ function fmtValK(v)   {
 
 // ===================== DETALLE GASTOS MODAL =====================
 let currentDetalleItems = [];
+let currentDetallePpto = 0;
 
 function openDetalleModal(descripcion) {
   const MONTH_ORDER = ['MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE','ENERO','FEBRERO','MARZO','ABRIL'];
@@ -17254,6 +17255,19 @@ function openDetalleModal(descripcion) {
   });
 
   currentDetalleItems = items;
+
+  // Calcular el PRESUPUESTO de esta descripción (sumando las filas de datos que
+  // coinciden, respetando el filtro de mes). Se usa en el pie del modal para
+  // mostrar gasto vs presupuesto y el % de desviación.
+  try{
+    var fuenteFilas = (typeof ACTIVE_DATA!=='undefined' && ACTIVE_DATA && ACTIVE_DATA.length) ? ACTIVE_DATA : RAW;
+    var filasDesc = fuenteFilas.filter(function(d){
+      if(d.DESCRIPCION !== descripcion) return false;
+      if(mesFiltro && d.MES !== mesFiltro) return false;
+      return true;
+    });
+    currentDetallePpto = filasDesc.reduce(function(s,d){ return s + (parseFloat(getPpto(d))||0); }, 0);
+  }catch(e){ currentDetallePpto = 0; }
 
   document.getElementById('detalle-title').textContent = descripcion;
   const mesLabel = mesFiltro ? ` · ${mesFiltro}` : ' · Todos los meses';
@@ -17312,7 +17326,16 @@ function renderDetalleTable(items) {
   noData.style.display = 'none';
   const total = items.reduce((s, x) => s + convertVal(x.total), 0);
   countEl.textContent = `${items.length} registro${items.length !== 1 ? 's' : ''}`;
-  totalEl.textContent = 'Total: ' + fmtVal(total);
+  // Pie del modal: además del gasto real, mostrar el presupuesto de la
+  // descripción y el % de desviación (real vs presupuesto).
+  var pptoConv = convertVal(currentDetallePpto || 0);
+  var devPct = (pptoConv && pptoConv !== 0) ? ((total - pptoConv) / Math.abs(pptoConv)) * 100 : null;
+  var devColor = (devPct == null) ? '#64748b' : (devPct > 0 ? '#ef4444' : '#16a34a');
+  var devTxt = (devPct == null) ? 's/ppto' : ((devPct > 0 ? '+' : '') + devPct.toFixed(1) + '%');
+  totalEl.innerHTML =
+    '<span style="margin-right:14px">Gasto: <strong>' + fmtVal(total) + '</strong></span>' +
+    '<span style="margin-right:14px;color:#475569">Ppto: <strong>' + fmtVal(pptoConv) + '</strong></span>' +
+    '<span style="color:' + devColor + '">Desv: <strong>' + devTxt + '</strong></span>';
 
   tbody.innerHTML = items.map(x => {
     const converted = convertVal(x.total);
@@ -18586,7 +18609,7 @@ function pzSerializeDataset(){
     rows: (ACTIVE_DATA || RAW) || [],
     detalle: (window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS) || {},
     monthsWithReal: (window.MONTHS_WITH_REAL || MONTHS_WITH_REAL) || [],
-    kpis: { kg: num('rb-kg'), tc: num('rb-tc'), ha: num('rb-ha') }
+    kpis: { kg: num('rb-kg'), tc: num('rb-tc'), ha: num('rb-ha'), kgEst: num('rb-kg-est') }
   };
 }
 /* loadDataset(obj): aplica datos provenientes de Firebase al dashboard y
@@ -18608,6 +18631,7 @@ function pzLoadDataset(obj){
       var kg=document.getElementById('rb-kg'); if(kg && k.kg!=null) kg.value = Math.round(k.kg).toLocaleString('es-CL');
       var tc=document.getElementById('rb-tc'); if(tc && k.tc!=null) tc.value = k.tc.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
       var ha=document.getElementById('rb-ha'); if(ha && k.ha!=null) ha.value = k.ha.toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+      var kgEst=document.getElementById('rb-kg-est'); if(kgEst && k.kgEst!=null) kgEst.value = Math.round(k.kgEst).toLocaleString('es-CL');
     }
     // Reconstruir filtros y re-render con los datos nuevos
     try{ rebuildFilters(ACTIVE_DATA || RAW); }catch(e){}
