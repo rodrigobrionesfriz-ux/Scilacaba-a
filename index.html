@@ -2030,7 +2030,7 @@ async function sciFbApplyRemote(data){
             var key = _sciStoreKey(store);
             var localArr = [];
             try{ localArr = await dbAll(store); }catch(e){ localArr = []; }
-            var fusionado = _sciMergeArrays(localArr, remote[store], key);
+            var fusionado = _sciMergeArrays(localArr, remote[store], key, store);
             await dbClear(store);
             for(var j=0;j<fusionado.length;j++){
               try{ await dbPutLocal(store, fusionado[j]); }catch(e){}
@@ -2060,6 +2060,44 @@ async function sciFbApplyRemote(data){
 }
 
 // Envía todo el estado del SCI a la nube
+/* ─── Lápidas de eliminación (tombstones) ───────────────────────────────
+   Cuando se elimina un registro de un store acumulativo, registramos su ID con
+   un timestamp. Esa marca se sincroniza (vía store 'config') y la fusión la
+   respeta: un registro con lápida más reciente que el propio registro NO
+   reaparece, aunque otro dispositivo todavía lo tenga. Así las eliminaciones
+   se propagan sin sacrificar la protección contra pérdida de datos nuevos. */
+var _SCI_TOMB_KEY = 'sci_tombstones';
+function _sciGetTombstones(){
+  try{
+    var c = (STATE.cache.config && STATE.cache.config[_SCI_TOMB_KEY]) || null;
+    return (c && c.tombs && typeof c.tombs==='object') ? c.tombs : {};
+  }catch(e){ return {}; }
+}
+/* Marca un id como eliminado en un store (registra timestamp) y sincroniza. */
+async function sciMarcarEliminado(store, id){
+  try{
+    var tombs = _sciGetTombstones();
+    if(!tombs[store]) tombs[store] = {};
+    tombs[store][String(id)] = Date.now();
+    var obj = { key:_SCI_TOMB_KEY, tombs: tombs, _updatedAt:new Date().toISOString() };
+    STATE.cache.config = STATE.cache.config || {};
+    STATE.cache.config[_SCI_TOMB_KEY] = obj;
+    await dbPut('config', obj); // dbPut sincroniza config a la nube
+  }catch(e){ console.error('tombstone error:', e); }
+}
+/* ¿El registro (rec) está eliminado? True si hay lápida con timestamp >= _mod. */
+function _sciEstaEliminado(store, rec, key){
+  if(!rec || rec[key]===undefined) return false;
+  var tombs = _sciGetTombstones();
+  var st = tombs[store]; if(!st) return false;
+  var tomb = st[String(rec[key])];
+  if(tomb==null) return false;
+  var mod = rec._mod || 0;
+  // Si el registro fue modificado DESPUÉS de la lápida, significa que se re-creó
+  // intencionalmente → no se considera eliminado. Si no, está eliminado.
+  return mod <= tomb;
+}
+
 /* Mapa de stores acumulativos (donde perder un registro es grave) y sus claves.
    Compartido por la recepción (applyRemote) y la subida (push) para que ningún
    dispositivo borre datos que otro creó. */
@@ -2072,8 +2110,9 @@ function _sciStoreKey(store){
   return 'id';
 }
 /* Fusiona dos arrays de registros por clave, conservando todos. Ante misma
-   clave, gana el de _mod más reciente (o el segundo si no hay _mod). */
-function _sciMergeArrays(localArr, remoteArr, key){
+   clave, gana el de _mod más reciente (o el segundo si no hay _mod).
+   Excluye los registros marcados como eliminados (lápidas) para ese store. */
+function _sciMergeArrays(localArr, remoteArr, key, store){
   var mapa = {};
   (localArr||[]).forEach(function(rec){ if(rec && rec[key]!==undefined) mapa[rec[key]] = rec; });
   (remoteArr||[]).forEach(function(rrec){
@@ -2084,7 +2123,12 @@ function _sciMergeArrays(localArr, remoteArr, key){
     var rm = (rrec && rrec._mod) ? rrec._mod : 0;
     mapa[rrec[key]] = (lm > rm) ? ex : rrec;
   });
-  return Object.keys(mapa).map(function(k){ return mapa[k]; });
+  // Filtrar los eliminados (lápidas), si se indicó el store.
+  var arr = Object.keys(mapa).map(function(k){ return mapa[k]; });
+  if(store){
+    arr = arr.filter(function(rec){ return !_sciEstaEliminado(store, rec, key); });
+  }
+  return arr;
 }
 
 async function sciFbPush(immediate){
@@ -2118,7 +2162,7 @@ async function sciFbPush(immediate){
         var localData = await dbAll(store);
         if(remoteObj && SCI_STORES_ACUMULATIVOS[store] && Array.isArray(remoteObj[store])){
           // Fusionar local + remoto: no perder lo que el otro dispositivo subió.
-          payloadObj[store] = _sciMergeArrays(localData, remoteObj[store], _sciStoreKey(store));
+          payloadObj[store] = _sciMergeArrays(localData, remoteObj[store], _sciStoreKey(store), store);
           // Reflejar la fusión también en la base local, para quedar consistentes.
           try{
             if(payloadObj[store].length !== localData.length){
@@ -9995,7 +10039,7 @@ function cteVerEstimDetalle(id){
 function cteEliminarEstim(id){
   if(!can('conteos.revisar')){ toast('Sin permiso','No puede eliminar estimaciones','error'); return; }
   confirmDialog('Eliminar estimación','¿Eliminar esta versión de estimación?',async function(){
-    try{ await dbDel('estimaciones', id); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){}
+    try{ await sciMarcarEliminado('estimaciones', id); await dbDel('estimaciones', id); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){}
     cteRender();
     toast('Estimación eliminada','','success');
   },'Eliminar',true);
@@ -10046,6 +10090,7 @@ function cteEliminarSesion(id){
   var s = (STATE.cache.conteos||[]).find(function(x){ return String(x.id)===String(id); });
   if(!s) return;
   confirmDialog('Eliminar conteo','¿Eliminar este conteo de "'+(s.panoNombre||'')+'"? '+(s.sincronizado?'':'Aún no se ha subido a la nube.'),async function(){
+    await sciMarcarEliminado('conteos', id); // lápida: evita que reaparezca al sincronizar
     await dbDel('conteos', id);
     STATE.cache.conteos = await dbAll('conteos');
     // Forzar subida INMEDIATA del estado sin el conteo, para que el listener remoto no lo restaure
@@ -11005,6 +11050,7 @@ function ipEliminar(id){
   var s=(STATE.cache.invplantas||[]).find(function(x){return String(x.id)===String(id);});
   if(!s) return;
   confirmDialog('Eliminar hilera','¿Eliminar el registro de la hilera '+s.codigoBase+'?',async function(){
+    await sciMarcarEliminado('invplantas', id); // lápida: evita que reaparezca al sincronizar
     await dbDel('invplantas', id);
     STATE.cache.invplantas=await dbAll('invplantas');
     ipRender();
