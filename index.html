@@ -8893,18 +8893,78 @@ async function saveEmpresaForm(){
 
 /* ═══════════════ INDICADORES DIARIOS (config) ═══════════════ */
 /* Estructura persistida en store 'config' con key 'indicadoresDiarios':
-   { key:'indicadoresDiarios', meses:{ MAYO:{usd,utm,uf}, JUNIO:{...}, ... } } */
+   { key:'indicadoresDiarios',
+     temporadas:{ '2025-2026':{ MAYO:{usd,utm,uf}, ... }, '2026-2027':{...} } }
+   Una temporada va de MAYO de un año a ABRIL del año siguiente.
+   Compatibilidad: si existe el campo antiguo 'meses' (sin año), se migra a la
+   temporada 2025-2026. */
 var PZ_MESES_TEMP = ['MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE','ENERO','FEBRERO','MARZO','ABRIL'];
-function getIndicadores(){
+// Temporada activa que se está editando/visualizando en la tabla.
+var _indicTempActiva = null;
+
+/* Devuelve el código de temporada ('AAAA-BBBB') al que pertenece un mes/año.
+   Mayo–Diciembre pertenecen a la temporada que empieza ese año; Enero–Abril
+   pertenecen a la temporada que empezó el año anterior. */
+function temporadaDeMesAnio(mes, anio){
+  var idx = PZ_MESES_TEMP.indexOf(String(mes).toUpperCase().trim());
+  anio = parseInt(anio,10);
+  if(isNaN(anio)) return null;
+  // idx 0..7 = MAYO..DICIEMBRE (inicio de temporada); 8..11 = ENERO..ABRIL (año siguiente)
+  var inicio = (idx>=8) ? (anio-1) : anio;
+  return inicio + '-' + (inicio+1);
+}
+/* Temporada actual según la fecha de hoy. */
+function temporadaActual(){
+  var hoy = new Date();
+  var m = hoy.getMonth(); // 0=ene..11=dic
+  var y = hoy.getFullYear();
+  // Mayo(4)–Dic(11): temporada y; Ene(0)–Abr(3): temporada y-1
+  var inicio = (m>=4) ? y : (y-1);
+  return inicio + '-' + (inicio+1);
+}
+/* Objeto raíz de indicadores (con migración de la estructura antigua). */
+function getIndicadoresRoot(){
   try{
     var c = (STATE.cache.config && STATE.cache.config.indicadoresDiarios) || null;
-    return (c && c.meses) ? c.meses : {};
-  }catch(e){ return {}; }
+    if(!c) return { temporadas:{} };
+    var root = { temporadas: (c.temporadas && typeof c.temporadas==='object') ? c.temporadas : {} };
+    // Migración: estructura antigua 'meses' → temporada 2025-2026
+    if(c.meses && typeof c.meses==='object' && !root.temporadas['2025-2026']){
+      root.temporadas['2025-2026'] = c.meses;
+    }
+    return root;
+  }catch(e){ return { temporadas:{} }; }
 }
-/* Devuelve el indicador de un mes (objeto {usd,utm,uf}) o null. */
-function getIndicadorMes(mes){
+/* Meses de una temporada concreta (objeto {MAYO:{...},...}) o {}. */
+function getIndicadoresTemporada(temp){
+  var root = getIndicadoresRoot();
+  return (root.temporadas && root.temporadas[temp]) ? root.temporadas[temp] : {};
+}
+/* Lista ordenada de temporadas conocidas (las guardadas + la actual + un margen
+   hacia adelante para poder avanzar). */
+function listarTemporadas(){
+  var root = getIndicadoresRoot();
+  var set = {};
+  Object.keys(root.temporadas||{}).forEach(function(t){ set[t]=1; });
+  // Asegurar la temporada actual y al menos una hacia adelante.
+  var actual = temporadaActual();
+  set[actual] = 1;
+  var inicioAct = parseInt(actual.split('-')[0],10);
+  set[(inicioAct+1)+'-'+(inicioAct+2)] = 1;
+  // Asegurar 2025-2026 (histórica)
+  set['2025-2026'] = 1;
+  return Object.keys(set).sort();
+}
+function getIndicadores(){
+  // Compatibilidad: devuelve los meses de la temporada ACTUAL (por fecha).
+  return getIndicadoresTemporada(temporadaActual());
+}
+/* Indicador de un mes. Acepta año opcional para resolver la temporada exacta;
+   si no se da año, usa la temporada actual por fecha. */
+function getIndicadorMes(mes, anio){
   if(!mes) return null;
-  var m = getIndicadores();
+  var temp = anio ? temporadaDeMesAnio(mes, anio) : temporadaActual();
+  var m = getIndicadoresTemporada(temp);
   var key = String(mes).toUpperCase().trim();
   return m[key] || null;
 }
@@ -8912,23 +8972,48 @@ function _fmtIndic(v){
   if(v==null || v==='' || isNaN(v)) return '';
   return Number(v).toLocaleString('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+/* Año calendario que corresponde a un mes dentro de la temporada activa. */
+function _anioDeMesEnTemporada(mes, temp){
+  var inicio = parseInt(String(temp).split('-')[0],10);
+  var idx = PZ_MESES_TEMP.indexOf(String(mes).toUpperCase());
+  return (idx>=8) ? (inicio+1) : inicio; // ENE..ABR caen en el año siguiente
+}
 function renderIndicadoresRows(){
-  var datos = getIndicadores();
+  if(!_indicTempActiva) _indicTempActiva = temporadaActual();
+  var datos = getIndicadoresTemporada(_indicTempActiva);
   var editable = (typeof can==='function') && can('config.editar');
   var ro = editable ? '' : ' readonly';
   return PZ_MESES_TEMP.map(function(mes){
     var d = datos[mes] || {};
+    var anioMes = _anioDeMesEnTemporada(mes, _indicTempActiva);
     var inp = function(campo, val){
       return '<input type="text" data-mes="'+mes+'" data-campo="'+campo+'" value="'+(_fmtIndic(val))+'"'+ro+
              ' style="width:120px;padding:6px 8px;border:1px solid var(--bo);border-radius:6px;font-size:13px" placeholder="—">';
     };
     return '<tr style="border-bottom:1px solid var(--bo)">'+
-      '<td style="padding:6px 10px;font-weight:600">'+mes+'</td>'+
+      '<td style="padding:6px 10px;font-weight:600">'+mes+' <span style="color:#94a3b8;font-weight:400;font-size:11px">'+anioMes+'</span></td>'+
       '<td style="padding:6px 10px">'+inp('usd', d.usd)+'</td>'+
       '<td style="padding:6px 10px">'+inp('utm', d.utm)+'</td>'+
       '<td style="padding:6px 10px">'+inp('uf', d.uf)+'</td>'+
       '</tr>';
   }).join('');
+}
+/* Opciones del selector de temporada. */
+function renderTemporadaOptions(){
+  if(!_indicTempActiva) _indicTempActiva = temporadaActual();
+  return listarTemporadas().map(function(t){
+    var sel = (t===_indicTempActiva) ? ' selected' : '';
+    var actualTxt = (t===temporadaActual()) ? ' (actual)' : '';
+    return '<option value="'+t+'"'+sel+'>Temporada '+t+actualTxt+'</option>';
+  }).join('');
+}
+/* Cambia la temporada activa y re-renderiza la tabla. */
+function cambiarTemporadaIndic(temp){
+  _indicTempActiva = temp;
+  var tbody = document.getElementById('indicadores-tbody');
+  if(tbody) tbody.innerHTML = renderIndicadoresRows();
+  var lbl = document.getElementById('indic-temp-label');
+  if(lbl) lbl.textContent = temp;
 }
 function _parseIndic(str){
   if(str==null) return null;
@@ -8940,6 +9025,7 @@ function _parseIndic(str){
 async function saveIndicadores(){
   if(!can('config.editar')){ return; }
   try{
+    if(!_indicTempActiva) _indicTempActiva = temporadaActual();
     var inputs = document.querySelectorAll('#indicadores-tbody input[data-mes]');
     var meses = {};
     inputs.forEach(function(inp){
@@ -8949,12 +9035,16 @@ async function saveIndicadores(){
       if(!meses[mes]) meses[mes] = {};
       if(val!=null) meses[mes][campo] = val;
     });
-    var obj = { key:'indicadoresDiarios', meses: meses, _updatedAt: new Date().toISOString() };
+    // Partir del root existente (con migración) y actualizar solo la temporada activa.
+    var root = getIndicadoresRoot();
+    if(!root.temporadas) root.temporadas = {};
+    root.temporadas[_indicTempActiva] = meses;
+    var obj = { key:'indicadoresDiarios', temporadas: root.temporadas, _updatedAt: new Date().toISOString() };
     await dbPut('config', obj);
     STATE.cache.config = STATE.cache.config || {};
     STATE.cache.config.indicadoresDiarios = obj;
-    if(typeof showNotice==='function') showNotice('\u2713 Indicadores diarios guardados.', 'ok');
-    else if(typeof toast==='function') toast('Indicadores guardados');
+    if(typeof showNotice==='function') showNotice('\u2713 Indicadores de la temporada '+_indicTempActiva+' guardados.', 'ok');
+    else if(typeof toast==='function') toast('Indicadores guardados','Temporada '+_indicTempActiva,'success');
   }catch(e){
     console.error('saveIndicadores error:', e);
     if(typeof showNotice==='function') showNotice('\u274c No se pudieron guardar los indicadores.', 'error');
@@ -8962,6 +9052,7 @@ async function saveIndicadores(){
 }
 window.getIndicadorMes = getIndicadorMes;
 window.getIndicadores = getIndicadores;
+window.temporadaActual = temporadaActual;
 
 function renderConfig(c){
   const groups=STATE.cache.groups;
@@ -9013,7 +9104,12 @@ function renderConfig(c){
           <div style="font-size:13px;color:var(--mu);margin-bottom:12px">
             Valores mensuales de los principales indicadores económicos. Se usan como respaldo en otros módulos
             (por ejemplo, el Tipo de Cambio del Control de Presupuesto toma el <strong>Valor USD</strong> del mes
-            cuando el Excel no lo trae). Edite y presione «Guardar indicadores».
+            cuando el Excel no lo trae). Cada temporada va de Mayo a Abril del año siguiente. Edite y presione «Guardar indicadores».
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <label style="font-size:13px;font-weight:700;color:#334155">Temporada:</label>
+            <select id="indic-temp-select" onchange="cambiarTemporadaIndic(this.value)" style="padding:8px 12px;border:1px solid var(--bo);border-radius:8px;font-size:13px;font-weight:600;background:#fff;min-width:220px">${renderTemporadaOptions()}</select>
+            <span style="font-size:12px;color:#94a3b8">Mayo (<span id="indic-temp-label">${_indicTempActiva||temporadaActual()}</span>) → Abril</span>
           </div>
           <div style="overflow-x:auto">
             <table class="data-table" id="indicadores-table" style="width:100%;border-collapse:collapse;font-size:13px">
@@ -9028,7 +9124,7 @@ function renderConfig(c){
               <tbody id="indicadores-tbody">${renderIndicadoresRows()}</tbody>
             </table>
           </div>
-          <div class="hint" style="margin-top:8px;line-height:1.4">Temporada Mayo 2025 – Abril 2026. Deje en blanco los meses sin dato.</div>
+          <div class="hint" style="margin-top:8px;line-height:1.4">Elija la temporada en el selector. Deje en blanco los meses sin dato. Puede avanzar a temporadas futuras (2027-2028, etc.).</div>
         </div>
       </div>
 
@@ -17634,7 +17730,9 @@ function processExcel(file) {
         // datos desde Indicadores Diarios (Configuración del SCI).
         try{
           if(typeof window.getIndicadorMes==='function'){
-            const indic = window.getIndicadorMes(lastMes);
+            // Pasar el año del último mes con real para resolver la temporada.
+            var anioLast = lastMesReal ? lastMesReal['AÑO'] : null;
+            const indic = window.getIndicadorMes(lastMes, anioLast);
             if(indic && indic.usd){
               const tcInput = document.getElementById('rb-tc');
               if(tcInput) tcInput.value = Number(indic.usd).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18804,7 +18902,14 @@ function pzInit(){
       if(typeof window.getIndicadorMes==='function'){
         var mesesReales = (window.MONTHS_WITH_REAL || (typeof MONTHS_WITH_REAL!=='undefined'?MONTHS_WITH_REAL:[])) || [];
         var ultimoMes = mesesReales.length ? mesesReales[mesesReales.length-1] : null;
-        var indic = ultimoMes ? window.getIndicadorMes(ultimoMes) : null;
+        // Buscar el año de ese mes en los datos para resolver la temporada.
+        var anioUlt = null;
+        try{
+          var fuente = (typeof ACTIVE_DATA!=='undefined' && ACTIVE_DATA) ? ACTIVE_DATA : RAW;
+          var fila = ultimoMes ? fuente.find(function(d){ return d.MES===ultimoMes; }) : null;
+          anioUlt = fila ? fila['AÑO'] : null;
+        }catch(e){}
+        var indic = ultimoMes ? window.getIndicadorMes(ultimoMes, anioUlt) : null;
         var tcInput = document.getElementById('rb-tc');
         if(indic && indic.usd && tcInput){
           // Solo si el usuario no ha modificado manualmente (heurística: marcar).
