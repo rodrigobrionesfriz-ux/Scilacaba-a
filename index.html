@@ -10728,6 +10728,98 @@ function ipFiltroTodos(val){
 }
 
 // Paso 2: mostrar el mapa con las hileras seleccionadas
+// Registros actualmente visibles en el mapa general (para el detalle por estado).
+var _ipMapaGenRegs = [];
+/* Despliega el detalle de qué hileras y qué números de planta están en un
+   estado dado (ej. Muerto), agrupado por cuartel e hilera, con opción de
+   imprimir para medidas correctivas en el huerto. */
+function ipDetalleEstado(estado){
+  var e = IP_ESTADOS[estado] || {label:estado, color:'#888'};
+  var regs = _ipMapaGenRegs || [];
+  var porCuartel = {};
+  var totalEstado = 0;
+  regs.forEach(function(r){
+    (r.plantas||[]).forEach(function(p){
+      var est = (p && p.estado) ? p.estado : 'sano';
+      if(est!==estado) return;
+      var cuartel = r.cuartel || '—';
+      var hilera = r.codigoBase || ('H'+r.hilera);
+      var mHil = String(hilera).match(/H\d+$/i);
+      var hilCorto = mHil ? mHil[0].toUpperCase() : hilera;
+      if(!porCuartel[cuartel]) porCuartel[cuartel] = {};
+      if(!porCuartel[cuartel][hilCorto]) porCuartel[cuartel][hilCorto] = [];
+      porCuartel[cuartel][hilCorto].push(p.seq!=null ? p.seq : '?');
+      totalEstado++;
+    });
+  });
+
+  var detalleHtml = '';
+  Object.keys(porCuartel).sort().forEach(function(cuartel){
+    detalleHtml += '<div style="margin-bottom:14px">'+
+      '<div style="font-size:15px;font-weight:800;color:#23303d;border-bottom:2px solid #e3e8ee;padding-bottom:4px;margin-bottom:8px">📍 '+escapeHtml(cuartel)+'</div>';
+    var hileras = porCuartel[cuartel];
+    Object.keys(hileras).sort(function(a,b){
+      return (parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0);
+    }).forEach(function(hil){
+      var plantas = hileras[hil].sort(function(a,b){ return (a||0)-(b||0); });
+      detalleHtml += '<div style="margin-bottom:6px;font-size:13px;color:#3a4a5a">'+
+        '<strong style="color:#1a5288">'+escapeHtml(hil)+'</strong> '+
+        '<span style="color:#7a8794">('+plantas.length+' planta'+(plantas.length!==1?'s':'')+'):</span> '+
+        'N° '+plantas.join(', ')+
+      '</div>';
+    });
+    detalleHtml += '</div>';
+  });
+  if(!detalleHtml) detalleHtml = '<div style="color:#7a8794">No hay plantas en este estado.</div>';
+
+  var prev = document.getElementById('ip-estado-detalle-modal'); if(prev) prev.remove();
+  var modal = document.createElement('div');
+  modal.id = 'ip-estado-detalle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10003;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="background:'+e.color+';color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-size:17px;font-weight:800">'+escapeHtml(e.label)+' — detalle</div>'+
+          '<div style="font-size:12px;opacity:.9">'+totalEstado+' planta(s) en este estado</div></div>'+
+        '<button onclick="document.getElementById(\'ip-estado-detalle-modal\').remove()" style="background:rgba(255,255,255,.25);border:none;color:#fff;font-size:24px;cursor:pointer;width:40px;height:40px;border-radius:8px">×</button>'+
+      '</div>'+
+      '<div id="ip-estado-detalle-body" style="padding:18px;overflow:auto;flex:1">'+detalleHtml+'</div>'+
+      '<div style="padding:12px 18px;border-top:1px solid #e3e8ee;display:flex;gap:10px;justify-content:flex-end">'+
+        '<button onclick="document.getElementById(\'ip-estado-detalle-modal\').remove()" style="padding:11px 16px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cerrar</button>'+
+        '<button onclick="ipImprimirDetalleEstado(\''+estado+'\')" style="padding:11px 18px;border:none;border-radius:9px;background:#1565c0;color:#fff;cursor:pointer;font-size:14px;font-weight:700">🖨️ Imprimir detalle</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+/* Abre una ventana de impresión con el detalle del estado para llevar a terreno. */
+function ipImprimirDetalleEstado(estado){
+  var e = IP_ESTADOS[estado] || {label:estado, color:'#888'};
+  var bodyEl = document.getElementById('ip-estado-detalle-body');
+  var contenido = bodyEl ? bodyEl.innerHTML : '';
+  var fecha = new Date().toLocaleString('es-CL');
+  var usuario = (STATE.user ? (STATE.user.nombre||STATE.user.id) : '');
+  var win = window.open('', '_blank');
+  if(!win){ if(typeof toast==='function') toast('Impresión bloqueada','Permita las ventanas emergentes para imprimir','error'); return; }
+  win.document.write(
+    '<html><head><title>Detalle plantas '+e.label+'</title>'+
+    '<meta charset="utf-8"><style>'+
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;padding:24px;max-width:800px;margin:0 auto}'+
+    'h1{font-size:20px;margin:0 0 4px} .sub{color:#6b7280;font-size:13px;margin-bottom:16px}'+
+    '.badge{display:inline-block;width:14px;height:14px;border-radius:50%;background:'+e.color+';vertical-align:middle;margin-right:6px}'+
+    '@media print{button{display:none}}'+
+    '</style></head><body>'+
+    '<h1><span class="badge"></span>Detalle de plantas en estado: '+e.label+'</h1>'+
+    '<div class="sub">Sociedad Agrícola y Forestal La Cabaña · Inventario de Huerto<br>'+
+      'Generado: '+fecha+(usuario?(' · por '+escapeHtml(usuario)):'')+'</div>'+
+    contenido+
+    '<div style="margin-top:24px;font-size:12px;color:#6b7280;border-top:1px solid #ddd;padding-top:10px">Documento para medidas correctivas del huerto. Los números corresponden a la posición de la planta dentro de cada hilera.</div>'+
+    '<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt>'+
+    '</body></html>'
+  );
+  win.document.close();
+}
+
 function ipMostrarMapaGeneral(){
   _ipMapZoom = 100; // reiniciar zoom al abrir
   var seleccionados = [];
@@ -10766,6 +10858,7 @@ function ipMostrarMapaGeneral(){
   // Replante, Falla/vacío).
   var conteoEstados = { sano:0, debil:0, muerto:0, replante:0, falta:0 };
   var totalPlantas = 0;
+  _ipMapaGenRegs = regs; // guardar para el detalle imprimible por estado
   regs.forEach(function(r){
     (r.plantas||[]).forEach(function(p){
       var est = (p && p.estado) ? p.estado : 'sano';
@@ -10784,13 +10877,14 @@ function ipMostrarMapaGeneral(){
         var e = IP_ESTADOS[k];
         var n = conteoEstados[k]||0;
         var pct = totalPlantas>0 ? Math.round((n/totalPlantas)*1000)/10 : 0;
-        return '<div style="flex:1;min-width:120px;background:#f8fafb;border:1px solid #e3e8ee;border-left:4px solid '+e.color+';border-radius:8px;padding:10px 12px">'+
+        var clickable = n>0;
+        return '<div '+(clickable?'onclick="ipDetalleEstado(\''+k+'\')" ':'')+'style="flex:1;min-width:120px;background:#f8fafb;border:1px solid #e3e8ee;border-left:4px solid '+e.color+';border-radius:8px;padding:10px 12px'+(clickable?';cursor:pointer':'')+'">'+
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
             '<span style="width:11px;height:11px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+
             '<span style="font-size:12px;color:#3a4a5a;font-weight:600">'+e.label+'</span>'+
           '</div>'+
           '<div style="font-size:22px;font-weight:800;color:#23303d;line-height:1.1">'+n.toLocaleString('es-CL')+'</div>'+
-          '<div style="font-size:11px;color:#7a8794">'+pct+'% del total</div>'+
+          '<div style="font-size:11px;color:#7a8794">'+pct+'% del total'+(clickable?' · ver detalle ›':'')+'</div>'+
         '</div>';
       }).join('')+
     '</div>'+
