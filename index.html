@@ -2030,7 +2030,7 @@ async function sciFbApplyRemote(data){
             var key = _sciStoreKey(store);
             var localArr = [];
             try{ localArr = await dbAll(store); }catch(e){ localArr = []; }
-            var fusionado = _sciMergeArrays(localArr, remote[store], key);
+            var fusionado = _sciMergeArrays(localArr, remote[store], key, store);
             await dbClear(store);
             for(var j=0;j<fusionado.length;j++){
               try{ await dbPutLocal(store, fusionado[j]); }catch(e){}
@@ -2060,6 +2060,44 @@ async function sciFbApplyRemote(data){
 }
 
 // Envía todo el estado del SCI a la nube
+/* ─── Lápidas de eliminación (tombstones) ───────────────────────────────
+   Cuando se elimina un registro de un store acumulativo, registramos su ID con
+   un timestamp. Esa marca se sincroniza (vía store 'config') y la fusión la
+   respeta: un registro con lápida más reciente que el propio registro NO
+   reaparece, aunque otro dispositivo todavía lo tenga. Así las eliminaciones
+   se propagan sin sacrificar la protección contra pérdida de datos nuevos. */
+var _SCI_TOMB_KEY = 'sci_tombstones';
+function _sciGetTombstones(){
+  try{
+    var c = (STATE.cache.config && STATE.cache.config[_SCI_TOMB_KEY]) || null;
+    return (c && c.tombs && typeof c.tombs==='object') ? c.tombs : {};
+  }catch(e){ return {}; }
+}
+/* Marca un id como eliminado en un store (registra timestamp) y sincroniza. */
+async function sciMarcarEliminado(store, id){
+  try{
+    var tombs = _sciGetTombstones();
+    if(!tombs[store]) tombs[store] = {};
+    tombs[store][String(id)] = Date.now();
+    var obj = { key:_SCI_TOMB_KEY, tombs: tombs, _updatedAt:new Date().toISOString() };
+    STATE.cache.config = STATE.cache.config || {};
+    STATE.cache.config[_SCI_TOMB_KEY] = obj;
+    await dbPut('config', obj); // dbPut sincroniza config a la nube
+  }catch(e){ console.error('tombstone error:', e); }
+}
+/* ¿El registro (rec) está eliminado? True si hay lápida con timestamp >= _mod. */
+function _sciEstaEliminado(store, rec, key){
+  if(!rec || rec[key]===undefined) return false;
+  var tombs = _sciGetTombstones();
+  var st = tombs[store]; if(!st) return false;
+  var tomb = st[String(rec[key])];
+  if(tomb==null) return false;
+  var mod = rec._mod || 0;
+  // Si el registro fue modificado DESPUÉS de la lápida, significa que se re-creó
+  // intencionalmente → no se considera eliminado. Si no, está eliminado.
+  return mod <= tomb;
+}
+
 /* Mapa de stores acumulativos (donde perder un registro es grave) y sus claves.
    Compartido por la recepción (applyRemote) y la subida (push) para que ningún
    dispositivo borre datos que otro creó. */
@@ -2072,8 +2110,9 @@ function _sciStoreKey(store){
   return 'id';
 }
 /* Fusiona dos arrays de registros por clave, conservando todos. Ante misma
-   clave, gana el de _mod más reciente (o el segundo si no hay _mod). */
-function _sciMergeArrays(localArr, remoteArr, key){
+   clave, gana el de _mod más reciente (o el segundo si no hay _mod).
+   Excluye los registros marcados como eliminados (lápidas) para ese store. */
+function _sciMergeArrays(localArr, remoteArr, key, store){
   var mapa = {};
   (localArr||[]).forEach(function(rec){ if(rec && rec[key]!==undefined) mapa[rec[key]] = rec; });
   (remoteArr||[]).forEach(function(rrec){
@@ -2084,7 +2123,12 @@ function _sciMergeArrays(localArr, remoteArr, key){
     var rm = (rrec && rrec._mod) ? rrec._mod : 0;
     mapa[rrec[key]] = (lm > rm) ? ex : rrec;
   });
-  return Object.keys(mapa).map(function(k){ return mapa[k]; });
+  // Filtrar los eliminados (lápidas), si se indicó el store.
+  var arr = Object.keys(mapa).map(function(k){ return mapa[k]; });
+  if(store){
+    arr = arr.filter(function(rec){ return !_sciEstaEliminado(store, rec, key); });
+  }
+  return arr;
 }
 
 async function sciFbPush(immediate){
@@ -2118,7 +2162,7 @@ async function sciFbPush(immediate){
         var localData = await dbAll(store);
         if(remoteObj && SCI_STORES_ACUMULATIVOS[store] && Array.isArray(remoteObj[store])){
           // Fusionar local + remoto: no perder lo que el otro dispositivo subió.
-          payloadObj[store] = _sciMergeArrays(localData, remoteObj[store], _sciStoreKey(store));
+          payloadObj[store] = _sciMergeArrays(localData, remoteObj[store], _sciStoreKey(store), store);
           // Reflejar la fusión también en la base local, para quedar consistentes.
           try{
             if(payloadObj[store].length !== localData.length){
@@ -2564,14 +2608,10 @@ async function _autoLogoutPorInactividad(){
   }, 600);
 }
 function _startInactivityWatch(){
-  if(!_inactivityBound){
-    _inactivityBound = true;
-    var ev = ['mousemove','mousedown','keydown','touchstart','scroll','click'];
-    ev.forEach(function(e){
-      try{ document.addEventListener(e, _resetInactivityTimer, { passive:true, capture:true }); }catch(err){}
-    });
-  }
-  _resetInactivityTimer();
+  // Cierre automático por inactividad DESACTIVADO: en terreno pueden ocurrir
+  // pausas largas (distracciones, traslados) sin que deba cerrarse la sesión.
+  // Se deja la función como no-op para no romper las llamadas existentes.
+  return;
 }
 function _stopInactivityWatch(){
   if(_inactivityTimer){ clearTimeout(_inactivityTimer); _inactivityTimer = null; }
@@ -9658,10 +9698,30 @@ async function cteFinalizarSesion(){
   _cteSesion.sincronizado = online;
   if(online) _cteSesion.fechaSync = new Date().toISOString();
   // Guardar local SIEMPRE (offline-first). dbPut sincroniza a Firebase si hay conexión.
-  try{
-    await dbPut('conteos', _cteSesion);
-    STATE.cache.conteos = await dbAll('conteos');
-  }catch(e){ console.error('Error guardando conteo:',e); toast('Error','No se pudo guardar localmente','error'); return; }
+  // Blindaje para terreno: garantizar id, y si el guardado falla, reintentar y
+  // NUNCA perder el conteo en silencio.
+  if(!_cteSesion.id){ try{ _cteSesion.id = uid(); }catch(e){ _cteSesion.id = 'cte_'+Date.now()+'_'+Math.random().toString(36).slice(2); } }
+  var _guardadoOk = false;
+  for(var _intento=0; _intento<2 && !_guardadoOk; _intento++){
+    try{
+      await dbPut('conteos', _cteSesion);
+      STATE.cache.conteos = await dbAll('conteos');
+      _guardadoOk = true;
+    }catch(e){
+      console.error('Error guardando conteo (intento '+(_intento+1)+'):', e);
+      if(_intento===0){ try{ _cteSesion.id = (_cteSesion.id||'cte')+'_r'+Date.now(); }catch(_){} }
+    }
+  }
+  if(!_guardadoOk){
+    // Último recurso: avisar fuerte y conservar la sesión en memoria para que el
+    // operador pueda reintentar (no se borra _cteSesion).
+    if(typeof confirmDialog==='function'){
+      confirmDialog('⚠️ No se pudo guardar','El conteo NO se guardó en el dispositivo. Anote los datos y reintente. ¿Reintentar ahora?', function(){ cteFinalizarSesion(); }, 'Reintentar', true);
+    } else {
+      toast('Error','No se pudo guardar el conteo. No cierre la app, reintente.','error');
+    }
+    return;
+  }
   var prom = _cteSesion.promedioCentros.toFixed(1);
   var nA = _cteSesion.nArboles;
   _cteSesion = null; _cteVista='inicio';
@@ -9975,7 +10035,7 @@ function cteVerEstimDetalle(id){
 function cteEliminarEstim(id){
   if(!can('conteos.revisar')){ toast('Sin permiso','No puede eliminar estimaciones','error'); return; }
   confirmDialog('Eliminar estimación','¿Eliminar esta versión de estimación?',async function(){
-    try{ await dbDel('estimaciones', id); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){}
+    try{ await sciMarcarEliminado('estimaciones', id); await dbDel('estimaciones', id); STATE.cache.estimaciones = await dbAll('estimaciones'); }catch(e){}
     cteRender();
     toast('Estimación eliminada','','success');
   },'Eliminar',true);
@@ -10026,6 +10086,7 @@ function cteEliminarSesion(id){
   var s = (STATE.cache.conteos||[]).find(function(x){ return String(x.id)===String(id); });
   if(!s) return;
   confirmDialog('Eliminar conteo','¿Eliminar este conteo de "'+(s.panoNombre||'')+'"? '+(s.sincronizado?'':'Aún no se ha subido a la nube.'),async function(){
+    await sciMarcarEliminado('conteos', id); // lápida: evita que reaparezca al sincronizar
     await dbDel('conteos', id);
     STATE.cache.conteos = await dbAll('conteos');
     // Forzar subida INMEDIATA del estado sin el conteo, para que el listener remoto no lo restaure
@@ -10190,6 +10251,7 @@ function ipIniciarHilera(){
   if(!variedad){ toast('Falta variedad','Ingrese la variedad principal','error'); return; }
   if(!hilera){ toast('Falta hilera','Ingrese el número de hilera','error'); return; }
 
+  _ipEstadoActual = 'sano'; // cada hilera nueva parte con estado Sano por defecto
   _ipSesion = {
     id: uid(),
     cuartelId: cuartelId,
@@ -10263,6 +10325,28 @@ function ipRenderConteo(){
         '<div style="font-size:11px;text-align:right">'+gpsIni+'<br>'+gpsFin+'</div>'+
       '</div>'+
     '</div>'+
+    // Selector de estado: se aplica a las plantas que se sumen a continuación.
+    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:#6a7889;font-weight:700;margin-bottom:7px">Estado de la planta a contar (por defecto Sano)</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        Object.keys(IP_ESTADOS).map(function(k){
+          var e=IP_ESTADOS[k];
+          var act = (k===(_ipEstadoActual||'sano'));
+          return '<button class="ip-estado-btn" data-estado="'+k+'" onclick="ipSetEstadoConteo(\''+k+'\')" '+
+            'style="flex:1;min-width:80px;padding:9px 6px;border:2px solid '+e.color+';border-radius:9px;background:#fff;cursor:pointer;font-size:12.5px;'+
+            (act?'outline:3px solid #23303d;transform:scale(1.05);font-weight:800;':'font-weight:600;')+'">'+
+            '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+e.color+';margin-right:5px;vertical-align:middle"></span>'+e.label+'</button>';
+        }).join('')+
+      '</div>'+
+      '<div id="ip-conteo-estados" style="margin-top:9px;min-height:16px">'+(function(){
+        // Resumen inicial por estado (por si ya hay plantas contadas)
+        if(!s.secuencia||!s.secuencia.length) return '';
+        var por={}; s.secuencia.forEach(function(el){ var e=_ipSeqEstado(el); por[e]=(por[e]||0)+1; });
+        return Object.keys(IP_ESTADOS).map(function(k){ var n=por[k]||0; if(!n) return ''; var e=IP_ESTADOS[k];
+          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#3a4a5a;margin-right:10px"><span style="width:9px;height:9px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+': <strong>'+n+'</strong></span>';
+        }).join('');
+      })()+'</div>'+
+    '</div>'+
     // Contador variedad principal
     '<div class="ip-counter-box principal">'+
       '<div class="ip-counter-title" style="color:#0a6ed1">🌳 '+escapeHtml(s.variedad)+'</div>'+
@@ -10290,24 +10374,55 @@ function ipRenderConteo(){
     '<button class="ip-big-btn ip-btn-gray" style="padding:10px;font-size:14px" onclick="ipCancelarHilera()">Cancelar</button>';
 }
 
+// Estado seleccionado actualmente para las plantas que se vayan sumando.
+// Por defecto 'sano'. El operador puede cambiarlo antes de sumar.
+var _ipEstadoActual = 'sano';
+function ipSetEstadoConteo(estado){
+  _ipEstadoActual = estado || 'sano';
+  // Resaltar el botón de estado activo
+  document.querySelectorAll('.ip-estado-btn').forEach(function(b){
+    var act = b.getAttribute('data-estado')===_ipEstadoActual;
+    b.style.outline = act ? '3px solid #23303d' : 'none';
+    b.style.transform = act ? 'scale(1.05)' : 'none';
+    b.style.fontWeight = act ? '800' : '600';
+  });
+}
+// Normaliza un elemento de secuencia (compatibilidad: antes era string 'principal').
+function _ipSeqTipo(el){ return (el && typeof el==='object') ? el.tipo : el; }
+function _ipSeqEstado(el){ return (el && typeof el==='object' && el.estado) ? el.estado : 'sano'; }
+
 function ipContar(tipo, d){
   if(!_ipSesion.secuencia) _ipSesion.secuencia=[];
   if(d>0){
-    // Sumar: agregar al final de la secuencia (orden real de la caminata)
-    _ipSesion.secuencia.push(tipo);
+    // Sumar: agregar al final con el estado seleccionado (orden real de la caminata)
+    _ipSesion.secuencia.push({ tipo: tipo, estado: _ipEstadoActual||'sano' });
   } else if(d<0){
     // Restar: quitar el ÚLTIMO de ese tipo en la secuencia (deshacer el más reciente)
     for(var i=_ipSesion.secuencia.length-1;i>=0;i--){
-      if(_ipSesion.secuencia[i]===tipo){ _ipSesion.secuencia.splice(i,1); break; }
+      if(_ipSeqTipo(_ipSesion.secuencia[i])===tipo){ _ipSesion.secuencia.splice(i,1); break; }
     }
   }
   // Recalcular contadores desde la secuencia (fuente de verdad)
-  _ipSesion.countPrincipal = _ipSesion.secuencia.filter(function(t){return t==='principal';}).length;
-  _ipSesion.countPoliniz = _ipSesion.secuencia.filter(function(t){return t==='poliniz';}).length;
+  _ipSesion.countPrincipal = _ipSesion.secuencia.filter(function(t){return _ipSeqTipo(t)==='principal';}).length;
+  _ipSesion.countPoliniz = _ipSesion.secuencia.filter(function(t){return _ipSeqTipo(t)==='poliniz';}).length;
   var e1=document.getElementById('ip-val-principal'); if(e1) e1.textContent=_ipSesion.countPrincipal;
   var e2=document.getElementById('ip-val-poliniz'); if(e2) e2.textContent=_ipSesion.countPoliniz;
-  // Actualizar total sin re-render completo
   var box=document.getElementById('ip-total-hilera'); if(box) box.textContent=(_ipSesion.countPrincipal+_ipSesion.countPoliniz);
+  // Actualizar el desglose por estado en vivo
+  ipActualizarResumenEstadoConteo();
+}
+// Muestra, durante el conteo, cuántas plantas se llevan por estado.
+function ipActualizarResumenEstadoConteo(){
+  var cont = document.getElementById('ip-conteo-estados');
+  if(!cont || !_ipSesion || !_ipSesion.secuencia) return;
+  var por = {};
+  _ipSesion.secuencia.forEach(function(el){ var e=_ipSeqEstado(el); por[e]=(por[e]||0)+1; });
+  cont.innerHTML = Object.keys(IP_ESTADOS).map(function(k){
+    var n = por[k]||0; if(n===0) return '';
+    var e = IP_ESTADOS[k];
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#3a4a5a;margin-right:10px">'+
+      '<span style="width:9px;height:9px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+': <strong>'+n+'</strong></span>';
+  }).join('');
 }
 
 function ipMarcarFin(){
@@ -10348,10 +10463,27 @@ async function _ipDoGuardarHilera(){
   var online = navigator.onLine;
   s.sincronizado = online;
   if(online) s.fechaSync=new Date().toISOString();
-  try{
-    await dbPut('invplantas', s);
-    STATE.cache.invplantas = await dbAll('invplantas');
-  }catch(e){ console.error(e); toast('Error','No se pudo guardar','error'); return; }
+  // Blindaje para terreno: garantizar id y reintentar; nunca perder la hilera en silencio.
+  if(!s.id){ try{ s.id = uid(); }catch(e){ s.id = 'ip_'+Date.now()+'_'+Math.random().toString(36).slice(2); } }
+  var _ipOk = false;
+  for(var _it=0; _it<2 && !_ipOk; _it++){
+    try{
+      await dbPut('invplantas', s);
+      STATE.cache.invplantas = await dbAll('invplantas');
+      _ipOk = true;
+    }catch(e){
+      console.error('Error guardando hilera (intento '+(_it+1)+'):', e);
+      if(_it===0){ try{ s.id = (s.id||'ip')+'_r'+Date.now(); }catch(_){} }
+    }
+  }
+  if(!_ipOk){
+    if(typeof confirmDialog==='function'){
+      confirmDialog('⚠️ No se pudo guardar','La hilera NO se guardó en el dispositivo. Anote los datos y reintente. ¿Reintentar ahora?', function(){ _ipDoGuardarHilera(); }, 'Reintentar', true);
+    } else {
+      toast('Error','No se pudo guardar la hilera. No cierre la app, reintente.','error');
+    }
+    return;
+  }
   var cod=s.codigoBase, tot=s.total;
   // Guardar los datos del cuartel para la posible siguiente hilera
   var datosCuartel = {
@@ -10421,14 +10553,16 @@ function ipGenerarPlantas(s){
       lat = ini.lat + (fin.lat-ini.lat)*frac;
       lng = ini.lng + (fin.lng-ini.lng)*frac;
     } else if(ini){ lat=ini.lat; lng=ini.lng; }
-    // El tipo respeta el ORDEN REAL en que se contó (ya invertido si es hilera par)
-    var tipo = seq[i];
+  // El tipo y ESTADO respetan el ORDEN REAL en que se contó (ya invertido si par)
+    var el = seq[i];
+    var tipo = (el && typeof el==='object') ? el.tipo : el;
+    var estado = (el && typeof el==='object' && el.estado) ? el.estado : 'sano';
     plantas.push({
       seq: i+1,
       codigo: s.codigoBase+'-'+String(i+1).padStart(6,'0'),
       tipo: tipo,
       lat: lat, lng: lng,
-      estado: 'sano'
+      estado: estado
     });
   }
   return plantas;
@@ -10635,6 +10769,101 @@ function ipFiltroTodos(val){
 }
 
 // Paso 2: mostrar el mapa con las hileras seleccionadas
+// Registros actualmente visibles en el mapa general (para el detalle por estado).
+var _ipMapaGenRegs = [];
+/* Despliega el detalle de qué hileras y qué números de planta están en un
+   estado dado (ej. Muerto), agrupado por cuartel e hilera, con opción de
+   imprimir para medidas correctivas en el huerto. */
+function ipDetalleEstado(estado){
+  var e = IP_ESTADOS[estado] || {label:estado, color:'#888'};
+  var regs = _ipMapaGenRegs || [];
+  var porCuartel = {};
+  var totalEstado = 0;
+  regs.forEach(function(r){
+    (r.plantas||[]).forEach(function(p){
+      var est = (p && p.estado) ? p.estado : 'sano';
+      if(est!==estado) return;
+      var cuartel = r.cuartel || '—';
+      var hilera = r.codigoBase || ('H'+r.hilera);
+      var mHil = String(hilera).match(/H\d+$/i);
+      var hilCorto = mHil ? mHil[0].toUpperCase() : hilera;
+      if(!porCuartel[cuartel]) porCuartel[cuartel] = {};
+      if(!porCuartel[cuartel][hilCorto]) porCuartel[cuartel][hilCorto] = [];
+      porCuartel[cuartel][hilCorto].push(p.seq!=null ? p.seq : '?');
+      totalEstado++;
+    });
+  });
+
+  var detalleHtml = '';
+  Object.keys(porCuartel).sort().forEach(function(cuartel){
+    detalleHtml += '<div style="margin-bottom:14px">'+
+      '<div style="font-size:15px;font-weight:800;color:#23303d;border-bottom:2px solid #e3e8ee;padding-bottom:4px;margin-bottom:8px">📍 '+escapeHtml(cuartel)+'</div>';
+    var hileras = porCuartel[cuartel];
+    Object.keys(hileras).sort(function(a,b){
+      return (parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0);
+    }).forEach(function(hil){
+      var plantas = hileras[hil].sort(function(a,b){ return (a||0)-(b||0); });
+      detalleHtml += '<div style="margin-bottom:6px;font-size:13px;color:#3a4a5a">'+
+        '<strong style="color:#1a5288">'+escapeHtml(hil)+'</strong> '+
+        '<span style="color:#7a8794">('+plantas.length+' planta'+(plantas.length!==1?'s':'')+'):</span> '+
+        'N° '+plantas.join(', ')+
+      '</div>';
+    });
+    detalleHtml += '</div>';
+  });
+  if(!detalleHtml) detalleHtml = '<div style="color:#7a8794">No hay plantas en este estado.</div>';
+
+  var prev = document.getElementById('ip-estado-detalle-modal'); if(prev) prev.remove();
+  var modal = document.createElement('div');
+  modal.id = 'ip-estado-detalle-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10003;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="background:'+e.color+';color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-size:17px;font-weight:800">'+escapeHtml(e.label)+' — detalle</div>'+
+          '<div style="font-size:12px;opacity:.9">'+totalEstado+' planta(s) en este estado</div></div>'+
+        '<button onclick="document.getElementById(\'ip-estado-detalle-modal\').remove()" style="background:rgba(255,255,255,.25);border:none;color:#fff;font-size:24px;cursor:pointer;width:40px;height:40px;border-radius:8px">×</button>'+
+      '</div>'+
+      '<div id="ip-estado-detalle-body" style="padding:18px;overflow:auto;flex:1">'+detalleHtml+'</div>'+
+      '<div style="padding:12px 18px;border-top:1px solid #e3e8ee;display:flex;gap:10px;justify-content:flex-end">'+
+        '<button onclick="document.getElementById(\'ip-estado-detalle-modal\').remove()" style="padding:11px 16px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cerrar</button>'+
+        '<button onclick="ipImprimirDetalleEstado(\''+estado+'\')" style="padding:11px 18px;border:none;border-radius:9px;background:#1565c0;color:#fff;cursor:pointer;font-size:14px;font-weight:700">🖨️ Imprimir detalle</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+/* Abre una ventana de impresión con el detalle del estado para llevar a terreno. */
+function ipImprimirDetalleEstado(estado){
+  var e = IP_ESTADOS[estado] || {label:estado, color:'#888'};
+  var bodyEl = document.getElementById('ip-estado-detalle-body');
+  var contenido = bodyEl ? bodyEl.innerHTML : '';
+  var fecha = new Date().toLocaleString('es-CL');
+  var usuario = (STATE.user ? (STATE.user.nombre||STATE.user.id) : '');
+  var win = window.open('', '_blank');
+  if(!win){ if(typeof toast==='function') toast('Impresión bloqueada','Permita las ventanas emergentes para imprimir','error'); return; }
+  win.document.write(
+    '<html><head><title>Detalle plantas '+e.label+'</title>'+
+    '<meta charset="utf-8"><style>'+
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;padding:24px;max-width:800px;margin:0 auto}'+
+    'h1{font-size:20px;margin:0 0 4px} .sub{color:#6b7280;font-size:13px;margin-bottom:16px}'+
+    '.badge{display:inline-block;width:14px;height:14px;border-radius:50%;background:'+e.color+';vertical-align:middle;margin-right:6px}'+
+    '@media print{button{display:none}}'+
+    '</style></head><body>'+
+    '<h1><span class="badge"></span>Detalle de plantas en estado: '+e.label+'</h1>'+
+    '<div class="sub">Sociedad Agrícola y Forestal La Cabaña · Inventario de Huerto<br>'+
+      'Generado: '+fecha+(usuario?(' · por '+escapeHtml(usuario)):'')+'</div>'+
+    contenido+
+    '<div style="margin-top:24px;font-size:12px;color:#6b7280;border-top:1px solid #ddd;padding-top:10px">Documento para medidas correctivas del huerto. Los números corresponden a la posición de la planta dentro de cada hilera.</div>'+
+    '<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt>'+
+    '</body></html>'
+  );
+  win.document.close();
+}
+// Exponer explícitamente en window para que el onclick inline de las tarjetas
+// las encuentre de forma fiable en cualquier dispositivo/contexto.
+try{ window.ipDetalleEstado = ipDetalleEstado; window.ipImprimirDetalleEstado = ipImprimirDetalleEstado; }catch(e){}
+
 function ipMostrarMapaGeneral(){
   _ipMapZoom = 100; // reiniciar zoom al abrir
   var seleccionados = [];
@@ -10673,6 +10902,7 @@ function ipMostrarMapaGeneral(){
   // Replante, Falla/vacío).
   var conteoEstados = { sano:0, debil:0, muerto:0, replante:0, falta:0 };
   var totalPlantas = 0;
+  _ipMapaGenRegs = regs; // guardar para el detalle imprimible por estado
   regs.forEach(function(r){
     (r.plantas||[]).forEach(function(p){
       var est = (p && p.estado) ? p.estado : 'sano';
@@ -10691,13 +10921,15 @@ function ipMostrarMapaGeneral(){
         var e = IP_ESTADOS[k];
         var n = conteoEstados[k]||0;
         var pct = totalPlantas>0 ? Math.round((n/totalPlantas)*1000)/10 : 0;
-        return '<div style="flex:1;min-width:120px;background:#f8fafb;border:1px solid #e3e8ee;border-left:4px solid '+e.color+';border-radius:8px;padding:10px 12px">'+
+        var clickable = n>0;
+        var handler = clickable ? ('onclick="ipDetalleEstado(\''+k+'\')" ontouchend="event.preventDefault();ipDetalleEstado(\''+k+'\')" ') : '';
+        return '<div '+handler+'style="flex:1;min-width:120px;background:#f8fafb;border:1px solid #e3e8ee;border-left:4px solid '+e.color+';border-radius:8px;padding:10px 12px'+(clickable?';cursor:pointer;-webkit-tap-highlight-color:rgba(21,101,192,.2)':'')+'">'+
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
             '<span style="width:11px;height:11px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+
             '<span style="font-size:12px;color:#3a4a5a;font-weight:600">'+e.label+'</span>'+
           '</div>'+
           '<div style="font-size:22px;font-weight:800;color:#23303d;line-height:1.1">'+n.toLocaleString('es-CL')+'</div>'+
-          '<div style="font-size:11px;color:#7a8794">'+pct+'% del total</div>'+
+          '<div style="font-size:11px;color:#7a8794">'+pct+'% del total'+(clickable?' · ver detalle ›':'')+'</div>'+
         '</div>';
       }).join('')+
     '</div>'+
@@ -10818,6 +11050,7 @@ function ipEliminar(id){
   var s=(STATE.cache.invplantas||[]).find(function(x){return String(x.id)===String(id);});
   if(!s) return;
   confirmDialog('Eliminar hilera','¿Eliminar el registro de la hilera '+s.codigoBase+'?',async function(){
+    await sciMarcarEliminado('invplantas', id); // lápida: evita que reaparezca al sincronizar
     await dbDel('invplantas', id);
     STATE.cache.invplantas=await dbAll('invplantas');
     ipRender();
