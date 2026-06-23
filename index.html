@@ -10210,6 +10210,7 @@ function ipIniciarHilera(){
   if(!variedad){ toast('Falta variedad','Ingrese la variedad principal','error'); return; }
   if(!hilera){ toast('Falta hilera','Ingrese el número de hilera','error'); return; }
 
+  _ipEstadoActual = 'sano'; // cada hilera nueva parte con estado Sano por defecto
   _ipSesion = {
     id: uid(),
     cuartelId: cuartelId,
@@ -10283,6 +10284,28 @@ function ipRenderConteo(){
         '<div style="font-size:11px;text-align:right">'+gpsIni+'<br>'+gpsFin+'</div>'+
       '</div>'+
     '</div>'+
+    // Selector de estado: se aplica a las plantas que se sumen a continuación.
+    '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:#6a7889;font-weight:700;margin-bottom:7px">Estado de la planta a contar (por defecto Sano)</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        Object.keys(IP_ESTADOS).map(function(k){
+          var e=IP_ESTADOS[k];
+          var act = (k===(_ipEstadoActual||'sano'));
+          return '<button class="ip-estado-btn" data-estado="'+k+'" onclick="ipSetEstadoConteo(\''+k+'\')" '+
+            'style="flex:1;min-width:80px;padding:9px 6px;border:2px solid '+e.color+';border-radius:9px;background:#fff;cursor:pointer;font-size:12.5px;'+
+            (act?'outline:3px solid #23303d;transform:scale(1.05);font-weight:800;':'font-weight:600;')+'">'+
+            '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+e.color+';margin-right:5px;vertical-align:middle"></span>'+e.label+'</button>';
+        }).join('')+
+      '</div>'+
+      '<div id="ip-conteo-estados" style="margin-top:9px;min-height:16px">'+(function(){
+        // Resumen inicial por estado (por si ya hay plantas contadas)
+        if(!s.secuencia||!s.secuencia.length) return '';
+        var por={}; s.secuencia.forEach(function(el){ var e=_ipSeqEstado(el); por[e]=(por[e]||0)+1; });
+        return Object.keys(IP_ESTADOS).map(function(k){ var n=por[k]||0; if(!n) return ''; var e=IP_ESTADOS[k];
+          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#3a4a5a;margin-right:10px"><span style="width:9px;height:9px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+': <strong>'+n+'</strong></span>';
+        }).join('');
+      })()+'</div>'+
+    '</div>'+
     // Contador variedad principal
     '<div class="ip-counter-box principal">'+
       '<div class="ip-counter-title" style="color:#0a6ed1">🌳 '+escapeHtml(s.variedad)+'</div>'+
@@ -10310,24 +10333,55 @@ function ipRenderConteo(){
     '<button class="ip-big-btn ip-btn-gray" style="padding:10px;font-size:14px" onclick="ipCancelarHilera()">Cancelar</button>';
 }
 
+// Estado seleccionado actualmente para las plantas que se vayan sumando.
+// Por defecto 'sano'. El operador puede cambiarlo antes de sumar.
+var _ipEstadoActual = 'sano';
+function ipSetEstadoConteo(estado){
+  _ipEstadoActual = estado || 'sano';
+  // Resaltar el botón de estado activo
+  document.querySelectorAll('.ip-estado-btn').forEach(function(b){
+    var act = b.getAttribute('data-estado')===_ipEstadoActual;
+    b.style.outline = act ? '3px solid #23303d' : 'none';
+    b.style.transform = act ? 'scale(1.05)' : 'none';
+    b.style.fontWeight = act ? '800' : '600';
+  });
+}
+// Normaliza un elemento de secuencia (compatibilidad: antes era string 'principal').
+function _ipSeqTipo(el){ return (el && typeof el==='object') ? el.tipo : el; }
+function _ipSeqEstado(el){ return (el && typeof el==='object' && el.estado) ? el.estado : 'sano'; }
+
 function ipContar(tipo, d){
   if(!_ipSesion.secuencia) _ipSesion.secuencia=[];
   if(d>0){
-    // Sumar: agregar al final de la secuencia (orden real de la caminata)
-    _ipSesion.secuencia.push(tipo);
+    // Sumar: agregar al final con el estado seleccionado (orden real de la caminata)
+    _ipSesion.secuencia.push({ tipo: tipo, estado: _ipEstadoActual||'sano' });
   } else if(d<0){
     // Restar: quitar el ÚLTIMO de ese tipo en la secuencia (deshacer el más reciente)
     for(var i=_ipSesion.secuencia.length-1;i>=0;i--){
-      if(_ipSesion.secuencia[i]===tipo){ _ipSesion.secuencia.splice(i,1); break; }
+      if(_ipSeqTipo(_ipSesion.secuencia[i])===tipo){ _ipSesion.secuencia.splice(i,1); break; }
     }
   }
   // Recalcular contadores desde la secuencia (fuente de verdad)
-  _ipSesion.countPrincipal = _ipSesion.secuencia.filter(function(t){return t==='principal';}).length;
-  _ipSesion.countPoliniz = _ipSesion.secuencia.filter(function(t){return t==='poliniz';}).length;
+  _ipSesion.countPrincipal = _ipSesion.secuencia.filter(function(t){return _ipSeqTipo(t)==='principal';}).length;
+  _ipSesion.countPoliniz = _ipSesion.secuencia.filter(function(t){return _ipSeqTipo(t)==='poliniz';}).length;
   var e1=document.getElementById('ip-val-principal'); if(e1) e1.textContent=_ipSesion.countPrincipal;
   var e2=document.getElementById('ip-val-poliniz'); if(e2) e2.textContent=_ipSesion.countPoliniz;
-  // Actualizar total sin re-render completo
   var box=document.getElementById('ip-total-hilera'); if(box) box.textContent=(_ipSesion.countPrincipal+_ipSesion.countPoliniz);
+  // Actualizar el desglose por estado en vivo
+  ipActualizarResumenEstadoConteo();
+}
+// Muestra, durante el conteo, cuántas plantas se llevan por estado.
+function ipActualizarResumenEstadoConteo(){
+  var cont = document.getElementById('ip-conteo-estados');
+  if(!cont || !_ipSesion || !_ipSesion.secuencia) return;
+  var por = {};
+  _ipSesion.secuencia.forEach(function(el){ var e=_ipSeqEstado(el); por[e]=(por[e]||0)+1; });
+  cont.innerHTML = Object.keys(IP_ESTADOS).map(function(k){
+    var n = por[k]||0; if(n===0) return '';
+    var e = IP_ESTADOS[k];
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#3a4a5a;margin-right:10px">'+
+      '<span style="width:9px;height:9px;border-radius:50%;background:'+e.color+';display:inline-block"></span>'+e.label+': <strong>'+n+'</strong></span>';
+  }).join('');
 }
 
 function ipMarcarFin(){
@@ -10458,14 +10512,16 @@ function ipGenerarPlantas(s){
       lat = ini.lat + (fin.lat-ini.lat)*frac;
       lng = ini.lng + (fin.lng-ini.lng)*frac;
     } else if(ini){ lat=ini.lat; lng=ini.lng; }
-    // El tipo respeta el ORDEN REAL en que se contó (ya invertido si es hilera par)
-    var tipo = seq[i];
+  // El tipo y ESTADO respetan el ORDEN REAL en que se contó (ya invertido si par)
+    var el = seq[i];
+    var tipo = (el && typeof el==='object') ? el.tipo : el;
+    var estado = (el && typeof el==='object' && el.estado) ? el.estado : 'sano';
     plantas.push({
       seq: i+1,
       codigo: s.codigoBase+'-'+String(i+1).padStart(6,'0'),
       tipo: tipo,
       lat: lat, lng: lng,
-      estado: 'sano'
+      estado: estado
     });
   }
   return plantas;
