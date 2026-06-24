@@ -1220,20 +1220,11 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
         </div>
         <div id="cc-import-preview" style="margin-top:14px"></div>
         <div style="margin-top:18px">
-          <div style="font-size:14px;font-weight:700;color:#354a5f;margin-bottom:12px">➕ Agregar manualmente</div>
-          <div class="cc-g4">
-            <div class="cc-field"><label class="cc-lbl">Producto</label><input type="text" id="cc-mp-n" placeholder="Nombre comercial"></div>
-            <div class="cc-field"><label class="cc-lbl">Tipo</label>
-              <select id="cc-mp-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
-            </div>
-            <div class="cc-field"><label class="cc-lbl">Ingrediente activo</label><input type="text" id="cc-mp-ia" placeholder="Ej: Captan 80%"></div>
-            <div class="cc-field"><label class="cc-lbl">Principal objetivo</label><input type="text" id="cc-mp-obj" placeholder="Ej: Botrytis"></div>
-            <div class="cc-field"><label class="cc-lbl">Unidad</label>
-              <select id="cc-mp-u"><option>mL/100L</option><option>L/100L</option><option>g/100L</option><option>kg/100L</option><option>L/ha</option><option>kg/ha</option><option>mL/ha</option><option>g/ha</option><option>cc/ha</option></select>
-            </div>
-            <div class="cc-field"><label class="cc-lbl">Dosis ref.</label><input type="text" id="cc-mp-d" placeholder="Ej: 1.5"></div>
+          <div style="font-size:14px;font-weight:700;color:#354a5f;margin-bottom:12px">➕ Agregar producto manualmente</div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:12px">
+            <p style="font-size:12px;color:#1e40af;margin-bottom:10px">Los productos se crean desde el módulo <strong>Productos</strong> del SCI (con todos sus datos: tipo, ingrediente activo, dosis, unidad). Al crearlo, estará disponible automáticamente en el Cuaderno.</p>
+            <button class="cc-btn cc-btn-s cc-btn-sm" onclick="if(typeof openProductForm==='function'){openProductForm();}else{toast('No disponible','Primero ingrese al SCI','error');}">📦 Crear producto en el SCI</button>
           </div>
-          <button class="cc-btn cc-btn-s cc-btn-sm" onclick="addManualProduct('mp')">Agregar</button>
         </div>
         <div id="cc-prod-list-wiz" style="margin-top:14px"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
@@ -2343,6 +2334,7 @@ window.addEventListener('beforeunload', function(e){
 const PERMISSIONS=[
   ['productos.ver','Ver productos'],
   ['productos.crear','Crear/editar productos'],
+  ['productos.eliminar','Eliminar productos'],
   ['bodegas.ver','Ver bodegas'],
   ['bodegas.crear','Crear/editar bodegas'],
   ['proveedores.ver','Ver proveedores'],
@@ -3591,6 +3583,49 @@ function renderPresupuesto(main){
 </div>
 
 <!-- RESUMEN COSECHA BANNER -->
+<!-- ── Pestañas del módulo de presupuesto ── -->
+<div id="pz-tabs-bar" style="display:flex;gap:0;border-bottom:2px solid #e3e8ee;margin:0 16px 0;padding-top:2px">
+  <button class="pz-tab-btn pz-tab-active" onclick="pzCambiarTab('dashboard')" data-pztab="dashboard" style="padding:10px 20px;font-size:13px;font-weight:700;border:none;border-bottom:3px solid #1565c0;background:transparent;cursor:pointer;color:#1565c0">📊 Dashboard</button>
+  <button class="pz-tab-btn" onclick="pzCambiarTab('criterios')" data-pztab="criterios" style="padding:10px 20px;font-size:13px;font-weight:700;border:none;border-bottom:3px solid transparent;background:transparent;cursor:pointer;color:#888">📋 Criterios</button>
+</div>
+<!-- Pane: Criterios (oculto por defecto) -->
+<div id="pz-pane-criterios" style="display:none;padding:18px">
+  <div style="margin-bottom:16px">
+    <h2 style="font-size:18px;font-weight:800;color:#23303d;margin-bottom:4px">📋 Criterios por Temporada</h2>
+    <p style="font-size:12px;color:#888">Registre los criterios clave para los principales eventos de cada temporada: tipo de poda, valores del trato, % contratista, estrategias de nutrición, labores de M.O., etc. Los datos se acumulan y permiten revisar la historia.</p>
+  </div>
+  <div style="background:#f8fafb;border:1px solid #e3e8ee;border-radius:10px;padding:16px;margin-bottom:18px" id="pz-criterio-form">
+    <div style="font-size:14px;font-weight:800;color:#1565c0;margin-bottom:12px">Agregar criterio</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#475569">Temporada</label>
+        <select id="pz-crit-temp" style="padding:9px 10px;border:1px solid #cdd5df;border-radius:7px;font-size:13px">
+          <option value="">Seleccione</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#475569">Tipo de gasto / Evento</label>
+        <select id="pz-crit-tipo" style="padding:9px 10px;border:1px solid #cdd5df;border-radius:7px;font-size:13px">
+          <option value="">Seleccione o escriba</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:#475569">Detalle del criterio</label>
+      <textarea id="pz-crit-detalle" rows="4" placeholder="Describa el criterio: tipo de poda, valores del trato, % contratista, estrategia de nutrición, principales labores de M.O., etc." style="padding:10px 12px;border:1px solid #cdd5df;border-radius:7px;font-size:13px;resize:vertical;line-height:1.5"></textarea>
+    </div>
+    <button onclick="pzGuardarCriterio()" style="padding:10px 20px;border:none;border-radius:8px;background:#1565c0;color:#fff;font-size:13px;font-weight:700;cursor:pointer">💾 Guardar criterio</button>
+  </div>
+  <div style="margin-bottom:10px;display:flex;align-items:center;gap:12px">
+    <label style="font-size:12px;font-weight:700;color:#475569">Filtrar por temporada:</label>
+    <select id="pz-crit-filtro" onchange="pzRenderCriterios()" style="padding:7px 10px;border:1px solid #cdd5df;border-radius:7px;font-size:12px">
+      <option value="">Todas</option>
+    </select>
+  </div>
+  <div id="pz-criterios-list"></div>
+</div>
+<!-- Pane: Dashboard (visible por defecto) -->
+<div id="pz-pane-dashboard">
 <div class="resumen-banner" id="resumen-banner">
 
   <div class="rb-item">
@@ -3621,7 +3656,7 @@ function renderPresupuesto(main){
   <div class="rb-item">
     <div class="rb-label">Kilos Cosechados</div>
     <div class="rb-value orange">
-      <input class="rb-input" id="rb-kg" type="text" value="206.808" title="Editable · Kilos reales cosechados">
+      <input class="rb-input" id="rb-kg" type="text" value="—" title="Editable · Kilos reales cosechados">
     </div>
     <div class="rb-sub">Kg reales temporada</div>
   </div>
@@ -3928,6 +3963,7 @@ function renderPresupuesto(main){
     </div>
   </div>
 </div>
+</div><!-- /pz-pane-dashboard -->
 
 </div>`;
   // El JS del módulo ya está cargado (IIFE). Cargar su lógica y datos.
@@ -4919,6 +4955,7 @@ function openProductForm(codigo=null,opts={}){
       </div>
     </div>`,
     `<button class="btn btn-secondary" id="pfCancel">${opts.fromMov?'← Volver a la entrada':'Cancelar'}</button>
+     ${p && can('productos.eliminar') ? '<button class="btn" id="pfDelete" style="background:#b91c1c;color:#fff;margin-left:auto">🗑 Eliminar</button>' : ''}
      <button class="btn btn-primary" id="pfSave">${p?'Guardar cambios':(opts.fromMov?'Crear y volver':'Crear producto')}</button>`,
     'lg');
   // Binding seguro
@@ -4927,6 +4964,7 @@ function openProductForm(codigo=null,opts={}){
     if(opts.fromMov)_renderMovForm(document.getElementById('mainContent'));
   };
   document.getElementById('pfSave').onclick=()=>saveProduct(p?p.codigoInterno:null,opts);
+  var pfDel=document.getElementById('pfDelete'); if(pfDel) pfDel.onclick=()=>deleteProduct(p.codigoInterno);
   document.getElementById('fpAtrib').addEventListener('change',e=>{
     document.getElementById('fpAtribLbl').textContent=e.target.checked?'Sí — lote y fecha de vencimiento':'No';
   });
@@ -5048,6 +5086,29 @@ async function saveProduct(codigo,opts){
     return;
   }
   if(STATE.page==='productos')renderProductos(document.getElementById('mainContent'));
+}
+// Eliminar producto: solo admin (productos.eliminar), con restricción si tiene movimientos.
+async function deleteProduct(codigo){
+  if(!can('productos.eliminar')){ toast('Sin permiso','Solo un administrador puede eliminar productos','error'); return; }
+  var p = getProduct(codigo); if(!p){ toast('No encontrado','','error'); return; }
+  // Verificar si tiene movimientos asociados
+  var movs = (STATE.cache.movements||[]).filter(function(m){
+    return (m.lineas||[]).some(function(l){ return l.codigoInterno===codigo; });
+  });
+  if(movs.length > 0){
+    toast('No se puede eliminar','El producto «'+p.descripcion+'» tiene '+movs.length+' movimiento(s) asociado(s). Debe anularlos primero.','error');
+    return;
+  }
+  confirmDialog('Eliminar producto','¿Eliminar definitivamente «'+p.descripcion+'» ('+codigo+')?  Esta acción no se puede deshacer.', async function(){
+    p.activo = false;
+    p.eliminado = new Date().toISOString();
+    p.eliminadoPor = STATE.user ? (STATE.user.nombre||STATE.user.id) : '';
+    await dbPut('products', p);
+    await reloadCache();
+    closeModal();
+    navigate('productos');
+    toast('Producto eliminado','«'+p.descripcion+'» marcado como inactivo','success');
+  }, 'Eliminar', true);
 }
 function viewProduct(codigo){
   const p=getProduct(codigo);if(!p)return;
@@ -11401,11 +11462,12 @@ function ipEditarPlanta(idx){
   var insertarBtns = '';
   if(_ipEsAdmin()){
     insertarBtns = '<div style="border-top:1px dashed #ddd;margin-top:10px;padding-top:12px">'+
-      '<div style="font-size:12px;color:#888;margin-bottom:8px">Administrador: corregir conteo si falta una planta</div>'+
-      '<div style="display:flex;gap:8px">'+
+      '<div style="font-size:12px;color:#888;margin-bottom:8px">Administrador: corregir conteo</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:8px">'+
         '<button onclick="ipInsertarPlantaDialog('+idx+',\'antes\')" style="flex:1;padding:11px;border:2px solid #1a7e3e;border-radius:10px;background:#fff;color:#1a7e3e;cursor:pointer;font-size:13px;font-weight:700">➕ Insertar antes</button>'+
         '<button onclick="ipInsertarPlantaDialog('+idx+',\'despues\')" style="flex:1;padding:11px;border:2px solid #1a7e3e;border-radius:10px;background:#fff;color:#1a7e3e;cursor:pointer;font-size:13px;font-weight:700">Insertar después ➕</button>'+
       '</div>'+
+      '<button onclick="ipEliminarPlantaMapa('+idx+')" style="width:100%;padding:11px;border:2px solid #c0392b;border-radius:10px;background:#fff;color:#c0392b;cursor:pointer;font-size:13px;font-weight:700">🗑 Eliminar esta planta (error de conteo)</button>'+
     '</div>';
   }
   modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:20px;max-height:90vh;overflow:auto">'+
@@ -11427,6 +11489,41 @@ async function ipSetEstadoPlanta(idx, estado){
   var m=document.getElementById('ip-edit-modal'); if(m)m.remove();
   ipRender();
   toast('Estado actualizado', p.codigo+' → '+(IP_ESTADOS[estado]?IP_ESTADOS[estado].label:estado),'success');
+}
+
+// Eliminar una planta desde el mapa 2D (solo admin, para corregir errores de conteo).
+// Recodifica las plantas restantes y recalcula contadores/GPS.
+function ipEliminarPlantaMapa(idx){
+  if(!_ipEsAdmin()){ toast('Sin permiso','Solo el administrador puede eliminar plantas','error'); return; }
+  var s=_ipMapaReg; if(!s || !s.plantas || !s.plantas[idx]) return;
+  var p=s.plantas[idx];
+  confirmDialog('Eliminar planta','¿Eliminar la planta <strong>'+escapeHtml(p.codigo)+'</strong> ('+(p.tipo==='poliniz'?'polinizante':'principal')+', estado: '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:(p.estado||'sano'))+') de esta hilera?<br><br>Las plantas siguientes se renumerarán.', async function(){
+    s.plantas.splice(idx, 1);
+    // Renumerar y recodificar
+    s.plantas.forEach(function(pl, i){
+      pl.seq = i + 1;
+      pl.codigo = s.codigoBase + '-' + String(i + 1).padStart(6, '0');
+    });
+    // Recalcular contadores
+    s.countPrincipal = s.plantas.filter(function(x){ return x.tipo === 'principal'; }).length;
+    s.countPoliniz = s.plantas.filter(function(x){ return x.tipo === 'poliniz'; }).length;
+    // Recalcular GPS interpolado si hay inicio y fin
+    if(s.gpsInicio && s.gpsFin && s.plantas.length > 1){
+      var n = s.plantas.length;
+      s.plantas.forEach(function(pl, i){
+        pl.lat = s.gpsInicio.lat + (s.gpsFin.lat - s.gpsInicio.lat) * i / (n - 1);
+        pl.lng = s.gpsInicio.lng + (s.gpsFin.lng - s.gpsInicio.lng) * i / (n - 1);
+      });
+    }
+    // Guardar y re-renderizar
+    try{
+      await dbPut('invplantas', s);
+      STATE.cache.invplantas = await dbAll('invplantas');
+    }catch(e){ console.error('Error guardando tras eliminar planta:', e); }
+    var m = document.getElementById('ip-edit-modal'); if(m) m.remove();
+    ipRender();
+    toast('Planta eliminada', p.codigo + ' eliminada. Hilera renumerada.', 'success');
+  }, 'Eliminar', true);
 }
 
 /* ─── Inserción de plantas (SOLO ADMINISTRADOR) ───────────────────────────
@@ -18718,10 +18815,18 @@ function processExcel(file) {
       const merged = [];
       allKeys.forEach(k => {
         const [MES, AÑO, SUB, TIPO, DESC] = k.split('|');
+        // Leer temporada del Excel (si la columna existe) o derivar de MES+AÑO.
+        var tempDeriv = '';
+        try{
+          var rawRow = rows.find(function(r){ return r.MES===MES && String(r['AÑO'])===String(AÑO); });
+          if(rawRow) tempDeriv = _getTemporada(rawRow);
+          if(!tempDeriv && typeof temporadaDeMesAnio==='function') tempDeriv = temporadaDeMesAnio(MES, AÑO) || '';
+        }catch(e){}
         merged.push({
           'MES': MES, 'AÑO': parseInt(AÑO),
           'SUB-GRUPO': SUB, 'TIPO DE COSTO': TIPO,
           'DESCRIPCION': DESC,
+          'TEMPORADA': tempDeriv,
           'PPTO_CLP': pptoCLPMap[k] || 0,
           'REAL_CLP': realCLPMap[k] || 0,
           'PPTO_USD': pptoUSDMap[k] || 0,
@@ -18960,7 +19065,9 @@ function populateFilters() {
 }
 
 // Lee el valor de "temporada" de una fila de forma tolerante al nombre exacto
-// de la columna (TEMPORADA, Temporada, temporada). Devuelve '' si no existe.
+// de la columna (TEMPORADA, Temporada, temporada). Si no existe la columna,
+// deriva la temporada de MES+AÑO usando temporadaDeMesAnio(). Devuelve '' si
+// no puede resolverla.
 function _getTemporada(d){
   if(!d) return '';
   if(d.TEMPORADA!=null && d.TEMPORADA!=='') return String(d.TEMPORADA).trim();
@@ -18968,6 +19075,10 @@ function _getTemporada(d){
   if(d.temporada!=null && d.temporada!=='') return String(d.temporada).trim();
   // Buscar cualquier clave que empiece por "temporada"
   for(var k in d){ if(/^temporada$/i.test(String(k).trim())){ var v=d[k]; if(v!=null&&v!=='') return String(v).trim(); } }
+  // Derivar de MES + AÑO si están disponibles
+  if(d.MES && d['AÑO']){
+    try{ var t=temporadaDeMesAnio(d.MES, d['AÑO']); if(t) return t; }catch(e){}
+  }
   return '';
 }
 
@@ -19996,6 +20107,182 @@ function pzWireFilters(){
     if(el && !el._pzWired){ el.addEventListener('change', render); el._pzWired = true; }
   });
 }
+
+// ── Criterios por Temporada (pestaña del presupuesto) ──────────────
+// Almacena criterios en config key 'pz_criterios': array acumulativo por
+// temporada con tipo de gasto y detalle descriptivo. Editable.
+var _PZ_CRIT_KEY = 'pz_criterios';
+function _pzGetCriterios(){
+  try{
+    var c = (STATE.cache.config && STATE.cache.config[_PZ_CRIT_KEY]) || null;
+    return (c && Array.isArray(c.items)) ? c.items : [];
+  }catch(e){ return []; }
+}
+async function _pzSaveCriterios(items){
+  var obj = { key:_PZ_CRIT_KEY, items:items, _updatedAt:new Date().toISOString() };
+  STATE.cache.config = STATE.cache.config || {};
+  STATE.cache.config[_PZ_CRIT_KEY] = obj;
+  await dbPut('config', obj);
+}
+// Cambiar pestaña Dashboard / Criterios
+window.pzCambiarTab = function(tab){
+  var pDash=document.getElementById('pz-pane-dashboard');
+  var pCrit=document.getElementById('pz-pane-criterios');
+  document.querySelectorAll('.pz-tab-btn').forEach(function(b){
+    var t=b.getAttribute('data-pztab');
+    b.style.borderBottomColor=(t===tab)?'#1565c0':'transparent';
+    b.style.color=(t===tab)?'#1565c0':'#888';
+    b.classList.toggle('pz-tab-active', t===tab);
+  });
+  if(pDash) pDash.style.display=(tab==='dashboard')?'':'none';
+  if(pCrit) pCrit.style.display=(tab==='criterios')?'':'none';
+  if(tab==='criterios'){
+    pzPopularSelectoresCriterios();
+    pzRenderCriterios();
+  }
+};
+// Popular los selectores de temporada y tipo de gasto
+window.pzPopularSelectoresCriterios = function(){
+  // Temporadas: las del presupuesto + las de criterios existentes + actual
+  var temps={};
+  var allD=ACTIVE_DATA||RAW||[];
+  allD.forEach(function(d){ var t=_getTemporada(d); if(t) temps[t]=1; });
+  _pzGetCriterios().forEach(function(c){ if(c.temporada) temps[c.temporada]=1; });
+  try{ var ta=temporadaActual(); if(ta) temps[ta]=1; var ini=parseInt(ta.split('-')[0]); temps[(ini+1)+'-'+(ini+2)]=1; }catch(e){}
+  temps['2025-2026']=1;
+  var tList=Object.keys(temps).sort();
+  // Selector de temporada del formulario
+  var sel=document.getElementById('pz-crit-temp');
+  if(sel){
+    var cur=sel.value;
+    sel.innerHTML='<option value="">Seleccione</option>';
+    tList.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+    if(cur && tList.indexOf(cur)>=0) sel.value=cur;
+  }
+  // Selector del filtro
+  var filt=document.getElementById('pz-crit-filtro');
+  if(filt){
+    var curF=filt.value;
+    filt.innerHTML='<option value="">Todas</option>';
+    tList.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; filt.appendChild(o); });
+    if(curF) filt.value=curF;
+  }
+  // Tipos de gasto: del Excel + algunos comunes
+  var tipos={};
+  allD.forEach(function(d){ var g=d.DESCRIPCION; if(g) tipos[g]=1; });
+  ['Poda','Raleo','Cosecha','Fertilización','Fitosanitario','Riego','Mano de Obra','Contratista','Maquinaria','Otros'].forEach(function(t){ tipos[t]=1; });
+  var tSel=document.getElementById('pz-crit-tipo');
+  if(tSel){
+    var curT=tSel.value;
+    tSel.innerHTML='<option value="">Seleccione</option>';
+    Object.keys(tipos).sort().forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; tSel.appendChild(o); });
+    if(curT) tSel.value=curT;
+  }
+};
+// Guardar un criterio
+window.pzGuardarCriterio = async function(){
+  if(typeof can==='function' && !can('presupuesto.editar')){
+    if(typeof toast==='function') toast('Sin permiso','Necesita permiso de edición','error');
+    return;
+  }
+  var temp=(document.getElementById('pz-crit-temp')||{}).value||'';
+  var tipo=(document.getElementById('pz-crit-tipo')||{}).value||'';
+  var detalle=(document.getElementById('pz-crit-detalle')||{}).value||'';
+  if(!temp){ if(typeof toast==='function') toast('Falta temporada','Seleccione una temporada','error'); return; }
+  if(!tipo){ if(typeof toast==='function') toast('Falta tipo','Seleccione un tipo de gasto','error'); return; }
+  if(!detalle.trim()){ if(typeof toast==='function') toast('Falta detalle','Describa el criterio','error'); return; }
+  var items=_pzGetCriterios();
+  // Si estamos editando (hay un id de edición activo), actualizar en vez de crear.
+  var editId=document.getElementById('pz-crit-edit-id');
+  if(editId && editId.value){
+    var ex=items.find(function(c){ return c.id===editId.value; });
+    if(ex){ ex.temporada=temp; ex.tipo=tipo; ex.detalle=detalle.trim(); ex.modificado=new Date().toISOString(); ex.usuario=(STATE.user?(STATE.user.nombre||STATE.user.id):''); }
+    editId.value='';
+    document.querySelector('#pz-criterio-form .pz-crit-cancel-btn')?.remove();
+  } else {
+    items.push({
+      id:'cr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      temporada:temp, tipo:tipo, detalle:detalle.trim(),
+      fecha:new Date().toISOString(),
+      usuario:(STATE.user?(STATE.user.nombre||STATE.user.id):'')
+    });
+  }
+  await _pzSaveCriterios(items);
+  // Limpiar formulario
+  document.getElementById('pz-crit-detalle').value='';
+  if(typeof toast==='function') toast('Criterio guardado','','success');
+  pzRenderCriterios();
+};
+// Renderizar lista de criterios
+window.pzRenderCriterios = function(){
+  var el=document.getElementById('pz-criterios-list'); if(!el) return;
+  var items=_pzGetCriterios();
+  var filtro=(document.getElementById('pz-crit-filtro')||{}).value||'';
+  if(filtro) items=items.filter(function(c){ return c.temporada===filtro; });
+  // Ordenar por temporada desc, luego por fecha desc
+  items.sort(function(a,b){ return (b.temporada||'').localeCompare(a.temporada||'') || (b.fecha||'').localeCompare(a.fecha||''); });
+  if(!items.length){
+    el.innerHTML='<div style="color:#999;padding:24px;text-align:center;font-size:13px">No hay criterios registrados'+(filtro?' para la temporada '+filtro:'')+'.</div>';
+    return;
+  }
+  var puedeEditar=(typeof can==='function')&&can('presupuesto.editar');
+  // Agrupar por temporada
+  var porTemp={};
+  items.forEach(function(c){ var t=c.temporada||'—'; if(!porTemp[t]) porTemp[t]=[]; porTemp[t].push(c); });
+  var html='';
+  Object.keys(porTemp).sort().reverse().forEach(function(temp){
+    html+='<div style="margin-bottom:16px"><div style="font-size:14px;font-weight:800;color:#1565c0;border-bottom:2px solid #e3e8ee;padding-bottom:4px;margin-bottom:8px">📅 Temporada '+escapeHtml(temp)+'</div>';
+    porTemp[temp].forEach(function(c){
+      var fechaFmt=''; try{ fechaFmt=new Date(c.fecha).toLocaleDateString('es-CL'); }catch(e){ fechaFmt=c.fecha||''; }
+      html+='<div style="background:#fff;border:1px solid #e3e8ee;border-radius:8px;padding:12px 14px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+          '<span style="background:#eff6ff;color:#1e40af;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px">'+escapeHtml(c.tipo||'')+'</span>'+
+          '<span style="font-size:10px;color:#94a3b8">'+escapeHtml(fechaFmt)+(c.usuario?' · '+escapeHtml(c.usuario):'')+'</span>'+
+        '</div>'+
+        '<div style="font-size:13px;color:#334155;line-height:1.5;white-space:pre-wrap">'+escapeHtml(c.detalle||'')+'</div>'+
+        (puedeEditar?'<div style="margin-top:8px;display:flex;gap:6px">'+
+          '<button onclick="pzEditarCriterio(\''+c.id+'\')" style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;font-size:11px;color:#1565c0;font-weight:700;cursor:pointer">✏️ Editar</button>'+
+          '<button onclick="pzEliminarCriterio(\''+c.id+'\')" style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:4px 10px;font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer">✕ Eliminar</button>'+
+        '</div>':'')+
+      '</div>';
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+};
+// Editar un criterio: carga los datos en el formulario
+window.pzEditarCriterio = function(id){
+  var items=_pzGetCriterios();
+  var c=items.find(function(x){ return x.id===id; }); if(!c) return;
+  var tempSel=document.getElementById('pz-crit-temp'); if(tempSel) tempSel.value=c.temporada||'';
+  var tipoSel=document.getElementById('pz-crit-tipo'); if(tipoSel) tipoSel.value=c.tipo||'';
+  var det=document.getElementById('pz-crit-detalle'); if(det) det.value=c.detalle||'';
+  // Marcar id de edición
+  var hidEdit=document.getElementById('pz-crit-edit-id');
+  if(!hidEdit){ hidEdit=document.createElement('input'); hidEdit.type='hidden'; hidEdit.id='pz-crit-edit-id'; document.getElementById('pz-criterio-form').appendChild(hidEdit); }
+  hidEdit.value=id;
+  // Agregar botón cancelar edición si no existe
+  if(!document.querySelector('#pz-criterio-form .pz-crit-cancel-btn')){
+    var cancelBtn=document.createElement('button');
+    cancelBtn.className='pz-crit-cancel-btn';
+    cancelBtn.textContent='Cancelar edición';
+    cancelBtn.style.cssText='padding:10px 20px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#666;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px';
+    cancelBtn.onclick=function(){ document.getElementById('pz-crit-edit-id').value=''; det.value=''; cancelBtn.remove(); };
+    document.querySelector('#pz-criterio-form button[onclick*="pzGuardarCriterio"]').insertAdjacentElement('afterend', cancelBtn);
+  }
+  det.focus();
+};
+// Eliminar un criterio
+window.pzEliminarCriterio = function(id){
+  if(typeof confirmDialog==='function'){
+    confirmDialog('Eliminar criterio','¿Eliminar este criterio? Esta acción no se puede deshacer.', async function(){
+      var items=_pzGetCriterios().filter(function(c){ return c.id!==id; });
+      await _pzSaveCriterios(items);
+      pzRenderCriterios();
+      if(typeof toast==='function') toast('Criterio eliminado','','success');
+    }, 'Eliminar', true);
+  }
+};
 
 window.PZ = {
   init: function(){ pzWireFilters(); pzInit(); },
