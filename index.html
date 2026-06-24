@@ -14646,6 +14646,12 @@ function abrirResumenBajaConfirmaciones(){
       var codigoSCI=prodSCI?prodSCI.codigoInterno:'';
       var qty=parseFloat(pr.qtyAplicada)||0;
       var unit=pr.unitS||'';
+      // Saldo disponible en bodega (todas las bodegas) para este producto.
+      var saldo = (codigoSCI && typeof getStockTotal==='function') ? getStockTotal(codigoSCI) : null;
+      var insuf = (saldo!=null && saldo < qty);
+      var saldoCell = (saldo==null)
+        ? '<span style="color:#999;font-size:11px">—</span>'
+        : '<span style="font-size:11px;font-weight:700;color:'+(insuf?'#b91c1c':'#15803d')+'">'+fmtN(saldo,3)+(insuf?' ⚠':'')+'</span>'+(insuf?'<div style="font-size:9px;color:#b91c1c">insuficiente</div>':'');
       // ¿Ya se dio de baja esta confirmación+producto? (marca en la confirmación)
       var yaBaja=(c.bajasBodega && c.bajasBodega[nombre]) ? c.bajasBodega[nombre] : null;
       var accion;
@@ -14653,13 +14659,14 @@ function abrirResumenBajaConfirmaciones(){
         accion='<span style="color:#15803d;font-weight:700;font-size:11px">✓ Baja '+escapeHtml(yaBaja)+'</span>';
       } else if(codigoSCI){
         accion='<button onclick="bajaConfirmacionEnBodega(\''+String(c.ordenId||idx)+'\',\''+String(idx)+'\',\''+codigoSCI+'\','+qty+')" '+
-          'style="background:#1565c0;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">📤 Dar de baja</button>';
+          'style="background:'+(insuf?'#b91c1c':'#1565c0')+';color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">📤 Dar de baja</button>';
       } else {
         accion='<span style="color:#b91c1c;font-size:11px" title="No existe en el catálogo del SCI">⚠ Crear en SCI</span>';
       }
       return '<tr style="border-bottom:1px solid #eee">'+
         '<td style="padding:6px 10px">'+escapeHtml(nombre)+(codigoSCI?'<div style="font-size:10px;color:#888">'+escapeHtml(codigoSCI)+'</div>':'')+'</td>'+
         '<td style="padding:6px 10px;text-align:right;font-weight:700">'+fmtN(qty,3)+' '+escapeHtml(unit)+'</td>'+
+        '<td style="padding:6px 10px;text-align:right">'+saldoCell+'</td>'+
         '<td style="padding:6px 10px;text-align:center">'+accion+'</td>'+
       '</tr>';
     }).join('');
@@ -14670,7 +14677,7 @@ function abrirResumenBajaConfirmaciones(){
         '<div style="font-size:11px;color:#666">'+escapeHtml(c.fechaApp||'')+' · '+escapeHtml(cuarteles.join(', '))+'</div>'+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
-        '<thead><tr style="background:#fafafa;text-align:left"><th style="padding:5px 10px">Producto</th><th style="padding:5px 10px;text-align:right">Cantidad total usada</th><th style="padding:5px 10px;text-align:center">Baja bodega</th></tr></thead>'+
+        '<thead><tr style="background:#fafafa;text-align:left"><th style="padding:5px 10px">Producto</th><th style="padding:5px 10px;text-align:right">Cantidad total usada</th><th style="padding:5px 10px;text-align:right">Saldo bodega</th><th style="padding:5px 10px;text-align:center">Baja bodega</th></tr></thead>'+
         '<tbody>'+prodRows+'</tbody>'+
       '</table>'+
     '</div>';
@@ -14703,32 +14710,45 @@ function bajaConfirmacionEnBodega(ordenId, idx, codigoSCI, cantidad){
   }
   var prod=getProduct(codigoSCI);
   if(!prod){ if(typeof toast==='function') toast('No encontrado','El producto no está en el catálogo del SCI','error'); return; }
-  var m=document.getElementById('cc-baja-resumen-modal'); if(m) m.remove();
-  // Ir a Salidas y prellenar el draft como CONSUMO CC
-  STATE.page='salidas';
-  movDraft={
-    tipo:'SAL', editId:null,
-    fecha:new Date().toISOString().slice(0,10),
-    bodegaId:'', tipoMovimiento:'CONSUMO CC',
-    tipoDoc:'', numeroDoc:'', fechaVencDoc:'',
-    proveedorCodigo:'', proveedorNombre:'',
-    clienteCodigo:'', clienteNombre:'',
-    centroCosto:'',
-    bodegaDestinoId:'',
-    documento:'', proveedor:'', destino:'',
-    observaciones:'Baja por aplicación (Cuaderno de Campo)',
-    lineas:[{ codigoInterno:codigoSCI, descripcion:prod.descripcion, cantidad:cantidad, costo:0 }],
-    // Origen: para marcar la confirmación como dada de baja al guardar la salida.
-    _origenConfirmacion:{ ordenId:String(ordenId), idx:String(idx), productoNombre:prod.descripcion }
-  };
-  if(typeof renderSidebar==='function') try{ renderSidebar(); }catch(e){}
-  var topT=document.getElementById('topTitle'); if(topT) topT.textContent='Nueva Salida de Bodega · Consumo CC';
-  var main=document.getElementById('mainContent');
-  if(main && typeof _renderMovForm==='function'){
-    _renderMovForm(main);
-    // En salida, cargar costo desde stock cuando se elija bodega (lo hace el form).
+  // Aviso de stock: comparar la cantidad a rebajar con el saldo disponible.
+  var stockTotal = (typeof getStockTotal==='function') ? getStockTotal(codigoSCI) : 0;
+  var cant = parseFloat(cantidad)||0;
+  function continuar(){
+    var m=document.getElementById('cc-baja-resumen-modal'); if(m) m.remove();
+    // Navegar a Salidas (esto crea un movDraft limpio) y LUEGO sobreescribirlo.
+    if(typeof navigate==='function') navigate('salidas');
+    movDraft={
+      tipo:'SAL', editId:null,
+      fecha:new Date().toISOString().slice(0,10),
+      bodegaId:'', tipoMovimiento:'CONSUMO CC',
+      tipoDoc:'', numeroDoc:'', fechaVencDoc:'',
+      proveedorCodigo:'', proveedorNombre:'',
+      clienteCodigo:'', clienteNombre:'',
+      centroCosto:'',
+      bodegaDestinoId:'',
+      documento:'', proveedor:'', destino:'',
+      observaciones:'Baja por aplicación (Cuaderno de Campo)',
+      lineas:[{ codigoInterno:codigoSCI, descripcion:prod.descripcion, cantidad:cant, costo:0 }],
+      _origenConfirmacion:{ ordenId:String(ordenId), idx:String(idx), productoNombre:prod.descripcion }
+    };
+    // Re-renderizar el formulario con el draft ya cargado.
+    var main=document.getElementById('mainContent');
+    if(main && typeof _renderMovForm==='function') _renderMovForm(main);
+    var topT=document.getElementById('topTitle'); if(topT) topT.textContent='Nueva Salida de Bodega · Consumo CC';
     if(typeof toast==='function') toast('Salida preparada','Seleccione bodega y centro de costo, luego guarde','success');
   }
+  // Si el stock total disponible es menor que lo que se quiere rebajar, advertir.
+  if(stockTotal < cant){
+    var msg='El saldo en bodega ('+stockTotal.toLocaleString('es-CL',{maximumFractionDigits:3})+') es INFERIOR a la cantidad a dar de baja ('+cant.toLocaleString('es-CL',{maximumFractionDigits:3})+'). '+
+            'Si continúa, el stock podría quedar negativo. ¿Desea continuar de todos modos?';
+    if(typeof confirmDialog==='function'){
+      confirmDialog('⚠️ Saldo insuficiente en bodega', msg, continuar, 'Continuar igual', true);
+    } else {
+      if(confirm(msg)) continuar();
+    }
+    return;
+  }
+  continuar();
 }
 
 // Normaliza un nombre para comparar: minúsculas, sin acentos, sin signos de
