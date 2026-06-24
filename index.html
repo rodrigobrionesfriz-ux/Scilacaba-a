@@ -14937,35 +14937,40 @@ function ccCrearProductoSCI(nombre, inputId, listId){
 function selProd(iid,lid,nombre,unidad,dosis){
   var inp = document.getElementById(iid);
   if(inp) inp.value = nombre;
+  // Normalizar: la dosis puede llegar como número, string, '' o 0.
+  var dosisStr = (dosis===null || dosis===undefined) ? '' : String(dosis);
+  var tieneDosis = dosisStr!=='' && dosisStr!=='null' && dosisStr!=='undefined';
+  var tieneUnidad = unidad!==null && unidad!==undefined && String(unidad)!=='' && String(unidad)!=='undefined';
   // Helpers internos
   function setSelectVal(elId, val){
-    var s = document.getElementById(elId); if(!s) return;
-    for(var i=0;i<s.options.length;i++){ if(s.options[i].value===val){ s.selectedIndex=i; return; } }
+    var s = document.getElementById(elId); if(!s) return false;
+    for(var i=0;i<s.options.length;i++){ if(s.options[i].value===val){ s.selectedIndex=i; return true; } }
+    return false;
   }
-  function setVal(elId, val){ var el = document.getElementById(elId); if(el) el.value = val; }
+  function setVal(elId, val){ var el = document.getElementById(elId); if(el){ el.value = val; return true; } return false; }
 
   if(iid === 'cc-f-prod'){
     // Registro de aplicación
-    if(unidad) setVal('cc-f-unidad', unidad);
-    if(dosis)  setVal('cc-f-dosis',  dosis);
+    if(tieneUnidad) setVal('cc-f-unidad', unidad);
+    if(tieneDosis)  setVal('cc-f-dosis',  dosisStr);
     if(typeof calcRegTotal==='function') calcRegTotal();
   } else if(iid === 'cc-o-prod'){
     // Producto principal de orden
-    if(unidad) setSelectVal('cc-o-unidad', unidad);
-    if(dosis)  setVal('cc-o-dosis', dosis);
+    if(tieneUnidad) setSelectVal('cc-o-unidad', unidad);
+    if(tieneDosis)  setVal('cc-o-dosis', dosisStr);
     if(typeof calcDist==='function') calcDist();
   } else if(iid.indexOf('cc-o-mix-prod-') === 0){
     // Producto en mezcla en emisión: cc-o-mix-prod-N
     var idxM = iid.substring('cc-o-mix-prod-'.length);
-    if(unidad) setSelectVal('cc-o-mix-unidad-' + idxM, unidad);
-    if(dosis)  setVal('cc-o-mix-dosis-' + idxM, dosis);
+    if(tieneUnidad) setSelectVal('cc-o-mix-unidad-' + idxM, unidad);
+    if(tieneDosis)  setVal('cc-o-mix-dosis-' + idxM, dosisStr);
     if(typeof _syncMixProds==='function') _syncMixProds();
     if(typeof calcDist==='function') calcDist();
   } else if(iid.indexOf('cc-eo-p-n-') === 0){
     // Producto en editor de orden: cc-eo-p-n-N
     var idxE = iid.substring('cc-eo-p-n-'.length);
-    if(unidad) setSelectVal('cc-eo-p-u-' + idxE, unidad);
-    if(dosis)  setVal('cc-eo-p-d-' + idxE, dosis);
+    if(tieneUnidad) setSelectVal('cc-eo-p-u-' + idxE, unidad);
+    if(tieneDosis)  setVal('cc-eo-p-d-' + idxE, dosisStr);
     if(typeof _syncEoProds==='function') _syncEoProds();
   }
   var listEl = document.getElementById(lid);
