@@ -1679,6 +1679,16 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
           <button class="cc-btn cc-btn-gold" onclick="rpGenerarExcel()">📥 Descargar reporte Excel</button>
         </div>
       </div>
+
+      <div class="cc-card" id="cc-card-baja-bodega" style="display:none">
+        <div class="cc-card-ttl">📦 Baja de producto en bodega</div>
+        <p style="font-size:12px;color:#666;margin-bottom:14px">
+          Resumen de las confirmaciones con la cantidad total de producto usado en cada una.
+          Desde aquí puede registrar la <strong>salida de bodega</strong> (consumo por centro de costo) en el SCI,
+          con el producto y la cantidad ya cargados.
+        </p>
+        <button class="cc-btn cc-btn-g" onclick="abrirResumenBajaConfirmaciones()">📤 Ver resumen y dar de baja</button>
+      </div>
     </div>
 
   </div>
@@ -5013,6 +5023,28 @@ async function saveProduct(codigo,opts){
       }
     }
     _renderMovForm(document.getElementById('mainContent'));
+    return;
+  }
+
+  // Si fue creado desde la búsqueda de una orden de aplicación: volver al
+  // Cuaderno y rellenar el producto recién creado en el input de la orden.
+  if(opts.fromOrden){
+    var nuevo = getProduct(nuevoCodigo);
+    if(nuevo && opts.ordenInputId){
+      // navegar de vuelta al Cuaderno si cambiamos de módulo
+      if(typeof navigate==='function' && STATE.page!=='cuaderno'){
+        navigate('cuaderno');
+      }
+      setTimeout(function(){
+        var inp=document.getElementById(opts.ordenInputId);
+        if(inp){
+          var lid = opts.ordenInputId.replace('-prod','-ac').replace('cc-o-prod','cc-o-ac').replace('cc-f-prod','cc-f-ac');
+          // selProd rellena nombre + unidad/dosis a partir de los datos del CC.
+          selProd(opts.ordenInputId, lid, (nuevo.descripcion||'').replace(/'/g,''), nuevo.ccUnidad||'', (nuevo.ccDosis!=null?nuevo.ccDosis:''));
+          if(typeof toast==='function') toast('Producto disponible','«'+(nuevo.descripcion||'')+'» creado y seleccionado','success');
+        }
+      }, 300);
+    }
     return;
   }
   if(STATE.page==='productos')renderProductos(document.getElementById('mainContent'));
@@ -8462,6 +8494,21 @@ async function saveMovimiento(){
       await applyMovementToStock(m);
       await dbPut('movements',m);
       await audit('movimiento.crear',`${tipoLabel(m.tipo)} ${numero}`,numero);
+      // Si la salida vino de una confirmación del Cuaderno, marcarla como dada de baja.
+      try{
+        if(movDraft._origenConfirmacion && typeof S!=='undefined' && Array.isArray(S.confirmaciones)){
+          var oc=movDraft._origenConfirmacion;
+          var conf=null;
+          // localizar por ordenId + índice del producto, o por ordenId solo
+          var candidatas=S.confirmaciones.filter(function(c){ return String(c.ordenId)===String(oc.ordenId); });
+          conf = candidatas[parseInt(oc.idx,10)] || candidatas[0] || null;
+          if(conf){
+            if(!conf.bajasBodega) conf.bajasBodega={};
+            conf.bajasBodega[oc.productoNombre]=numero; // guarda el N° de movimiento
+            if(typeof save==='function') save();        // persiste el Cuaderno (localStorage + Firebase)
+          }
+        }
+      }catch(e){ console.warn('No se pudo marcar la confirmación:', e); }
       await reloadCache();
       hideLoading();
       toast(`${tipoLabel(m.tipo)} registrada`,numero);
@@ -14487,7 +14534,209 @@ function exportarEstimacionExcel(){
 }
 
 // ══ RESUMEN ══
+// Reporte de aplicaciones confirmadas de un cuartel (paño principal + sus
+// polinizantes), imprimible, con todos los datos de cada aplicación.
+function verAplicacionesPano(panoId){
+  var p=getPano(panoId); if(!p){ if(typeof toast==='function') toast('No encontrado','Paño no encontrado','error'); return; }
+  var hijosP=S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(p.id); });
+  var idsGrupo=[String(p.id)].concat(hijosP.map(function(h){ return String(h.id); }));
+  // Confirmaciones que incluyen el cuartel, ordenadas por fecha
+  var confs=(S.confirmaciones||[]).filter(function(c){
+    return (c.panoIds||[]).some(function(pid){ return idsGrupo.indexOf(String(pid))>=0; });
+  }).sort(function(a,b){ return String(b.fechaApp||'').localeCompare(String(a.fechaApp||'')); });
+
+  function fmtN(n,d){ n=parseFloat(n)||0; return n.toLocaleString('es-CL',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+
+  // Construir el cuerpo del reporte (una sección por aplicación)
+  var cuerpo='';
+  confs.forEach(function(c){
+    var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
+    var tipoApp=orden?(orden.tipo||orden.tipoApp||''):'';
+    var nroOrden=orden?(orden.numero||orden.id||''):(c.ordenId||'');
+    var prods=(c.productosReales||[]).map(function(pr){
+      return '<tr><td style="padding:4px 8px;border:1px solid #ddd">'+escapeHtml(pr.nombre||'')+'</td>'+
+        '<td style="padding:4px 8px;border:1px solid #ddd;text-align:right">'+fmtN(pr.qtyAplicada,3)+' '+escapeHtml(pr.unitS||'')+'</td></tr>';
+    }).join('');
+    var panosCubiertos=(c.panoIds||[]).map(function(pid){ var px=getPano(pid); return px?px.nombre+(px.variedad?' ('+px.variedad+')':''):pid; }).join(', ');
+    cuerpo+='<div class="aplic-bloque" style="margin-bottom:18px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">'+
+      '<div style="background:#f0f7ff;padding:10px 14px;border-bottom:1px solid #e0e0e0">'+
+        '<div style="font-weight:800;font-size:14px;color:#1565c0">📅 '+escapeHtml(c.fechaApp||'Sin fecha')+(c.turno?' · '+escapeHtml(c.turno):'')+'</div>'+
+        '<div style="font-size:12px;color:#555;margin-top:2px">Orden '+escapeHtml(String(nroOrden))+(tipoApp?' · '+escapeHtml(tipoApp):'')+' · Operador: '+escapeHtml(c.operador||'—')+'</div>'+
+      '</div>'+
+      '<div style="padding:10px 14px">'+
+        '<table style="border-collapse:collapse;font-size:12px;width:100%;margin-bottom:8px">'+
+          '<thead><tr style="background:#fafafa"><th style="padding:4px 8px;border:1px solid #ddd;text-align:left">Producto</th><th style="padding:4px 8px;border:1px solid #ddd;text-align:right">Cantidad aplicada</th></tr></thead>'+
+          '<tbody>'+(prods||'<tr><td colspan="2" style="padding:4px 8px;border:1px solid #ddd;color:#888">Sin productos</td></tr>')+'</tbody>'+
+        '</table>'+
+        '<div style="font-size:12px;color:#333"><strong>💧 Agua aplicada:</strong> '+fmtN(c.aguaReal,0)+' L</div>'+
+        (c.mojamiento?'<div style="font-size:12px;color:#333"><strong>Mojamiento:</strong> '+escapeHtml(String(c.mojamiento))+' L/ha</div>':'')+
+        '<div style="font-size:11px;color:#777;margin-top:4px">Paños: '+escapeHtml(panosCubiertos)+'</div>'+
+        (c.observaciones?'<div style="font-size:11px;color:#777;margin-top:2px"><strong>Obs:</strong> '+escapeHtml(c.observaciones)+'</div>':'')+
+      '</div>'+
+    '</div>';
+  });
+  if(!cuerpo) cuerpo='<div style="color:#888;padding:20px;text-align:center">Sin aplicaciones confirmadas para este cuartel.</div>';
+
+  var fecha=new Date().toLocaleString('es-CL');
+  var titulo='Aplicaciones confirmadas · '+(p.nombre||'')+(p.variedad?' ('+p.variedad+')':'');
+
+  // Modal con botón imprimir
+  var prev=document.getElementById('cc-aplic-pano-modal'); if(prev) prev.remove();
+  var modal=document.createElement('div');
+  modal.id='cc-aplic-pano-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10005;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:680px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="background:#1565c0;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+      '<div><div style="font-size:16px;font-weight:800">'+escapeHtml(titulo)+'</div>'+
+        '<div style="font-size:12px;opacity:.9">'+confs.length+' aplicación(es) confirmada(s)</div></div>'+
+      '<button onclick="document.getElementById(\'cc-aplic-pano-modal\').remove()" style="background:rgba(255,255,255,.25);border:none;color:#fff;font-size:24px;cursor:pointer;width:40px;height:40px;border-radius:8px">×</button>'+
+    '</div>'+
+    '<div id="cc-aplic-pano-body" style="padding:18px;overflow:auto;flex:1">'+cuerpo+'</div>'+
+    '<div style="padding:12px 18px;border-top:1px solid #e3e8ee;display:flex;gap:10px;justify-content:flex-end">'+
+      '<button onclick="document.getElementById(\'cc-aplic-pano-modal\').remove()" style="padding:11px 16px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cerrar</button>'+
+      '<button onclick="imprimirAplicacionesPano(\''+p.id+'\')" style="padding:11px 18px;border:none;border-radius:9px;background:#1565c0;color:#fff;cursor:pointer;font-size:14px;font-weight:700">🖨️ Imprimir reporte</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+}
+// Imprime el reporte de aplicaciones confirmadas del cuartel.
+function imprimirAplicacionesPano(panoId){
+  var p=getPano(panoId); if(!p) return;
+  var bodyEl=document.getElementById('cc-aplic-pano-body');
+  var contenido=bodyEl?bodyEl.innerHTML:'';
+  var fecha=new Date().toLocaleString('es-CL');
+  var titulo='Aplicaciones confirmadas · '+(p.nombre||'')+(p.variedad?' ('+p.variedad+')':'');
+  var win=window.open('','_blank');
+  if(!win){ if(typeof toast==='function') toast('Impresión bloqueada','Permita las ventanas emergentes para imprimir','error'); return; }
+  win.document.write('<html><head><title>'+escapeHtml(titulo)+'</title><meta charset="utf-8"><style>'+
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;padding:24px;max-width:800px;margin:0 auto}'+
+    'h1{font-size:19px;margin:0 0 4px} .sub{color:#6b7280;font-size:13px;margin-bottom:18px}'+
+    'table{page-break-inside:avoid} .aplic-bloque{page-break-inside:avoid}'+
+    '@media print{button{display:none}}'+
+    '</style></head><body>'+
+    '<h1>'+escapeHtml(titulo)+'</h1>'+
+    '<div class="sub">Sociedad Agrícola y Forestal La Cabaña · Cuaderno de Campo<br>Generado: '+fecha+'</div>'+
+    contenido+
+    '<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>');
+  win.document.close();
+}
+
+// ── Resumen de confirmaciones para BAJA DE BODEGA (solo con permiso) ──
+// Lista cada confirmación con su número y la cantidad total de producto usado,
+// con un enlace para dar de baja ese producto en la bodega (movimiento de
+// salida del SCI por centro de costo). Pensado para administrador/encargado.
+function abrirResumenBajaConfirmaciones(){
+  if(typeof can==='function' && !can('movimientos.crear')){
+    if(typeof toast==='function') toast('Sin permiso','Necesita permiso para crear movimientos de bodega','error');
+    return;
+  }
+  function fmtN(n,d){ n=parseFloat(n)||0; return n.toLocaleString('es-CL',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+  var confs=(S.confirmaciones||[]).slice().sort(function(a,b){ return String(b.fechaApp||'').localeCompare(String(a.fechaApp||'')); });
+
+  var filas='';
+  confs.forEach(function(c,idx){
+    var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
+    var nro=orden?(orden.numero||orden.id||''):(c.numero||c.ordenId||('#'+(idx+1)));
+    var panosTxt=(c.panoIds||[]).map(function(pid){ var p=getPano(pid); return p?p.nombre:pid; });
+    // Cuarteles únicos
+    var cuarteles=[]; panosTxt.forEach(function(n){ if(cuarteles.indexOf(n)<0) cuarteles.push(n); });
+    var prodRows=(c.productosReales||[]).map(function(pr){
+      var nombre=pr.nombre||'';
+      // Buscar el producto en el catálogo del SCI por descripción
+      var prodSCI=(STATE.cache.products||[]).find(function(x){ return (x.descripcion||'').toLowerCase()===nombre.toLowerCase(); });
+      var codigoSCI=prodSCI?prodSCI.codigoInterno:'';
+      var qty=parseFloat(pr.qtyAplicada)||0;
+      var unit=pr.unitS||'';
+      // ¿Ya se dio de baja esta confirmación+producto? (marca en la confirmación)
+      var yaBaja=(c.bajasBodega && c.bajasBodega[nombre]) ? c.bajasBodega[nombre] : null;
+      var accion;
+      if(yaBaja){
+        accion='<span style="color:#15803d;font-weight:700;font-size:11px">✓ Baja '+escapeHtml(yaBaja)+'</span>';
+      } else if(codigoSCI){
+        accion='<button onclick="bajaConfirmacionEnBodega(\''+String(c.ordenId||idx)+'\',\''+String(idx)+'\',\''+codigoSCI+'\','+qty+')" '+
+          'style="background:#1565c0;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">📤 Dar de baja</button>';
+      } else {
+        accion='<span style="color:#b91c1c;font-size:11px" title="No existe en el catálogo del SCI">⚠ Crear en SCI</span>';
+      }
+      return '<tr style="border-bottom:1px solid #eee">'+
+        '<td style="padding:6px 10px">'+escapeHtml(nombre)+(codigoSCI?'<div style="font-size:10px;color:#888">'+escapeHtml(codigoSCI)+'</div>':'')+'</td>'+
+        '<td style="padding:6px 10px;text-align:right;font-weight:700">'+fmtN(qty,3)+' '+escapeHtml(unit)+'</td>'+
+        '<td style="padding:6px 10px;text-align:center">'+accion+'</td>'+
+      '</tr>';
+    }).join('');
+    if(!prodRows) return;
+    filas+='<div style="margin-bottom:16px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">'+
+      '<div style="background:#f7f9fc;padding:9px 12px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'+
+        '<div style="font-weight:800;font-size:13px;color:#23303d">📋 Confirmación '+escapeHtml(String(nro))+'</div>'+
+        '<div style="font-size:11px;color:#666">'+escapeHtml(c.fechaApp||'')+' · '+escapeHtml(cuarteles.join(', '))+'</div>'+
+      '</div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+        '<thead><tr style="background:#fafafa;text-align:left"><th style="padding:5px 10px">Producto</th><th style="padding:5px 10px;text-align:right">Cantidad total usada</th><th style="padding:5px 10px;text-align:center">Baja bodega</th></tr></thead>'+
+        '<tbody>'+prodRows+'</tbody>'+
+      '</table>'+
+    '</div>';
+  });
+  if(!filas) filas='<div style="color:#888;padding:24px;text-align:center">No hay confirmaciones con productos para dar de baja.</div>';
+
+  var prev=document.getElementById('cc-baja-resumen-modal'); if(prev) prev.remove();
+  var modal=document.createElement('div');
+  modal.id='cc-baja-resumen-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10006;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="background:#23303d;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+      '<div><div style="font-size:16px;font-weight:800">📦 Resumen de confirmaciones · Baja de bodega</div>'+
+        '<div style="font-size:12px;opacity:.85">Producto usado por confirmación. Pulse «Dar de baja» para registrar la salida en el SCI.</div></div>'+
+      '<button onclick="document.getElementById(\'cc-baja-resumen-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:24px;cursor:pointer;width:40px;height:40px;border-radius:8px">×</button>'+
+    '</div>'+
+    '<div style="padding:18px;overflow:auto;flex:1">'+filas+'</div>'+
+    '<div style="padding:10px 18px;border-top:1px solid #e3e8ee;text-align:right">'+
+      '<button onclick="document.getElementById(\'cc-baja-resumen-modal\').remove()" style="padding:10px 18px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cerrar</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+}
+
+// Abre el formulario de SALIDA del SCI (consumo por centro de costo) prellenado
+// con el producto y la cantidad de la confirmación.
+function bajaConfirmacionEnBodega(ordenId, idx, codigoSCI, cantidad){
+  if(typeof can==='function' && !can('movimientos.crear')){
+    if(typeof toast==='function') toast('Sin permiso','Necesita permiso para crear movimientos','error');
+    return;
+  }
+  var prod=getProduct(codigoSCI);
+  if(!prod){ if(typeof toast==='function') toast('No encontrado','El producto no está en el catálogo del SCI','error'); return; }
+  var m=document.getElementById('cc-baja-resumen-modal'); if(m) m.remove();
+  // Ir a Salidas y prellenar el draft como CONSUMO CC
+  STATE.page='salidas';
+  movDraft={
+    tipo:'SAL', editId:null,
+    fecha:new Date().toISOString().slice(0,10),
+    bodegaId:'', tipoMovimiento:'CONSUMO CC',
+    tipoDoc:'', numeroDoc:'', fechaVencDoc:'',
+    proveedorCodigo:'', proveedorNombre:'',
+    clienteCodigo:'', clienteNombre:'',
+    centroCosto:'',
+    bodegaDestinoId:'',
+    documento:'', proveedor:'', destino:'',
+    observaciones:'Baja por aplicación (Cuaderno de Campo)',
+    lineas:[{ codigoInterno:codigoSCI, descripcion:prod.descripcion, cantidad:cantidad, costo:0 }],
+    // Origen: para marcar la confirmación como dada de baja al guardar la salida.
+    _origenConfirmacion:{ ordenId:String(ordenId), idx:String(idx), productoNombre:prod.descripcion }
+  };
+  if(typeof renderSidebar==='function') try{ renderSidebar(); }catch(e){}
+  var topT=document.getElementById('topTitle'); if(topT) topT.textContent='Nueva Salida de Bodega · Consumo CC';
+  var main=document.getElementById('mainContent');
+  if(main && typeof _renderMovForm==='function'){
+    _renderMovForm(main);
+    // En salida, cargar costo desde stock cuando se elija bodega (lo hace el form).
+    if(typeof toast==='function') toast('Salida preparada','Seleccione bodega y centro de costo, luego guarde','success');
+  }
+}
+
 function renderResumen(){
+  // Mostrar la tarjeta de baja de bodega solo si el usuario tiene permiso.
+  try{
+    var cardBaja=document.getElementById('cc-card-baja-bodega');
+    if(cardBaja) cardBaja.style.display=((typeof can==='function')&&can('movimientos.crear'))?'':'none';
+  }catch(e){}
   renderBkAlert();
   var tHas=S.panos.reduce(function(s,p){ return s+p.hectareas; },0);
   document.getElementById('cc-stats').innerHTML=[
@@ -14509,9 +14758,16 @@ function renderResumen(){
     if(!ps.length) return '';
     return '<div class="cc-card" style="margin-bottom:0"><div class="cc-card-ttl">\u{1F331} Plantaci\u00f3n '+y+'</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:8px">'+ps.map(function(p){
-        var r=S.registros.filter(function(x){ return x.panoId==p.id; }).length;
+        // IDs del grupo: principal + polinizantes (las aplicaciones cubren todo el cuartel)
+        var hijosP=S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(p.id); });
+        var idsGrupo=[String(p.id)].concat(hijosP.map(function(h){ return String(h.id); }));
+        // Contar APLICACIONES CONFIRMADAS que incluyan cualquier paño del grupo
+        var confsPano=(S.confirmaciones||[]).filter(function(c){
+          return (c.panoIds||[]).some(function(pid){ return idsGrupo.indexOf(String(pid))>=0; });
+        });
+        var r=confsPano.length;
         var propio=_plantasDe(p);
-        var hijos=S.panos.filter(function(x){ return (x.tipo||'Productivo')==='Polinizante' && String(x.panoPadre)===String(p.id); });
+        var hijos=hijosP;
         var plantasHijos=hijos.reduce(function(s,h){ return s+_plantasDe(h); },0);
         var total=propio+plantasHijos;
         // Superficie total del paño = hectáreas del principal + las de sus polinizantes
@@ -14532,7 +14788,9 @@ function renderResumen(){
             '<span style="font-weight:700">\u{1F331} '+(Math.round(hasTotal*100)/100)+' h\u00e1</span>'+
             '<span style="color:#1a5a8a;font-weight:700">\u{1F4A7} '+(Math.round(riegoTotal*100)/100)+'</span>'+
             '<span style="color:#5a3a8a;font-weight:700">\u{1F33F} '+(p.densidad||0)+'</span>'+
-            '<span style="color:#888">'+r+' aplic.</span></div>'+
+            (r>0
+              ? '<span onclick="verAplicacionesPano(\''+p.id+'\')" style="color:#1565c0;font-weight:700;cursor:pointer;text-decoration:underline">'+r+' aplic. \u203A</span>'
+              : '<span style="color:#888">0 aplic.</span>')+'</div>'+
           detVar+'</div>';
       }).join('')+'</div></div>';
   }).join('');
@@ -14638,13 +14896,43 @@ function showAC(inputId,listId){
         || (p.tipo||'').toLowerCase().includes(q)
         || (p.ingredienteActivo||'').toLowerCase().includes(q);
   }).slice(0,10);
-  if(!prods.length){ list.style.display='none'; return; }
+  // Enlace para crear el producto en el SCI cuando no existe (si hay permiso).
+  var puedeCrear = (typeof can==='function') && can('productos.crear');
+  var qTrim = (document.getElementById(inputId).value||'').trim();
+  function linkCrear(){
+    if(!puedeCrear || !qTrim) return '';
+    var nombreSafe = qTrim.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return '<div class="cc-ac-item" style="border-top:1px solid #e3e8ee;background:#f0f7ff;color:#1565c0;font-weight:700" '+
+      'onmousedown="ccCrearProductoSCI(\''+nombreSafe+'\',\''+inputId+'\',\''+listId+'\')">'+
+      '➕ Crear «'+escapeHtml(qTrim)+'» en el SCI<div class="cc-ac-sub" style="color:#5a7fa6;font-weight:400">No está en el catálogo. Crear ficha de producto.</div></div>';
+  }
+  if(!prods.length){
+    var lk=linkCrear();
+    if(lk){ list.innerHTML=lk; list.style.display=''; }
+    else { list.style.display='none'; }
+    return;
+  }
   list.innerHTML=prods.map(function(p){
     var nombreSafe=(p.nombre||'').replace(/'/g,'');
     return '<div class="cc-ac-item" onmousedown="selProd(\''+inputId+'\',\''+listId+'\',\''+nombreSafe+'\',\''+(p.unidad||'')+'\',\''+(p.dosis||'')+'\')">'+
       escapeHtml(p.nombre||'')+'<div class="cc-ac-sub">'+escapeHtml(p.tipo||'')+(p.ingredienteActivo?' · '+escapeHtml(p.ingredienteActivo):'')+(p.dosis?' · Dosis: '+p.dosis+' '+(p.unidad||''):'')+'</div></div>';
-  }).join('');
+  }).join('') + linkCrear();
   list.style.display='';
+}
+// Abre el formulario de producto del SCI con el nombre prellenado, desde la
+// búsqueda de una orden. Al guardar, el catálogo se actualiza y el producto
+// queda disponible para seleccionarlo.
+function ccCrearProductoSCI(nombre, inputId, listId){
+  if(typeof can==='function' && !can('productos.crear')){
+    if(typeof toast==='function') toast('Sin permiso','No tiene permiso para crear productos','error');
+    return;
+  }
+  var lst=document.getElementById(listId); if(lst) lst.style.display='none';
+  if(typeof openProductForm==='function'){
+    openProductForm(null, { prefilledDesc: nombre, fromOrden:true, ordenInputId:inputId });
+  } else {
+    if(typeof toast==='function') toast('No disponible','El formulario de productos no está disponible','error');
+  }
 }
 function selProd(iid,lid,nombre,unidad,dosis){
   var inp = document.getElementById(iid);
