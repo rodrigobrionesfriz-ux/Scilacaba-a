@@ -14602,14 +14602,47 @@ function calcRegTotal(){
   var cuarteles={}; selPanosReg.forEach(function(id){ var p=getPano(id); if(p){ var k=(p.tipo||'Productivo')==='Polinizante'?(p.panoPadre||id):id; cuarteles[k]=1; } });
   el.textContent='✓ '+Object.keys(cuarteles).length+' cuartel(es) · '+tHa.toFixed(2)+' há';
 }
+// Catálogo unificado de productos: ahora vive en el SCI (STATE.cache.products).
+// Esta función lo expone en el formato que el Cuaderno de Campo espera (nombre,
+// tipo, dosis, unidad, etc.), mapeando los campos agronómicos (cc*) de la ficha.
+// Si el SCI no está disponible, cae de vuelta a S.productos (compatibilidad).
+function _getProductosCatalogo(){
+  try{
+    if(typeof STATE!=='undefined' && STATE.cache && Array.isArray(STATE.cache.products) && STATE.cache.products.length){
+      return STATE.cache.products
+        .filter(function(p){ return p && p.activo!==false; })
+        .map(function(p){
+          return {
+            nombre: p.descripcion || '',
+            tipo: p.ccTipo || '',
+            ingredienteActivo: p.ccIngredienteActivo || '',
+            objetivo: p.ccObjetivo || '',
+            unidad: p.ccUnidad || '',
+            dosis: (p.ccDosis!=null ? p.ccDosis : ''),
+            codigoInterno: p.codigoInterno || ''
+          };
+        });
+    }
+  }catch(e){}
+  // Respaldo: catálogo antiguo del Cuaderno
+  return (typeof S!=='undefined' && Array.isArray(S.productos)) ? S.productos : [];
+}
+
 function showAC(inputId,listId){
   var q=document.getElementById(inputId).value.toLowerCase();
   var list=document.getElementById(listId);
-  var prods=S.productos.filter(function(p){ return !q||p.nombre.toLowerCase().includes(q); }).slice(0,8);
+  var catalogo=_getProductosCatalogo();
+  var prods=catalogo.filter(function(p){
+    if(!q) return true;
+    return (p.nombre||'').toLowerCase().includes(q)
+        || (p.tipo||'').toLowerCase().includes(q)
+        || (p.ingredienteActivo||'').toLowerCase().includes(q);
+  }).slice(0,10);
   if(!prods.length){ list.style.display='none'; return; }
   list.innerHTML=prods.map(function(p){
-    return '<div class="cc-ac-item" onmousedown="selProd(\''+inputId+'\',\''+listId+'\',\''+p.nombre.replace(/'/g,'')+'\',\''+p.unidad+'\',\''+p.dosis+'\')">'+
-      p.nombre+'<div class="cc-ac-sub">'+(p.tipo||'')+' '+(p.dosis?'· Dosis: '+p.dosis+' '+(p.unidad||''):'')+'</div></div>';
+    var nombreSafe=(p.nombre||'').replace(/'/g,'');
+    return '<div class="cc-ac-item" onmousedown="selProd(\''+inputId+'\',\''+listId+'\',\''+nombreSafe+'\',\''+(p.unidad||'')+'\',\''+(p.dosis||'')+'\')">'+
+      escapeHtml(p.nombre||'')+'<div class="cc-ac-sub">'+escapeHtml(p.tipo||'')+(p.ingredienteActivo?' · '+escapeHtml(p.ingredienteActivo):'')+(p.dosis?' · Dosis: '+p.dosis+' '+(p.unidad||''):'')+'</div></div>';
   }).join('');
   list.style.display='';
 }
@@ -17179,6 +17212,45 @@ function guardarNuevoPano(){
 
 // ══ PRODUCTOS ══
 function renderProdList(){
+  var el=document.getElementById('cc-prod-list'); if(!el) return;
+  var cntLbl=document.getElementById('cc-prod-cnt-lbl');
+  var searchEl=document.getElementById('cc-prod-search');
+  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  // El catálogo ahora vive en el SCI. Mostramos esos productos (solo lectura);
+  // la creación/edición se hace en el módulo Productos del SCI.
+  var catalogo = _getProductosCatalogo();
+  var lista = catalogo.map(function(p,i){ return {p:p, i:i}; });
+  if(q){
+    lista = lista.filter(function(o){
+      var p=o.p;
+      return (p.nombre||'').toLowerCase().indexOf(q)>=0
+        || (p.tipo||'').toLowerCase().indexOf(q)>=0
+        || (p.ingredienteActivo||'').toLowerCase().indexOf(q)>=0
+        || (p.objetivo||'').toLowerCase().indexOf(q)>=0;
+    });
+  }
+  if(cntLbl) cntLbl.textContent='Catálogo del SCI — '+catalogo.length+' productos'+(q?(' ('+lista.length+' encontrados)'):'');
+  if(!catalogo.length){ el.innerHTML='<div class="cc-no-data"><span>📦</span>Sin productos en el catálogo del SCI. Créelos en el módulo Productos del SCI.</div>'; return; }
+  if(!lista.length){ el.innerHTML='<div class="cc-no-data"><span>🔍</span>Sin resultados para "'+escapeHtml(q)+'"</div>'; return; }
+  el.innerHTML='<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:12px;padding:8px 14px;border-bottom:1px solid #eee">📦 El catálogo de productos se administra en el módulo <strong>Productos</strong> del SCI. Aquí se muestra para consulta.</div>'+
+  lista.map(function(o){
+    var p=o.p;
+    var tc=TIPO_C[p.tipo]||TIPO_C['Otro'];
+    var detalle = (p.tipo||'—');
+    if(p.ingredienteActivo) detalle += ' · i.a.: '+escapeHtml(p.ingredienteActivo);
+    if(p.dosis) detalle += ' · '+p.dosis+' '+(p.unidad||'');
+    return '<div style="padding:9px 16px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;font-size:13px">'+
+      '<div style="flex:1;min-width:0"><span style="font-weight:700">'+escapeHtml(p.nombre)+'</span>'+
+        '<div style="font-size:11px;color:#888">'+detalle+'</div>'+
+        (p.objetivo?'<div style="font-size:11px;color:#0a6ed1;margin-top:1px">🎯 '+escapeHtml(p.objetivo)+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span class="cc-badge" style="background:'+tc[0]+';color:'+tc[1]+'">'+(p.tipo||'Otro')+'</span>'+
+      '</div></div>';
+  }).join('');
+  return;
+}
+function _renderProdList_OLD_unused(){
   var el=document.getElementById('cc-prod-list'); if(!el) return;
   var cntLbl=document.getElementById('cc-prod-cnt-lbl');
   // Filtro por buscador
