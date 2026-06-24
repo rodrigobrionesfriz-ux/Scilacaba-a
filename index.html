@@ -1224,7 +1224,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
           <div class="cc-g4">
             <div class="cc-field"><label class="cc-lbl">Producto</label><input type="text" id="cc-mp-n" placeholder="Nombre comercial"></div>
             <div class="cc-field"><label class="cc-lbl">Tipo</label>
-              <select id="cc-mp-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
+              <select id="cc-mp-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
             </div>
             <div class="cc-field"><label class="cc-lbl">Ingrediente activo</label><input type="text" id="cc-mp-ia" placeholder="Ej: Captan 80%"></div>
             <div class="cc-field"><label class="cc-lbl">Principal objetivo</label><input type="text" id="cc-mp-obj" placeholder="Ej: Botrytis"></div>
@@ -1304,7 +1304,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
         <div class="cc-g3">
           <div class="cc-field"><label class="cc-lbl">Fecha <span class="cc-req">*</span></label><input type="date" id="cc-f-fecha"></div>
           <div class="cc-field"><label class="cc-lbl">Tipo <span class="cc-req">*</span></label>
-            <select id="cc-f-tipo"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
+            <select id="cc-f-tipo"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
           </div>
           <div class="cc-field"><label class="cc-lbl">N° Lote</label><input type="text" id="cc-f-lote" placeholder="Ej: CAP-2024-001"></div>
         </div>
@@ -1349,7 +1349,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
           <select id="cc-fl-pano" onchange="renderHist()"><option value="">Todos</option></select>
         </div>
         <div class="cc-field"><label class="cc-lbl">Tipo</label>
-          <select id="cc-fl-tipo" onchange="renderHist()"><option value="">Todos</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
+          <select id="cc-fl-tipo" onchange="renderHist()"><option value="">Todos</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
         </div>
         <div class="cc-field"><label class="cc-lbl">Buscar</label><input type="text" id="cc-fl-q" placeholder="Producto..." oninput="renderHist()"></div>
         <button class="cc-btn cc-btn-s cc-btn-sm" onclick="limpiarFiltros()">✕ Limpiar</button>
@@ -1380,6 +1380,8 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             <button class="cc-tipo-btn" onclick="selTipo(this,'Herbicida')">🌱 Herbicida</button>
             <button class="cc-tipo-btn" onclick="selTipo(this,'Fertilización foliar')">🍃 Fertilización foliar</button>
             <button class="cc-tipo-btn" onclick="selTipo(this,'Bioestimulante')">⚡ Bioestimulante</button>
+            <button class="cc-tipo-btn" onclick="selTipo(this,'Enmienda')">🪨 Enmienda</button>
+            <button class="cc-tipo-btn" onclick="selTipo(this,'Fitoregulador')">🧬 Fitoregulador</button>
           </div>
         </div>
         <div class="cc-card">
@@ -1554,7 +1556,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             <div class="cc-g2">
               <div class="cc-field"><label class="cc-lbl">Producto</label><input type="text" id="cc-ap-n" placeholder="Nombre comercial"></div>
               <div class="cc-field"><label class="cc-lbl">Tipo</label>
-                <select id="cc-ap-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
+                <select id="cc-ap-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
               </div>
               <div class="cc-field"><label class="cc-lbl">Ingrediente activo</label><input type="text" id="cc-ap-ia" placeholder="Ej: Captan 80%"></div>
               <div class="cc-field"><label class="cc-lbl">Principal objetivo</label><input type="text" id="cc-ap-obj" placeholder="Ej: Botrytis, Monilia"></div>
@@ -3647,6 +3649,10 @@ function renderPresupuesto(main){
 <!-- FILTERS -->
 <div class="filters">
   <div class="filter-group">
+    <label>TEMPORADA</label>
+    <select id="f-temporada"><option value="">Todas</option></select>
+  </div>
+  <div class="filter-group">
     <label>MES</label>
     <select id="f-mes"><option value="">Todos</option><option value="MAYO">MAYO</option><option value="JUNIO">JUNIO</option><option value="JULIO">JULIO</option><option value="AGOSTO">AGOSTO</option><option value="SEPTIEMBRE">SEPTIEMBRE</option><option value="OCTUBRE">OCTUBRE</option><option value="NOVIEMBRE">NOVIEMBRE</option><option value="DICIEMBRE">DICIEMBRE</option><option value="ENERO">ENERO</option><option value="FEBRERO">FEBRERO</option><option value="MARZO">MARZO</option><option value="ABRIL">ABRIL</option></select>
   </div>
@@ -4810,6 +4816,7 @@ function openProductForm(codigo=null,opts={}){
         <button type="button" class="pf-tab" data-tab="clasif" onclick="pfTab('clasif')">🗂️ Clasificación</button>
         <button type="button" class="pf-tab" data-tab="inventario" onclick="pfTab('inventario')">📦 Inventario</button>
         <button type="button" class="pf-tab" data-tab="impuestos" onclick="pfTab('impuestos')">💲 Impuestos</button>
+        <button type="button" class="pf-tab" data-tab="aplicacion" onclick="pfTab('aplicacion')">🌿 Aplicación / Cuaderno</button>
       </div>
       <div class="pf-content">
         <div class="pf-pane active" id="pf-pane-generales">
@@ -4876,6 +4883,29 @@ function openProductForm(codigo=null,opts={}){
             </div>
           </div>
         </div>
+        <div class="pf-pane" id="pf-pane-aplicacion">
+          <div class="pf-section-title">Datos agronómicos (Cuaderno de Campo)</div>
+          <div class="hint" style="margin-bottom:10px">Complete estos campos si el producto se usa en aplicaciones del Cuaderno de Campo (fitosanitarios, fertilizantes, etc.). Permiten consolidar la ficha del SCI con los datos del Cuaderno.</div>
+          <div class="form-grid">
+            <div class="form-field"><label>Tipo (agronómico)</label>
+              <select id="fpCCTipo">
+                <option value="">— Ninguno —</option>
+                ${['Fungicida','Bactericida','Insecticida','Acaricida','Herbicida','Fertilizante foliar','Fertilizante edáfico','Fertilizante suelo','Enmienda','Fitoregulador','Bioestimulante','Orgánico','Corrector mineral','Coadyuvante','Otro'].map(t=>`<option value="${t}" ${p?.ccTipo===t?'selected':''}>${t}</option>`).join('')}
+              </select>
+              <div class="hint">Clasificación para el Cuaderno de Campo.</div>
+            </div>
+            <div class="form-field"><label>Ingrediente activo</label><input type="text" id="fpCCIA" value="${escapeHtml(p?.ccIngredienteActivo||'')}" placeholder="Ej: Captan 80%"></div>
+            <div class="form-field"><label>Principal objetivo</label><input type="text" id="fpCCObj" value="${escapeHtml(p?.ccObjetivo||'')}" placeholder="Ej: Botrytis, Monilia"></div>
+            <div class="form-field"><label>Dosis de referencia</label><input type="text" id="fpCCDosis" value="${escapeHtml(p?.ccDosis!=null?String(p.ccDosis):'')}" placeholder="Ej: 1.5"></div>
+            <div class="form-field"><label>Unidad de medida (CC)</label>
+              <select id="fpCCUnidad">
+                <option value="">—</option>
+                ${['mL/100L','L/100L','g/100L','kg/100L','L/ha','kg/ha','mL/ha','g/ha','cc/ha'].map(u=>`<option value="${u}" ${p?.ccUnidad===u?'selected':''}>${u}</option>`).join('')}
+              </select>
+              <div class="hint">Unidad de dosificación usada en el Cuaderno (distinta de la unidad de inventario).</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>`,
     `<button class="btn btn-secondary" id="pfCancel">${opts.fromMov?'← Volver a la entrada':'Cancelar'}</button>
@@ -4927,6 +4957,13 @@ async function saveProduct(codigo,opts){
   const aplicaIVA=document.getElementById('fpIVA')?document.getElementById('fpIVA').checked:true;
   const aplicaIEC=document.getElementById('fpIEC')?document.getElementById('fpIEC').checked:false;
   const aplicaILA=document.getElementById('fpILA')?document.getElementById('fpILA').checked:false;
+  // Datos agronómicos del Cuaderno de Campo (consolidación de productos)
+  const ccTipo=document.getElementById('fpCCTipo')?document.getElementById('fpCCTipo').value:'';
+  const ccIA=document.getElementById('fpCCIA')?document.getElementById('fpCCIA').value.trim():'';
+  const ccObj=document.getElementById('fpCCObj')?document.getElementById('fpCCObj').value.trim():'';
+  const ccDosisRaw=document.getElementById('fpCCDosis')?document.getElementById('fpCCDosis').value.trim():'';
+  const ccDosis=ccDosisRaw!==''?(parseFloat(ccDosisRaw.replace(',','.'))||null):null;
+  const ccUnidad=document.getElementById('fpCCUnidad')?document.getElementById('fpCCUnidad').value:'';
 
   // Validar EAN duplicado al crear (si tiene EAN)
   if(!codigo && ean){
@@ -4943,6 +4980,7 @@ async function saveProduct(codigo,opts){
     }
     p.codigoEAN=ean;p.descripcion=desc;p.unidadMedida=um;p.tipoProducto=tipo;p.grupo=grupo;p.subGrupo=subGrupo;p.manejaAtributos=atrib;p.inventariable=inventariable;p.stockMinimo=stockMin;
     p.aplicaIVA=aplicaIVA;p.aplicaIEC=aplicaIEC;p.aplicaILA=aplicaILA;
+    p.ccTipo=ccTipo;p.ccIngredienteActivo=ccIA;p.ccObjetivo=ccObj;p.ccDosis=ccDosis;p.ccUnidad=ccUnidad;
     p.modificado=new Date().toISOString();
     await dbPut('products',p);
     await audit('producto.editar','Edición de producto',codigo);
@@ -4953,6 +4991,7 @@ async function saveProduct(codigo,opts){
       codigoInterno:cod,codigoEAN:ean,descripcion:desc,unidadMedida:um,
       tipoProducto:tipo,grupo:grupo,subGrupo:subGrupo,manejaAtributos:atrib,inventariable:inventariable,
       aplicaIVA:aplicaIVA,aplicaIEC:aplicaIEC,aplicaILA:aplicaILA,
+      ccTipo:ccTipo,ccIngredienteActivo:ccIA,ccObjetivo:ccObj,ccDosis:ccDosis,ccUnidad:ccUnidad,
       stockMinimo:stockMin,activo:true,creado:new Date().toISOString()
     };
     await dbPut('products',np);
@@ -12445,6 +12484,7 @@ var TIPO_C = {
   'Orgánico':['#d4edda','#155724'],
   'Corrector mineral':['#fde2be','#7a4200'],
   'Coadyuvante':['#e2e3e5','#383d41'],
+  'Fitoregulador':['#e0d4f7','#4a2a82'],
   'Otro':['#e9ecef','#495057']
 };
 
@@ -16298,9 +16338,24 @@ function rpGenerarExcel(){
     // ─── HOJA 4: Consumo por paño ───
     var panosData = {}; // pid -> {pano, aplicaciones, productos:{nombre->qty unitS}, agua}
     confs.forEach(function(c){
-      var aguaPerPano = (c.panoIds||[]).length ? (parseFloat(c.aguaReal||0)||0) / c.panoIds.length : 0;
-      (c.panoIds||[]).forEach(function(pid){
+      // Reparto PROPORCIONAL A LAS HECTÁREAS de cada paño (no en partes iguales).
+      // Se calcula la superficie de cada paño y el total, para prorratear el agua
+      // y el producto según el peso en hectáreas de cada uno.
+      var ids = c.panoIds || [];
+      var hasPorPano = {};
+      var haTotalConf = 0;
+      ids.forEach(function(pid){
         var p = getPano(pid);
+        var ha = p ? (parseFloat(p.hectareas)||0) : 0;
+        hasPorPano[pid] = ha;
+        haTotalConf += ha;
+      });
+      var aguaRealConf = parseFloat(c.aguaReal||0)||0;
+      ids.forEach(function(pid){
+        var p = getPano(pid);
+        var ha = hasPorPano[pid] || 0;
+        // Fracción de este paño según sus hectáreas (si no hay há, repartir igual).
+        var frac = (haTotalConf>0) ? (ha/haTotalConf) : (ids.length ? 1/ids.length : 0);
         if(!panosData[pid]){
           panosData[pid] = {
             pano: p,
@@ -16318,16 +16373,16 @@ function rpGenerarExcel(){
           };
         }
         panosData[pid].aplicaciones++;
-        panosData[pid].agua += aguaPerPano;
-        // Atribuir productos: cada paño recibe una porción proporcional del total
-        var nPanos = (c.panoIds||[]).length || 1;
+        // Agua proporcional a las hectáreas del paño
+        panosData[pid].agua += aguaRealConf * frac;
+        // Productos: cada paño recibe una porción proporcional a sus hectáreas
         (c.productosReales||[]).forEach(function(pr){
           if(!pr.nombre) return;
           var key = pr.nombre + ' [' + (pr.unitS||'') + ']';
           if(!panosData[pid].productos[key]){
             panosData[pid].productos[key] = {nombre:pr.nombre, unitS:pr.unitS||'', qty:0};
           }
-          panosData[pid].productos[key].qty += (parseFloat(pr.qtyAplicada||0)||0) / nPanos;
+          panosData[pid].productos[key].qty += (parseFloat(pr.qtyAplicada||0)||0) * frac;
         });
       });
     });
@@ -18238,6 +18293,7 @@ function safeDestroy(instance, canvasId) {
 let chartLinea, chartTipo, chartSubgrupo, chartDesc, chartDev;
 
 function rebuildFilters(data) {
+  const temporadas = [...new Set(data.map(d => _getTemporada(d)).filter(t => t))].sort();
   const meses = [...new Set(data.map(d => d.MES))].sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
   const tipos = [...new Set(data.map(d => d["TIPO DE COSTO"].trim()))].sort();
   const subgrupos = [...new Set(data.map(d => d["SUB-GRUPO"]))].sort();
@@ -18245,11 +18301,21 @@ function rebuildFilters(data) {
 
   const rebuild = (id, arr) => {
     const sel = document.getElementById(id);
+    if(!sel) return;
     const cur = sel.value;
     sel.innerHTML = '<option value="">Todos</option>';
     arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
     if (arr.includes(cur)) sel.value = cur;
   };
+  // Temporada: usa "Todas" como etiqueta del vacío
+  (function(){
+    const sel = document.getElementById('f-temporada');
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>';
+    temporadas.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+    if (temporadas.includes(cur)) sel.value = cur;
+  })();
   rebuild('f-mes', meses);
   rebuild('f-tipo', tipos);
   rebuild('f-subgrupo', subgrupos);
@@ -18317,8 +18383,21 @@ function populateFilters() {
   refreshLastUpdate();
 }
 
+// Lee el valor de "temporada" de una fila de forma tolerante al nombre exacto
+// de la columna (TEMPORADA, Temporada, temporada). Devuelve '' si no existe.
+function _getTemporada(d){
+  if(!d) return '';
+  if(d.TEMPORADA!=null && d.TEMPORADA!=='') return String(d.TEMPORADA).trim();
+  if(d.Temporada!=null && d.Temporada!=='') return String(d.Temporada).trim();
+  if(d.temporada!=null && d.temporada!=='') return String(d.temporada).trim();
+  // Buscar cualquier clave que empiece por "temporada"
+  for(var k in d){ if(/^temporada$/i.test(String(k).trim())){ var v=d[k]; if(v!=null&&v!=='') return String(v).trim(); } }
+  return '';
+}
+
 function getFilters() {
   return {
+    temporada: document.getElementById('f-temporada') ? document.getElementById('f-temporada').value : '',
     mes: document.getElementById('f-mes').value,
     tipo: document.getElementById('f-tipo').value,
     sub: document.getElementById('f-subgrupo').value,
@@ -18332,6 +18411,7 @@ function filterData() {
   // Map to MONTO PPTO / MONTO REAL based on currency
   return source
     .filter(d =>
+      (!f.temporada || _getTemporada(d) === f.temporada) &&
       (!f.mes || d.MES === f.mes) &&
       (!f.tipo || d["TIPO DE COSTO"].trim() === f.tipo) &&
       (!f.sub || d["SUB-GRUPO"] === f.sub) &&
@@ -18345,6 +18425,7 @@ function filterData() {
 }
 
 function resetFilters() {
+  if(document.getElementById('f-temporada')) document.getElementById('f-temporada').value = '';
   document.getElementById('f-mes').value = '';
   document.getElementById('f-tipo').value = '';
   document.getElementById('f-subgrupo').value = '';
@@ -19061,6 +19142,7 @@ document.getElementById('f-mes').addEventListener('change', render);
 document.getElementById('f-tipo').addEventListener('change', render);
 document.getElementById('f-subgrupo').addEventListener('change', render);
 document.getElementById('f-desc').addEventListener('change', render);
+(function(){ var ft=document.getElementById('f-temporada'); if(ft) ft.addEventListener('change', render); })();
 
 // ===================== DESCARGA HTML =====================
 function downloadDashboard() {
@@ -19333,7 +19415,7 @@ function pzReset(){ _pzReady = false; }
 // Filtros: enganchar change para re-render (en el original había listeners
 // implícitos vía onchange en algunos; aseguramos consistencia).
 function pzWireFilters(){
-  ['f-mes','f-tipo','f-subgrupo','f-desc'].forEach(function(id){
+  ['f-temporada','f-mes','f-tipo','f-subgrupo','f-desc'].forEach(function(id){
     var el = document.getElementById(id);
     if(el && !el._pzWired){ el.addEventListener('change', render); el._pzWired = true; }
   });
