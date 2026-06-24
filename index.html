@@ -14731,6 +14731,193 @@ function bajaConfirmacionEnBodega(ordenId, idx, codigoSCI, cantidad){
   }
 }
 
+// Normaliza un nombre para comparar: minúsculas, sin acentos, sin signos de
+// puntuación, espacios colapsados. Diferencias triviales (acentos, espacios,
+// mayúsculas, guiones) se consideran el mismo producto automáticamente.
+function _normNombreProd(s){
+  return String(s||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // quitar acentos
+    .replace(/[^a-z0-9 ]+/g,' ')                        // signos → espacio
+    .replace(/\s+/g,' ')                                 // colapsar espacios
+    .trim();
+}
+// Distancia de Levenshtein (para detectar nombres "parecidos" pero no iguales).
+function _levenshtein(a,b){
+  a=String(a||''); b=String(b||'');
+  var m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  var prev=[], cur=[], i, j;
+  for(j=0;j<=n;j++) prev[j]=j;
+  for(i=1;i<=m;i++){
+    cur[0]=i;
+    for(j=1;j<=n;j++){
+      var cost=a.charAt(i-1)===b.charAt(j-1)?0:1;
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost);
+    }
+    for(j=0;j<=n;j++) prev[j]=cur[j];
+  }
+  return cur[n];
+}
+// Similitud 0..1 entre dos nombres. Considera el nombre completo y también la
+// primera palabra (la "raíz" comercial), para detectar casos como
+// "Domine" ↔ "Dodine 65 WP" donde difieren en sufijos y una letra.
+function _similitudNombre(a,b){
+  var na=_normNombreProd(a), nb=_normNombreProd(b);
+  if(!na||!nb) return 0;
+  if(na===nb) return 1;
+  // uno contiene al otro como palabra inicial (ej. "dodine" en "dodine 65 wp")
+  if(na.indexOf(nb)>=0 || nb.indexOf(na)>=0) return 0.92;
+  // comparar por nombre completo
+  function simStr(x,y){ var d=_levenshtein(x,y); var ml=Math.max(x.length,y.length); return ml?(1-(d/ml)):0; }
+  var simFull=simStr(na,nb);
+  // comparar por primera palabra (raíz comercial)
+  var ra=na.split(' ')[0], rb=nb.split(' ')[0];
+  var simRaiz=simStr(ra,rb);
+  // si las raíces son muy parecidas (ej. "domine"↔"dodine" = 0.83), pesa fuerte
+  return Math.max(simFull, simRaiz*0.95);
+}
+
+// ── Migración: productos del Cuaderno (S.productos) → fichas del SCI ──
+// Diferencias triviales (acentos, espacios, mayúsculas) se resuelven solas.
+// Para nombres PARECIDOS pero no idénticos, pregunta antes de duplicar.
+async function migrarProductosCuadernoASCI(){
+  if(typeof can==='function' && !can('productos.crear')){
+    if(typeof toast==='function') toast('Sin permiso','Necesita permiso para crear productos','error');
+    return;
+  }
+  var viejos = (typeof S!=='undefined' && Array.isArray(S.productos)) ? S.productos : [];
+  if(!viejos.length){
+    if(typeof toast==='function') toast('Sin productos','No hay productos en el catálogo del Cuaderno para migrar','info');
+    return;
+  }
+  var scis=(STATE.cache.products||[]);
+  // Clasificar cada producto del Cuaderno
+  var aCrear=[], aCompletar=[], dudosos=[];
+  viejos.forEach(function(v){
+    var nombre=(v.nombre||'').trim();
+    if(!nombre) return;
+    // 1) coincidencia exacta tras normalizar → completar
+    var exacto=scis.find(function(p){ return _normNombreProd(p.descripcion)===_normNombreProd(nombre); });
+    if(exacto){ aCompletar.push({v:v, sci:exacto}); return; }
+    // 2) buscar el más parecido por encima de un umbral
+    var mejor=null, mejorSim=0;
+    scis.forEach(function(p){
+      var sim=_similitudNombre(nombre, p.descripcion);
+      if(sim>mejorSim){ mejorSim=sim; mejor=p; }
+    });
+    if(mejor && mejorSim>=0.75){ dudosos.push({v:v, sci:mejor, sim:mejorSim}); }
+    else { aCrear.push(v); }
+  });
+
+  // Si hay dudosos, mostrar un modal de revisión ANTES de ejecutar.
+  if(dudosos.length){
+    _mostrarRevisionMigracion(aCrear, aCompletar, dudosos);
+  } else {
+    await _ejecutarMigracion(aCrear, aCompletar);
+  }
+}
+
+// Modal de revisión: por cada producto dudoso, el usuario decide si es el mismo
+// (vincular y completar) o uno distinto (crear nuevo).
+function _mostrarRevisionMigracion(aCrear, aCompletar, dudosos){
+  var prev=document.getElementById('cc-migra-modal'); if(prev) prev.remove();
+  var modal=document.createElement('div');
+  modal.id='cc-migra-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10007;display:flex;align-items:center;justify-content:center;padding:16px';
+  var filas=dudosos.map(function(d,i){
+    return '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:#666;margin-bottom:6px">¿Son el mismo producto?</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px;margin-bottom:8px">'+
+        '<span style="background:#fef3c7;color:#92600a;padding:3px 8px;border-radius:6px;font-weight:700">📒 Cuaderno: '+escapeHtml(d.v.nombre||'')+'</span>'+
+        '<span style="color:#888">↔</span>'+
+        '<span style="background:#e0e7ff;color:#3730a3;padding:3px 8px;border-radius:6px;font-weight:700">📦 SCI: '+escapeHtml(d.sci.descripcion||'')+'</span>'+
+        '<span style="font-size:11px;color:#999">('+Math.round(d.sim*100)+'% parecido)</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<label style="flex:1;display:flex;align-items:center;gap:6px;font-size:12px;padding:7px 10px;border:1px solid #ddd;border-radius:7px;cursor:pointer;background:#f0fdf4"><input type="radio" name="migra-d-'+i+'" value="mismo" checked> Es el mismo (completar SCI)</label>'+
+        '<label style="flex:1;display:flex;align-items:center;gap:6px;font-size:12px;padding:7px 10px;border:1px solid #ddd;border-radius:7px;cursor:pointer;background:#fef2f2"><input type="radio" name="migra-d-'+i+'" value="distinto"> Es distinto (crear nuevo)</label>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;max-width:640px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="background:#1565c0;color:#fff;padding:14px 18px">'+
+      '<div style="font-size:16px;font-weight:800">🔍 Revisar productos parecidos</div>'+
+      '<div style="font-size:12px;opacity:.9">'+aCrear.length+' nuevos · '+aCompletar.length+' a completar · '+dudosos.length+' por revisar</div>'+
+    '</div>'+
+    '<div style="padding:18px;overflow:auto;flex:1">'+
+      '<div style="font-size:12px;color:#555;margin-bottom:12px">Estos nombres se parecen pero no son idénticos. Indique cuáles son el mismo producto (para no duplicar) y cuáles son distintos.</div>'+
+      filas+
+    '</div>'+
+    '<div style="padding:12px 18px;border-top:1px solid #e3e8ee;display:flex;gap:10px;justify-content:flex-end">'+
+      '<button onclick="document.getElementById(\'cc-migra-modal\').remove()" style="padding:11px 16px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cancelar</button>'+
+      '<button id="cc-migra-confirm" style="padding:11px 18px;border:none;border-radius:9px;background:#1565c0;color:#fff;cursor:pointer;font-size:14px;font-weight:700">Migrar</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  // Guardar el contexto para el confirm
+  window._migraCtx={ aCrear:aCrear, aCompletar:aCompletar, dudosos:dudosos };
+  document.getElementById('cc-migra-confirm').onclick=async function(){
+    var ctx=window._migraCtx;
+    var crear=ctx.aCrear.slice();
+    var completar=ctx.aCompletar.slice();
+    ctx.dudosos.forEach(function(d,i){
+      var sel=document.querySelector('input[name="migra-d-'+i+'"]:checked');
+      var val=sel?sel.value:'mismo';
+      if(val==='mismo') completar.push({v:d.v, sci:d.sci});
+      else crear.push(d.v);
+    });
+    document.getElementById('cc-migra-modal').remove();
+    await _ejecutarMigracion(crear, completar);
+  };
+}
+
+// Ejecuta la migración con las listas ya resueltas.
+async function _ejecutarMigracion(aCrear, aCompletar){
+  var grupos=(STATE.cache.groups||[]).map(function(g){ return g.nombre; });
+  var grupoDef = grupos.length ? grupos[0] : 'General';
+  var tipos=(STATE.cache.productTypes||[]).filter(function(t){ return t.activo!==false; }).map(function(t){ return t.nombre; });
+  var tipoDef = tipos.length ? tipos[0] : 'Insumo agrícola';
+  var creados=0, completados=0;
+  // Completar existentes
+  for(var i=0;i<aCompletar.length;i++){
+    var v=aCompletar[i].v, ex=aCompletar[i].sci;
+    var dosisNum=(v.dosis!=null && String(v.dosis).trim()!=='')?(parseFloat(String(v.dosis).replace(',','.'))||null):null;
+    var cambio=false;
+    if((!ex.ccTipo||ex.ccTipo==='') && v.tipo){ ex.ccTipo=v.tipo; cambio=true; }
+    if((ex.ccIngredienteActivo==null||ex.ccIngredienteActivo==='') && v.ingredienteActivo){ ex.ccIngredienteActivo=v.ingredienteActivo; cambio=true; }
+    if((ex.ccObjetivo==null||ex.ccObjetivo==='') && v.objetivo){ ex.ccObjetivo=v.objetivo; cambio=true; }
+    if((ex.ccDosis==null) && dosisNum!=null){ ex.ccDosis=dosisNum; cambio=true; }
+    if((!ex.ccUnidad||ex.ccUnidad==='') && v.unidad){ ex.ccUnidad=v.unidad; cambio=true; }
+    if(cambio){ ex.modificado=new Date().toISOString(); await dbPut('products',ex); completados++; }
+  }
+  // Crear nuevos
+  for(var k=0;k<aCrear.length;k++){
+    var nv=aCrear[k];
+    var nombre=(nv.nombre||'').trim(); if(!nombre) continue;
+    var dn=(nv.dosis!=null && String(nv.dosis).trim()!=='')?(parseFloat(String(nv.dosis).replace(',','.'))||null):null;
+    var cod=await nextProductCode();
+    var np={
+      codigoInterno:cod, codigoEAN:'', descripcion:nombre,
+      unidadMedida:'UN', tipoProducto:tipoDef, grupo:grupoDef, subGrupo:'',
+      manejaAtributos:false, inventariable:true,
+      aplicaIVA:true, aplicaIEC:false, aplicaILA:false,
+      ccTipo:nv.tipo||'', ccIngredienteActivo:nv.ingredienteActivo||'', ccObjetivo:nv.objetivo||'',
+      ccDosis:dn, ccUnidad:nv.unidad||'',
+      stockMinimo:0, activo:true, creado:new Date().toISOString(), _migradoDeCuaderno:true
+    };
+    await dbPut('products',np);
+    creados++;
+  }
+  if(typeof reloadCache==='function') await reloadCache();
+  if(typeof renderProdList==='function') renderProdList();
+  var msg='Migración completada: '+creados+' creados, '+completados+' completados.';
+  if(typeof confirmDialog==='function'){
+    confirmDialog('✓ Productos migrados', msg+' Ahora aparecen en el catálogo del SCI y en las órdenes.', function(){}, 'Entendido', false);
+  } else if(typeof toast==='function'){
+    toast('Migración completada', msg, 'success');
+  }
+}
+
 function renderResumen(){
   // Mostrar la tarjeta de baja de bodega solo si el usuario tiene permiso.
   try{
@@ -17525,7 +17712,11 @@ function renderProdList(){
   if(cntLbl) cntLbl.textContent='Catálogo del SCI — '+catalogo.length+' productos'+(q?(' ('+lista.length+' encontrados)'):'');
   if(!catalogo.length){ el.innerHTML='<div class="cc-no-data"><span>📦</span>Sin productos en el catálogo del SCI. Créelos en el módulo Productos del SCI.</div>'; return; }
   if(!lista.length){ el.innerHTML='<div class="cc-no-data"><span>🔍</span>Sin resultados para "'+escapeHtml(q)+'"</div>'; return; }
-  el.innerHTML='<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:12px;padding:8px 14px;border-bottom:1px solid #eee">📦 El catálogo de productos se administra en el módulo <strong>Productos</strong> del SCI. Aquí se muestra para consulta.</div>'+
+  el.innerHTML='<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:12px;padding:8px 14px;border-bottom:1px solid #eee">📦 El catálogo de productos se administra en el módulo <strong>Productos</strong> del SCI. Aquí se muestra para consulta.'+
+    (((typeof S!=='undefined' && Array.isArray(S.productos) && S.productos.length) && (typeof can==='function') && can('productos.crear'))
+      ? '<br><button onclick="migrarProductosCuadernoASCI()" style="margin-top:8px;background:#1565c0;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">⬆️ Migrar '+S.productos.length+' producto(s) del Cuaderno al SCI</button>'
+      : '')+
+    '</div>'+
   lista.map(function(o){
     var p=o.p;
     var tc=TIPO_C[p.tipo]||TIPO_C['Otro'];
