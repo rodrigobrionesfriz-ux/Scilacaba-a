@@ -5101,9 +5101,23 @@ async function deleteProduct(codigo){
 function viewProduct(codigo){
   const p=getProduct(codigo);if(!p)return;
   const stocks=STATE.cache.stock.filter(s=>s.codigoInterno===codigo&&s.cantidad>0);
-  const lots=(function(){ var raw=STATE.cache.lots.filter(l=>l.codigoInterno===codigo&&l.cantidad>0);
-    var seen={},dd=[]; raw.forEach(function(l){ var k=l.codigoInterno+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
-      if(!seen[k]){seen[k]=l;dd.push(l);}else{seen[k].cantidad+=l.cantidad;} }); return dd; })();
+  const lots=(function(){
+    var raw=STATE.cache.lots.filter(l=>l.codigoInterno===codigo&&l.cantidad>0);
+    var seen={},dd=[];
+    raw.forEach(function(l){
+      var k=l.codigoInterno+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
+      if(!seen[k]){
+        seen[k]={
+          ...l,
+          cantidad:Number(l.cantidad)||0
+        };
+        dd.push(seen[k]);
+      }else{
+        seen[k].cantidad += Number(l.cantidad)||0;
+      }
+    });
+    return dd;
+  })();
   const movs=STATE.cache.movements.filter(m=>!m.anulado&&(m.detalles||[]).some(d=>d.codigoInterno===codigo)).slice(-10).reverse();
   showModal(`Producto · ${p.codigoInterno}`,
     `<div class="form-grid">
@@ -7172,8 +7186,17 @@ function renderStockTable(){
         // por sincronización Firebase con distintos id pero misma clave real.
         var raw=STATE.cache.lots.filter(l=>l.codigoInterno===r.codigoInterno&&l.bodegaId===r.bodegaId&&l.cantidad>0);
         var seen={}, dedup=[];
-        raw.forEach(function(l){ var k=(l.codigoInterno||'')+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
-          if(!seen[k]){ seen[k]=l; dedup.push(l); } else { seen[k].cantidad+=l.cantidad; }
+        raw.forEach(function(l){
+          var k=(l.codigoInterno||'')+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
+          if(!seen[k]){
+            seen[k]={
+              ...l,
+              cantidad:Number(l.cantidad)||0
+            };
+            dedup.push(seen[k]);
+          }else{
+            seen[k].cantidad += Number(l.cantidad)||0;
+          }
         });
         return dedup;
       })();
@@ -7194,8 +7217,20 @@ function renderStockTable(){
 function showLotsDetail(prod,bod){
   const p=getProduct(prod);const b=getWarehouse(bod);
   const lots=(function(){ var raw=STATE.cache.lots.filter(l=>l.codigoInterno===prod&&l.bodegaId===bod&&l.cantidad>0).sort((a,b)=>(a.fechaVenc||'').localeCompare(b.fechaVenc||''));
-    var seen={},dd=[]; raw.forEach(function(l){ var k=l.codigoInterno+'|'+l.bodegaId+'|'+(l.lote||'');
-      if(!seen[k]){seen[k]=l;dd.push(l);}else{seen[k].cantidad+=l.cantidad;} }); return dd; })();
+    var seen={},dd=[];
+    raw.forEach(function(l){
+      var k=l.codigoInterno+'|'+l.bodegaId+'|'+(l.lote||'');
+      if(!seen[k]){
+        seen[k]={
+          ...l,
+          cantidad:Number(l.cantidad)||0
+        };
+        dd.push(seen[k]);
+      }else{
+        seen[k].cantidad += Number(l.cantidad)||0;
+      }
+    });
+    return dd; })();
   showModal(`Lotes · ${prod} · ${b?b.nombre:bod}`,
     `<div style="font-size:13px;margin-bottom:8px"><strong>${escapeHtml(p?.descripcion||'')}</strong></div>
      <table class="detalle-table"><thead><tr><th>Lote</th><th>Vencimiento</th><th class="num">Cantidad</th><th class="num">Costo</th><th class="num">Valor</th></tr></thead>
