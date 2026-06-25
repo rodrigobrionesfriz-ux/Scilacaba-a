@@ -1543,20 +1543,11 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             <div style="font-size:11px;color:#aaa;margin-top:2px">Mostrará vista previa antes de importar</div>
           </div>
           <div style="margin-top:18px;padding-top:14px;border-top:1px solid #eee">
-            <div style="font-size:14px;font-weight:700;color:#354a5f;margin-bottom:10px">➕ Agregar manual</div>
-            <div class="cc-g2">
-              <div class="cc-field"><label class="cc-lbl">Producto</label><input type="text" id="cc-ap-n" placeholder="Nombre comercial"></div>
-              <div class="cc-field"><label class="cc-lbl">Tipo</label>
-                <select id="cc-ap-t"><option value="">—</option><option>Fungicida</option><option>Bactericida</option><option>Insecticida</option><option>Acaricida</option><option>Herbicida</option><option>Fertilizante foliar</option><option>Fertilizante edáfico</option><option>Fertilizante suelo</option><option>Enmienda</option><option>Fitoregulador</option><option>Bioestimulante</option><option>Orgánico</option><option>Corrector mineral</option><option>Coadyuvante</option><option>Otro</option></select>
-              </div>
-              <div class="cc-field"><label class="cc-lbl">Ingrediente activo</label><input type="text" id="cc-ap-ia" placeholder="Ej: Captan 80%"></div>
-              <div class="cc-field"><label class="cc-lbl">Principal objetivo</label><input type="text" id="cc-ap-obj" placeholder="Ej: Botrytis, Monilia"></div>
-              <div class="cc-field"><label class="cc-lbl">Unidad</label>
-                <select id="cc-ap-u"><option>mL/100L</option><option>L/100L</option><option>g/100L</option><option>kg/100L</option><option>L/ha</option><option>kg/ha</option><option>mL/ha</option><option>g/ha</option><option>cc/ha</option></select>
-              </div>
-              <div class="cc-field"><label class="cc-lbl">Dosis ref.</label><input type="text" id="cc-ap-d" placeholder="Ej: 1.5"></div>
+            <div style="font-size:14px;font-weight:700;color:#354a5f;margin-bottom:10px">➕ Agregar producto</div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px">
+              <p style="font-size:12px;color:#1e40af;margin-bottom:8px">Los productos se crean en la ficha del <strong>SCI</strong> (módulo Productos). Al crearlo, queda disponible en las órdenes del Cuaderno.</p>
+              <button class="cc-btn cc-btn-s cc-btn-sm" onclick="if(typeof openProductForm==='function'){openProductForm();}else{toast('No disponible','','error');}">📦 Crear producto en el SCI</button>
             </div>
-            <button class="cc-btn cc-btn-s cc-btn-sm" onclick="addManualProduct('ap')">Agregar</button>
           </div>
         </div>
         <div class="cc-card" style="padding:0;overflow:hidden">
@@ -4800,12 +4791,12 @@ function renderProductosTable(){
     w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
       '<div class="empty-state-icon">🔍</div>'+
       '<div class="empty-state-title">Busca o filtra productos</div>'+
-      '<div class="empty-state-text">Usa el buscador (código, EAN o descripción) o los filtros de grupo y tipo para encontrar productos.<br>Hay <strong>'+STATE.cache.products.length+'</strong> productos registrados.</div>'+
+      '<div class="empty-state-text">Usa el buscador (código, EAN o descripción) o los filtros de grupo y tipo para encontrar productos.<br>Hay <strong>'+STATE.cache.products.filter(function(p){return p.activo!==false;}).length+'</strong> productos registrados.</div>'+
       (can('productos.crear')?'<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openProductForm()">+ Nuevo producto</button>':'')+
     '</div>';
     return;
   }
-  let prods=STATE.cache.products;
+  let prods=STATE.cache.products.filter(function(p){ return p.activo!==false; });
   if(prodFilter.search){
     const s=prodFilter.search.toLowerCase();
     prods=prods.filter(p=>(p.codigoInterno+' '+p.codigoEAN+' '+p.descripcion).toLowerCase().includes(s));
@@ -5099,21 +5090,20 @@ async function deleteProduct(codigo){
     toast('No se puede eliminar','El producto «'+p.descripcion+'» tiene '+movs.length+' movimiento(s) asociado(s). Debe anularlos primero.','error');
     return;
   }
-  confirmDialog('Eliminar producto','¿Eliminar definitivamente «'+p.descripcion+'» ('+codigo+')?  Esta acción no se puede deshacer.', async function(){
-    p.activo = false;
-    p.eliminado = new Date().toISOString();
-    p.eliminadoPor = STATE.user ? (STATE.user.nombre||STATE.user.id) : '';
-    await dbPut('products', p);
+  confirmDialog('Eliminar producto','¿Eliminar definitivamente «'+p.descripcion+'» ('+codigo+')?  No tiene movimientos asociados. Se eliminará por completo.', async function(){
+    await dbDel('products', codigo);
     await reloadCache();
     closeModal();
     navigate('productos');
-    toast('Producto eliminado','«'+p.descripcion+'» marcado como inactivo','success');
+    toast('Producto eliminado','«'+p.descripcion+'» eliminado definitivamente','success');
   }, 'Eliminar', true);
 }
 function viewProduct(codigo){
   const p=getProduct(codigo);if(!p)return;
   const stocks=STATE.cache.stock.filter(s=>s.codigoInterno===codigo&&s.cantidad>0);
-  const lots=STATE.cache.lots.filter(l=>l.codigoInterno===codigo&&l.cantidad>0);
+  const lots=(function(){ var raw=STATE.cache.lots.filter(l=>l.codigoInterno===codigo&&l.cantidad>0);
+    var seen={},dd=[]; raw.forEach(function(l){ var k=l.codigoInterno+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
+      if(!seen[k]){seen[k]=l;dd.push(l);}else{seen[k].cantidad+=l.cantidad;} }); return dd; })();
   const movs=STATE.cache.movements.filter(m=>!m.anulado&&(m.detalles||[]).some(d=>d.codigoInterno===codigo)).slice(-10).reverse();
   showModal(`Producto · ${p.codigoInterno}`,
     `<div class="form-grid">
@@ -5140,11 +5130,16 @@ function viewProduct(codigo){
 }
 
 async function exportProductosExcel(){
-  const data=STATE.cache.products.map(p=>({
+  const data=STATE.cache.products.filter(function(p){ return p.activo!==false; }).map(p=>({
     'Código Interno':p.codigoInterno,'EAN':p.codigoEAN||'',
     'Descripción':p.descripcion,'UM':p.unidadMedida,
     'Tipo':p.tipoProducto||'','Grupo':p.grupo||'','Sub-Grupo':p.subGrupo||'',
     'Maneja Atributos':p.manejaAtributos?'SI':'NO',
+    'Tipo Agronómico (CC)':p.ccTipo||'',
+    'Ingrediente Activo':p.ccIngredienteActivo||'',
+    'Principal Objetivo':p.ccObjetivo||'',
+    'Dosis Referencia':p.ccDosis!=null?p.ccDosis:'',
+    'Unidad CC':p.ccUnidad||'',
     'Stock Total':getStockTotal(p.codigoInterno)
   }));
   const ws=XLSX.utils.json_to_sheet(data);
@@ -7172,7 +7167,16 @@ function renderStockTable(){
   w.innerHTML=`<div class="table-wrap"><table class="data">
     <thead><tr><th>Bodega</th><th>Código</th><th>Producto</th><th>Grupo / Sub-grupo</th><th>UM</th><th class="num">Stock</th><th class="num">Costo PPP</th><th class="num">Valor</th><th class="center">Lote</th></tr></thead>
     <tbody>${rows.map(r=>{
-      const lots=STATE.cache.lots.filter(l=>l.codigoInterno===r.codigoInterno&&l.bodegaId===r.bodegaId&&l.cantidad>0);
+      const lots=(function(){
+        // De-duplicar lotes por (codigoInterno, bodegaId, lote) — pueden existir duplicados
+        // por sincronización Firebase con distintos id pero misma clave real.
+        var raw=STATE.cache.lots.filter(l=>l.codigoInterno===r.codigoInterno&&l.bodegaId===r.bodegaId&&l.cantidad>0);
+        var seen={}, dedup=[];
+        raw.forEach(function(l){ var k=(l.codigoInterno||'')+'|'+(l.bodegaId||'')+'|'+(l.lote||'');
+          if(!seen[k]){ seen[k]=l; dedup.push(l); } else { seen[k].cantidad+=l.cantidad; }
+        });
+        return dedup;
+      })();
       return `<tr><td>${escapeHtml(r.b?r.b.nombre:r.bodegaId)}</td>
         <td class="mono"><strong>${r.codigoInterno}</strong></td>
         <td>${escapeHtml(r.p.descripcion)}</td>
@@ -7189,7 +7193,9 @@ function renderStockTable(){
 }
 function showLotsDetail(prod,bod){
   const p=getProduct(prod);const b=getWarehouse(bod);
-  const lots=STATE.cache.lots.filter(l=>l.codigoInterno===prod&&l.bodegaId===bod&&l.cantidad>0).sort((a,b)=>(a.fechaVenc||'').localeCompare(b.fechaVenc||''));
+  const lots=(function(){ var raw=STATE.cache.lots.filter(l=>l.codigoInterno===prod&&l.bodegaId===bod&&l.cantidad>0).sort((a,b)=>(a.fechaVenc||'').localeCompare(b.fechaVenc||''));
+    var seen={},dd=[]; raw.forEach(function(l){ var k=l.codigoInterno+'|'+l.bodegaId+'|'+(l.lote||'');
+      if(!seen[k]){seen[k]=l;dd.push(l);}else{seen[k].cantidad+=l.cantidad;} }); return dd; })();
   showModal(`Lotes · ${prod} · ${b?b.nombre:bod}`,
     `<div style="font-size:13px;margin-bottom:8px"><strong>${escapeHtml(p?.descripcion||'')}</strong></div>
      <table class="detalle-table"><thead><tr><th>Lote</th><th>Vencimiento</th><th class="num">Cantidad</th><th class="num">Costo</th><th class="num">Valor</th></tr></thead>
@@ -8551,6 +8557,23 @@ async function saveMovimiento(){
       }
       if(cfg.reqBodDest){
         m.bodegaDestinoId=movDraft.bodegaDestinoId;
+      }
+      // Validar saldo suficiente en bodega para SALIDAS (no traspasos, que tienen su propia lógica)
+      if(m.tipo==='SAL' && m.tipoMovimiento!=='TRASPASO BODEGA'){
+        var insuficientes=[];
+        for(var _vi=0;_vi<m.detalles.length;_vi++){
+          var _d=m.detalles[_vi];
+          var _st=getStock(_d.codigoInterno, m.bodegaId);
+          var _disp=_st?_st.cantidad:0;
+          if(_d.cantidad>_disp){
+            var _pn=getProduct(_d.codigoInterno);
+            insuficientes.push((_pn?_pn.descripcion:_d.codigoInterno)+': disponible '+fmtNum(_disp,2)+', solicitado '+fmtNum(_d.cantidad,2));
+          }
+        }
+        if(insuficientes.length>0){
+          toast('Saldo insuficiente','No se puede rebajar más de lo disponible en bodega:\n'+insuficientes.join('\n'),'error');
+          return;
+        }
       }
       await applyMovementToStock(m);
       await dbPut('movements',m);
