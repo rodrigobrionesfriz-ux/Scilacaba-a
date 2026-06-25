@@ -4229,7 +4229,13 @@ async function recalcularStock(){
 }
 
 async function _ejecutarRecalculoStock(){
-  // 1. Borrar stock y lotes actuales
+  // 0. Snapshot de los lotes existentes ANTES de limpiar. Necesario para
+  //    sepultar (tombstone) en la nube los registros que ya no correspondan:
+  //    'lots' es un store ACUMULATIVO que se fusiona por id, así que un simple
+  //    dbClear local NO basta — sin lápida, la nube los reinyecta al sincronizar.
+  const lotesPrevios=await dbAll('lots');
+
+  // 1. Borrar stock y lotes actuales (local)
   await dbClear('stock');
   await dbClear('lots');
 
@@ -4244,7 +4250,11 @@ async function _ejecutarRecalculoStock(){
   const lotKey=(cod,bod,lote)=>`${cod}|${bod}|${lote||''}`;
   const ensureLot=(cod,bod,lote,fechaVenc)=>{
     const k=lotKey(cod,bod,lote);
-    if(!lotMap[k])lotMap[k]={id:uid(),codigoInterno:cod,bodegaId:bod,lote:lote||'',fechaVenc:fechaVenc||'',cantidad:0,costo:0};
+    // ID DETERMINÍSTICO (clave real cod|bod|lote) en vez de uid() aleatorio.
+    // Así cada recálculo reescribe el MISMO registro en lugar de crear uno
+    // nuevo; la fusión acumulativa de la nube colapsa por id en vez de
+    // multiplicar. Esto hace el recálculo idempotente.
+    if(!lotMap[k])lotMap[k]={id:'lot|'+k,codigoInterno:cod,bodegaId:bod,lote:lote||'',fechaVenc:fechaVenc||'',cantidad:0,costo:0};
     return lotMap[k];
   };
 
@@ -4325,14 +4335,37 @@ async function _ejecutarRecalculoStock(){
     stockEntries++;
   }
   let lotEntries=0;
+  const idsNuevos=new Set();
   for(const k of Object.keys(lotMap)){
     const lot=lotMap[k];
     await dbPut('lots',lot);
+    idsNuevos.add(lot.id);
     lotEntries++;
   }
 
+  // 5. Sepultar (tombstone) en la nube los lotes previos cuyo id ya no
+  //    corresponde a la reconstrucción. 'lots' es un store ACUMULATIVO que se
+  //    fusiona por id; sin lápida, los registros viejos (ids aleatorios de
+  //    versiones anteriores del recálculo) se reinyectan desde la nube al
+  //    sincronizar y el saldo de lotes se infla sin control. Se hace en lote
+  //    (un solo dbPut a config) para no spamear la sincronización.
+  let lotesSepultados=0;
+  try{
+    const huerfanos=(lotesPrevios||[]).filter(lp=>lp&&lp.id!==undefined&&!idsNuevos.has(lp.id));
+    if(huerfanos.length){
+      const tombs=_sciGetTombstones();
+      if(!tombs.lots)tombs.lots={};
+      const ahora=Date.now();
+      for(const lp of huerfanos){ tombs.lots[String(lp.id)]=ahora; lotesSepultados++; }
+      const tombObj={key:_SCI_TOMB_KEY,tombs:tombs,_updatedAt:new Date().toISOString()};
+      STATE.cache.config=STATE.cache.config||{};
+      STATE.cache.config[_SCI_TOMB_KEY]=tombObj;
+      await dbPut('config',tombObj); // dbPut sincroniza config (con las lápidas) a la nube
+    }
+  }catch(e){ console.error('Error al sepultar lotes huérfanos en recálculo:',e); }
+
   await reloadCache();
-  return {movProcesados:procesados,stockEntries,lotEntries};
+  return {movProcesados:procesados,stockEntries,lotEntries,lotesSepultados};
 }
 
 /* ═══════════════ DETECCIÓN DE INCONSISTENCIAS DE STOCK ═══════════════
