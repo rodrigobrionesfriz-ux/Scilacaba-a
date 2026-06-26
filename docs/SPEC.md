@@ -17,7 +17,7 @@ SCI es un sistema de inventario para una empresa agrícola, con un fuerte compon
 - **Tailwind + shadcn/ui** — UI; **TanStack Table** (tablas), **recharts** (gráficos), **React Hook Form + zod**.
 - **Dexie (IndexedDB)** — solo módulos de terreno (offline) + PWA (next-pwa/serwist).
 - **SheetJS (XLSX)** — import/export Excel (server-side). **@react-pdf/renderer** — PDFs.
-- **Vitest** (unit/integración) + **Playwright** (e2e).
+- **Vitest** (unit/integración). E2E por definir (Playwright descartado).
 - **Hosting**: Railway (Postgres + app).
 
 ## Decisiones globales (detalle en DECISIONS.md)

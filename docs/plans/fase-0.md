@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Levantar el esqueleto de SCI v2 — Next.js + TS + Tailwind con estructura **por capas técnicas** (ADR-013), tooling completo (shadcn, ESLint con boundaries, Prettier, Drizzle, Vitest, Playwright) y CI verde en PR a `develop`.
+**Goal:** Levantar el esqueleto de SCI v2 — Next.js + TS + Tailwind con estructura **por capas técnicas** (ADR-013), tooling completo (shadcn, ESLint con boundaries, Prettier, Drizzle, Vitest) y CI verde en PR a `develop`. (Sin Playwright — descartado por el usuario.)
 
 **Architecture:** Capas técnicas bajo `src/` (ADR-013, supersede la screaming-modular de ADR-006). Detalle de las 14 reglas de código/estructura en `docs/CONVENTIONS.md`. Dirección de dependencias vigilada por `eslint-plugin-boundaries` (`boundaries/dependencies`): la UI no es importada por capas inferiores, el acceso a datos pasa por `server`, las hojas no importan hacia arriba.
 
-**Tech Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 + shadcn/ui (base-nova/base-ui) · zod · ESLint flat config (`eslint-config-next` + `eslint-plugin-boundaries`) · Prettier · Drizzle ORM 0.45 + drizzle-kit 0.31 (driver **pg** / node-postgres) · Vitest 4 · Playwright 1.61 · GitHub Actions. **pnpm** 11 como package manager.
+**Tech Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 + shadcn/ui (base-nova/base-ui) · zod · ESLint flat config (`eslint-config-next` + `eslint-plugin-boundaries`) · Prettier · Drizzle ORM 0.45 + drizzle-kit 0.31 (driver **pg** / node-postgres) · Vitest 4 · GitHub Actions. **pnpm** 11 como package manager.
 
 ## Global Constraints
 
@@ -39,10 +39,9 @@
 │   └── db/
 │       ├── client.ts                         # drizzle(postgres(DATABASE_URL))
 │       └── schema.ts                         # placeholder _health (se borra en Fase 1)
-├── e2e/dashboard.spec.ts                     # Playwright: /dashboard renderiza
 ├── drizzle/                                  # output de migraciones
 ├── .github/workflows/ci.yml
-├── drizzle.config.ts · vitest.config.ts · playwright.config.ts
+├── drizzle.config.ts · vitest.config.ts
 ├── eslint.config.mjs · .prettierrc.json · components.json
 ├── pnpm-workspace.yaml · .env.example · tsconfig.json · package.json
 ```
@@ -84,7 +83,7 @@ Demuestra `app → server → {types, schemas, constants, utils, components}` co
 - [x] `pnpm add -D eslint-plugin-boundaries prettier eslint-config-prettier`.
 - [x] `eslint.config.mjs`: `settings."boundaries/elements"` define una capa por carpeta (`app, server, components, hooks, db, lib, utils, schemas, types, constants`); regla `boundaries/dependencies` (v6, no deprecada) con `default: "disallow"` y allow-list por capa (ver `docs/CONVENTIONS.md` → Boundaries). `eslint-config-prettier` al final.
 - [x] `.prettierrc.json`: `{ "semi": false, "singleQuote": false, "trailingComma": "all", "printWidth": 80 }`; `.prettierignore`.
-- [x] Scripts: `lint: "eslint ."`, `typecheck: "tsc --noEmit"`, `format`/`format:check`, `test`/`e2e`/`db:*`.
+- [x] Scripts: `lint: "eslint ."`, `typecheck: "tsc --noEmit"`, `format`/`format:check`, `test`/`db:*`.
 - [x] Verde + **prueba negativa**: import `server → components` falla con `boundaries/dependencies`. Commit (incluido en el commit del pivot).
 
 ## Task 5: Drizzle + drizzle-kit + client + schema placeholder + .env.example
@@ -158,22 +157,15 @@ describe("formatCLP", () => {
 - [ ] **Step 3:** `vitest.config.ts` con `resolve: { tsconfigPaths: true }` (nativo en Vitest 4, sin plugin), `environment: "node"`, `include: ["src/**/*.{test,spec}.ts"]`, `exclude: ["e2e/**", "node_modules/**"]`.
 - [ ] **Step 4:** `pnpm test` → verde. Si el locale es-CL de Node no diera `"$1.000"`, ajustar `formatCLP` a formateo manual. Commit.
 
-## Task 7: Playwright con un e2e verde
+## Task 7: ~~Playwright~~ — DESCARTADO
 
-**Files:** Create `playwright.config.ts`, `e2e/dashboard.spec.ts`. Modify `.gitignore`.
-
-- [ ] **Step 1:** `pnpm add -D @playwright/test` && `pnpm exec playwright install chromium`.
-- [ ] **Step 2:** `playwright.config.ts`: `testDir: "./e2e"`, `use.baseURL: "http://localhost:3000"`, `webServer: { command: "pnpm build && pnpm start", url: ..., reuseExistingServer: !process.env.CI, timeout: 120_000 }`.
-- [ ] **Step 3:** `e2e/dashboard.spec.ts`: `page.goto("/dashboard")` y `expect(page.getByRole("heading", { name: /SCI v2 — Dashboard/i })).toBeVisible()`.
-- [ ] **Step 4:** `.gitignore`: `/test-results`, `/playwright-report`, `/blob-report`, `/playwright/.cache`.
-- [ ] **Step 5:** `pnpm e2e` → 1 passed. Commit.
+Playwright y los navegadores (Chromium/Chrome) quedan **descartados** por decisión del usuario. No hay e2e en Fase 0; la herramienta e2e queda por definir. Los tests de Fase 0 son unit/integración con Vitest (Task 6).
 
 ## Task 8: GitHub Actions CI (PR → develop)
 
 **Files:** Create `.github/workflows/ci.yml`.
 
-- [ ] Job `verify` (con servicio `postgres:16`, `env.DATABASE_URL`): `pnpm/action-setup@v4` + `actions/setup-node@v4 {node-version: 24, cache: pnpm}` + `pnpm install --frozen-lockfile` + `pnpm typecheck` + `pnpm lint` + `pnpm test` + `pnpm db:migrate` + `pnpm build`.
-- [ ] Job `e2e`: setup pnpm/node + `pnpm install --frozen-lockfile` + `pnpm exec playwright install --with-deps chromium` + `pnpm e2e`.
+- [ ] Job único `verify` (con servicio `postgres:16`, `env.DATABASE_URL`): `pnpm/action-setup@v4` + `actions/setup-node@v4 {node-version: 24, cache: pnpm}` + `pnpm install --frozen-lockfile` + `pnpm typecheck` + `pnpm lint` + `pnpm test` + `pnpm db:migrate` + `pnpm build`. (Sin job e2e.)
 - [ ] Sanity local: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`. Commit.
 
 ## Task 9: Actualizar HANDOFF y abrir PR a develop
@@ -185,8 +177,8 @@ describe("formatCLP", () => {
 
 ## Self-Review
 
-**Cobertura de entregables Fase 0:** Next+TS+Tailwind + estructura por capas + slice ejemplo (Tasks 1–2) ✓ · shadcn + ESLint boundaries + Prettier (Tasks 3–4) ✓ · Drizzle + drizzle-kit + config + scripts (Task 5) · Vitest + Playwright verdes (Tasks 6–7) · CI typecheck+lint+test+build (+db:migrate) (Task 8) · `.env.example` + `src/db/client.ts` (Task 5) · HANDOFF + PR (Task 9).
+**Cobertura de entregables Fase 0:** Next+TS+Tailwind + estructura por capas + slice ejemplo (Tasks 1–2) ✓ · shadcn + ESLint boundaries + Prettier (Tasks 3–4) ✓ · Drizzle + drizzle-kit + config + scripts (Task 5) · Vitest verde (Task 6) · CI typecheck+lint+test+build (+db:migrate) (Task 8) · `.env.example` + `src/db/client.ts` (Task 5) · HANDOFF + PR (Task 9).
 
-**Desviaciones respecto al prompt original:** (1) pnpm en vez de npm (preferencia del usuario). (2) Arquitectura por capas (ADR-013) en vez de screaming-modular; por tanto el client de DB es `src/db/client.ts` (no `src/shared/db`). Ambas decididas por el usuario durante Fase 0.
+**Desviaciones respecto al prompt original (decididas por el usuario en Fase 0):** (1) pnpm en vez de npm. (2) Arquitectura por capas (ADR-013) en vez de screaming-modular; el client de DB es `src/db/client.ts` (no `src/shared/db`). (3) Driver `pg` en vez de postgres-js. (4) **Sin Playwright/e2e** (entregable original de Playwright descartado).
 
 **Riesgos:** `Intl` es-CL en Node (fallback manual en `formatCLP`). `next build` no importa `src/db/client.ts` en Fase 0 (no se ejecuta el throw); CI define `DATABASE_URL`. shadcn `Button` quedó como `function` (rule 1 arrow) — vendored; se revisa en la sesión de reglas/skills.
