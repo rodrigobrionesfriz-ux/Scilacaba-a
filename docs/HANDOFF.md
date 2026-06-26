@@ -3,8 +3,8 @@
 > **Este es el PUNTO DE ENTRADA.** Cualquier sesión nueva (humano o agente) empieza leyendo este archivo de principio a fin antes de tocar nada. Se actualiza **cada sesión**.
 
 **Última actualización**: 2026-06-26 por sesión Fase 0 (Claude)
-**Rama activa**: `feat/fase-0-scaffold` (PR a `develop`)
-**Estado global**: Fase 0 (scaffold + tooling) HECHA. Pendiente: merge del PR + Fase 1.
+**Rama activa**: `develop`
+**Estado global**: Fase 0 (scaffold + tooling) **mergeada a `develop`** (PR #1). Siguiente: Fase 1.
 
 ---
 
@@ -26,7 +26,7 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 | Fase | Módulo / contenido | Estado | Rama / PR | Verificado |
 |------|--------------------|--------|-----------|------------|
 | —    | Bootstrap (ramas + docs/) | HECHO | develop | sí |
-| 0    | Scaffold + tooling + CI (Postgres efímero) | HECHO | feat/fase-0-scaffold (PR a develop) | local (dev/build/test/typecheck/lint + db:migrate) |
+| 0    | Scaffold + tooling + CI (Postgres efímero) | HECHO (merged) | develop (PR #1) | CI verde + local (dev/build/test/typecheck/lint + db:migrate) |
 | 1    | Schema Drizzle + migrador + datos reales | PENDIENTE | — | — |
 | 2    | better-auth + usuarios + permisos + layout/sidebar | PENDIENTE | — | — |
 | 3    | Maestros CRUD (productos, bodegas, prov., clientes, centros) | PENDIENTE | — | — |
@@ -75,7 +75,7 @@ Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra
 
 ## Próximos pasos (orden)
 
-1. **Mergear el PR de Fase 0** a `develop` (revisar CI verde en GitHub).
+1. ~~Mergear el PR de Fase 0~~ — **hecho** (PR #1 → `develop`).
 2. **Reglas + skills** (hecho en esta sesión): las 14 reglas viven en `.claude/rules/{estilo,estructura,boundaries}.md`, cargadas por `CLAUDE.md`; `docs/CONVENTIONS.md` es puntero. Skills en `.claude/skills/`: `sci-conventions`, `new-entity`, `new-page`, `new-component`. **Decidido:** shadcn vendored (`src/components/ui`) es la **única** excepción a la regla 1 → el `Button` se queda con `function`. Pendiente opcional: lint que falle ante `function`/`any`/`as` (las reglas hoy son guía + boundaries; el resto se vigila a mano).
 3. **Fase 1 — Schema Drizzle real + migrador**: reemplazar el placeholder `_health` por el schema real; conseguir el export de los 3 docs Firestore; provisionar Postgres en Railway y obtener `DATABASE_URL` real; decidir herramienta e2e (Playwright descartado).
 
@@ -94,4 +94,4 @@ Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra
 | Fecha | Sesión | Qué se hizo | Commit/PR |
 |-------|--------|-------------|-----------|
 | 2026-06-25 | bootstrap | Rama `develop` desde `origin/main`; sistema de handoff en `docs/` | (este commit) |
-| 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013) + `docs/CONVENTIONS.md`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | `feat/fase-0-scaffold` (PR a develop) |
+| 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013); reglas en `.claude/rules` + skills en `.claude/skills`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | PR #1 merged a `develop` (`8eac4e4`) |
