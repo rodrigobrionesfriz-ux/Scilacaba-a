@@ -13,10 +13,10 @@
 - **No modificar `index.html`** — es la referencia viva de funcionalidad (ADR-002). No tocar `docs/` salvo `HANDOFF.md` y este plan.
 - **Estructura de carpetas fija:** `app/` en la raíz (NO `src/app`); módulos en `src/modules/<m>`; kernel en `src/shared`. Alias `@/*` → `./src/*`.
 - **Regla de boundaries:** `app` solo importa el `index.ts` de un módulo; un módulo importa `shared` y sus propios archivos, nunca internals de otro módulo; `shared` solo importa `shared`. Verificada en lint.
-- **Package manager:** npm (el handoff usa `npm ci` / `npm run`). Node 24.
+- **Package manager:** pnpm (preferencia del usuario). Node 24. `packageManager: pnpm@11.1.2` pineado en `package.json`. Builds de deps con scripts (`sharp`, `unrs-resolver`, `@tailwindcss/oxide`) habilitados vía `allowBuilds` en `pnpm-workspace.yaml` (pnpm 11 ignora scripts de lifecycle por defecto y ya NO lee config del campo `pnpm` de package.json).
 - **Commits:** convencionales `feat(scope): ...`. **NUNCA incluir `Co-Authored-By`** en los commits.
 - **Fase 0 NO usa Railway ni datos reales.** `DATABASE_URL` real es Fase 1. Para Fase 0 basta un Postgres efímero (servicio en CI) y un schema *placeholder* (`_health`) que se elimina en Fase 1.
-- **Éxito:** `npm run dev`, `npm run build`, `npm test`, `npm run typecheck`, `npm run lint` en verde local + **CI verde** en el PR a `develop`.
+- **Éxito:** `pnpm dev`, `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint` en verde local + **CI verde** en el PR a `develop`.
 
 ## File Structure
 
@@ -69,20 +69,19 @@
 - [ ] **Step 1: Generar Next.js 16 en un tmp dir (no interactivo)**
 
 ```bash
-cd /tmp/claude-1000/-home-berserk-projects-Scilacaba-a/48471432-1fbf-452d-bbea-e8f8d1bda029/scratchpad
-npx create-next-app@latest sci-scaffold --yes --ts --tailwind --eslint --app --no-src-dir --import-alias "@/*" --use-npm
+cd <scratchpad>
+pnpm dlx create-next-app@latest sci-scaffold --yes --ts --tailwind --eslint --app --no-src-dir --import-alias "@/*" --use-pnpm
 ```
-Expected: proyecto generado en `.../scratchpad/sci-scaffold` (App Router en raíz, sin `src/`).
+Expected: proyecto generado en `<scratchpad>/sci-scaffold` (App Router en raíz, sin `src/`).
 
 - [ ] **Step 2: Copiar al repo sin pisar index.html / docs / .git**
 
 ```bash
-cd /tmp/claude-1000/-home-berserk-projects-Scilacaba-a/48471432-1fbf-452d-bbea-e8f8d1bda029/scratchpad/sci-scaffold
-rm -rf .git
-cp -rn node_modules /home/berserk/projects/Scilacaba-a/ 2>/dev/null || true
+cd <scratchpad>/sci-scaffold
+rm -rf .git node_modules .next
 rsync -a --exclude '.git' --exclude 'README.md' ./ /home/berserk/projects/Scilacaba-a/
 ```
-(Si `rsync` no está, usar `cp -a` archivo por archivo evitando README.md.) Verificar que `index.html`, `docs/`, `README.md` siguen intactos: `cd /home/berserk/projects/Scilacaba-a && git status` debe mostrar solo archivos nuevos de Next, nunca `modified: index.html`.
+(Se copian solo los fuentes; las deps se instalan con `pnpm install` en el repo, NO se copia `node_modules`.) Verificar que `index.html`, `docs/`, `README.md` siguen intactos: `cd /home/berserk/projects/Scilacaba-a && git status` debe mostrar solo archivos nuevos de Next, nunca `modified: index.html`.
 
 - [ ] **Step 3: tsconfig paths → ./src/***
 
@@ -91,19 +90,33 @@ En `tsconfig.json`, fijar el alias para que `@/*` resuelva a `src/` (create-next
 "paths": { "@/*": ["./src/*"] }
 ```
 
-- [ ] **Step 4: Verificar dev y build**
+- [ ] **Step 4: Instalar deps con pnpm + habilitar builds**
 
 ```bash
 cd /home/berserk/projects/Scilacaba-a
-npm run build
+pnpm install
 ```
-Expected: build OK (la home por defecto de Next compila). `npm run dev` levanta en :3000.
+Next 16 corre un chequeo de deps antes de `build` que invoca `pnpm install`; pnpm 11 bloquea los scripts de lifecycle por defecto y sale con error. Añadir `packageManager: "pnpm@11.1.2"` a `package.json` y crear/editar `pnpm-workspace.yaml`:
+```yaml
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  "@tailwindcss/oxide": true
+```
+Luego `rm -rf node_modules && pnpm install` para que se ejecuten los builds.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Verificar dev y build**
+
+```bash
+pnpm build
+```
+Expected: build OK (la home por defecto de Next compila). `pnpm dev` levanta en :3000.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(scaffold): bootstrap Next.js 16 + TS + Tailwind (App Router en raíz)"
+git commit -m "feat(scaffold): bootstrap Next.js 16 + TS + Tailwind (App Router en raíz) con pnpm"
 ```
 
 ---
@@ -156,8 +169,8 @@ export default function Page() {
 - [ ] **Step 4: Verificar build + typecheck**
 
 ```bash
-npm run build
-npx tsc --noEmit
+pnpm build
+pnpm exec tsc --noEmit
 ```
 Expected: ambos OK; `/` renderiza el dashboard placeholder.
 
@@ -179,7 +192,7 @@ git commit -m "feat(dashboard): módulo de ejemplo wired app→module→shared"
 - [ ] **Step 1: Inicializar shadcn con defaults**
 
 ```bash
-npx shadcn@latest init -d
+pnpm dlx shadcn@latest init -d
 ```
 Si pregunta, aceptar defaults (base color neutral, CSS variables). Esto crea `components.json` y el helper `cn`.
 
@@ -202,7 +215,7 @@ Mover el helper generado a `src/shared/utils/cn.ts` si shadcn lo dejó en otro l
 - [ ] **Step 3: Añadir Button**
 
 ```bash
-npx shadcn@latest add button
+pnpm dlx shadcn@latest add button
 ```
 Expected: `src/shared/ui/button.tsx` creado.
 
@@ -218,7 +231,7 @@ import { Button } from "@/shared/ui/button";
 - [ ] **Step 5: Verificar build**
 
 ```bash
-npm run build
+pnpm build
 ```
 Expected: OK; el botón shadcn renderiza con estilos.
 
@@ -242,7 +255,7 @@ Enforce `app → modules (index) → shared` y prohíbe internals cruzados.
 - [ ] **Step 1: Instalar deps**
 
 ```bash
-npm i -D eslint-plugin-boundaries prettier eslint-config-prettier
+pnpm add -D eslint-plugin-boundaries prettier eslint-config-prettier
 ```
 
 - [ ] **Step 2: Configurar boundaries en `eslint.config.mjs`**
@@ -309,10 +322,10 @@ index.html
 - [ ] **Step 5: Verificar lint verde y que la regla MUERDE**
 
 ```bash
-npm run lint
+pnpm lint
 ```
 Expected: PASS sobre el código actual (app importa solo el index del módulo).
-Prueba negativa (no commitear): crear `src/modules/dashboard/ui/leak.ts` con `import { foo } from "@/modules/otro/ui/secreto"` o hacer que `app/page.tsx` importe `@/modules/dashboard/ui/dashboard-page` (internal, no el index) → `npm run lint` debe FALLAR con error de `boundaries/entry-point` o `boundaries/element-types`. Revertir la prueba.
+Prueba negativa (no commitear): crear `src/modules/dashboard/ui/leak.ts` con `import { foo } from "@/modules/otro/ui/secreto"` o hacer que `app/page.tsx` importe `@/modules/dashboard/ui/dashboard-page` (internal, no el index) → `pnpm lint` debe FALLAR con error de `boundaries/entry-point` o `boundaries/element-types`. Revertir la prueba.
 
 - [ ] **Step 6: Commit**
 
@@ -335,8 +348,8 @@ git commit -m "chore(lint): ESLint boundaries (app→module→shared) + Prettier
 - [ ] **Step 1: Instalar deps**
 
 ```bash
-npm i drizzle-orm postgres
-npm i -D drizzle-kit dotenv
+pnpm add drizzle-orm postgres
+pnpm add -D drizzle-kit dotenv
 ```
 
 - [ ] **Step 2: Schema placeholder**
@@ -407,8 +420,8 @@ Añadir `.env` a `.gitignore` (create-next-app ya ignora `.env*`; verificar).
 docker run --rm -d --name sci-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=sci -p 5432:5432 postgres:16
 export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/sci"
 sleep 4
-npm run db:generate   # genera drizzle/0000_*.sql para _health
-npm run db:migrate    # aplica la migración → OK
+pnpm db:generate   # genera drizzle/0000_*.sql para _health
+pnpm db:migrate    # aplica la migración → OK
 docker stop sci-pg
 ```
 Expected: `db:generate` crea un SQL en `drizzle/`; `db:migrate` aplica sin error. (Si no hay Docker local, se valida en CI — Task 7.)
@@ -431,7 +444,7 @@ git commit -m "feat(db): Drizzle + drizzle-kit + client + schema placeholder _he
 - [ ] **Step 1: Instalar deps**
 
 ```bash
-npm i -D vitest vite-tsconfig-paths
+pnpm add -D vitest vite-tsconfig-paths
 ```
 
 - [ ] **Step 2: Escribir el test que falla**
@@ -470,7 +483,7 @@ export default defineConfig({
 - [ ] **Step 4: Correr el test → FALLA (no existe money.ts)**
 
 ```bash
-npm test
+pnpm test
 ```
 Expected: FAIL — `Cannot find module './money'` / `formatCLP is not defined`.
 
@@ -491,7 +504,7 @@ export function formatCLP(amount: number): string {
 - [ ] **Step 6: Correr el test → PASA**
 
 ```bash
-npm test
+pnpm test
 ```
 Expected: PASS.
 
@@ -513,8 +526,8 @@ git commit -m "test(shared): Vitest verde + formatCLP util"
 - [ ] **Step 1: Instalar Playwright + navegador**
 
 ```bash
-npm i -D @playwright/test
-npx playwright install chromium
+pnpm add -D @playwright/test
+pnpm exec playwright install chromium
 ```
 
 - [ ] **Step 2: playwright.config.ts**
@@ -526,7 +539,7 @@ export default defineConfig({
   testDir: "./e2e",
   use: { baseURL: "http://localhost:3000" },
   webServer: {
-    command: "npm run build && npm run start",
+    command: "pnpm build && pnpm start",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
@@ -556,7 +569,7 @@ En `vitest.config.ts` añadir `exclude: ["e2e/**", "node_modules/**"]` para que 
 - [ ] **Step 5: Correr e2e (verde)**
 
 ```bash
-npm run e2e
+pnpm e2e
 ```
 Expected: 1 passed (Playwright levanta el server, abre `/`, ve el heading).
 
@@ -600,31 +613,33 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sci
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run db:migrate
-      - run: npm run build
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm db:migrate
+      - run: pnpm build
 
   e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: npm }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
 ```
 
 - [ ] **Step 2: Sanity local del pipeline del job `verify`**
 
 Reproducir la secuencia del job localmente (con el Postgres efímero del Task 5):
 ```bash
-npm run typecheck && npm run lint && npm test && npm run build
+pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 Expected: todo verde. (`db:migrate` ya validado en Task 5 / se ejecutará en CI.)
 
@@ -703,7 +718,7 @@ git push
 
 **Riesgos / puntos de atención:**
 - `create-next-app` en dir no vacío: mitigado generando en tmp + rsync excluyendo `index.html`/README/`.git`. Verificar `git status` tras copiar.
-- shadcn v4 + alias custom: tras `init -d`, ajustar `components.json` y ubicación de `cn`. Verificar que `npx shadcn add button` cae en `src/shared/ui`.
+- shadcn v4 + alias custom: tras `init -d`, ajustar `components.json` y ubicación de `cn`. Verificar que `pnpm dlx shadcn add button` cae en `src/shared/ui`.
 - Boundaries flat-config: validar con prueba negativa (Task 4 Step 5) que la regla efectivamente falla ante un import internal/cross-module.
 - `Intl` es-CL en Node: si el locale no produce `"$1.000"`, usar formateo manual (Task 6 Step 5 nota).
 - `next build` no debe importar `db/client.ts` (que lanza sin `DATABASE_URL`); en Fase 0 ninguna página lo importa, y CI define `DATABASE_URL`. OK.
