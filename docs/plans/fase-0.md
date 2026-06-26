@@ -1,0 +1,184 @@
+# Fase 0 — Scaffold + Tooling — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Levantar el esqueleto de SCI v2 — Next.js + TS + Tailwind con estructura **por capas técnicas** (ADR-013), tooling completo (shadcn, ESLint con boundaries, Prettier, Drizzle, Vitest) y CI verde en PR a `develop`. (Sin Playwright — descartado por el usuario.)
+
+**Architecture:** Capas técnicas bajo `src/` (ADR-013, supersede la screaming-modular de ADR-006). Detalle de las 14 reglas de código/estructura en `docs/CONVENTIONS.md`. Dirección de dependencias vigilada por `eslint-plugin-boundaries` (`boundaries/dependencies`): la UI no es importada por capas inferiores, el acceso a datos pasa por `server`, las hojas no importan hacia arriba.
+
+**Tech Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 + shadcn/ui (base-nova/base-ui) · zod · ESLint flat config (`eslint-config-next` + `eslint-plugin-boundaries`) · Prettier · Drizzle ORM 0.45 + drizzle-kit 0.31 (driver **pg** / node-postgres) · Vitest 4 · GitHub Actions. **pnpm** 11 como package manager.
+
+## Global Constraints
+
+- **No modificar `index.html`** — referencia viva de funcionalidad (ADR-002). No tocar `docs/` salvo `HANDOFF.md`, `CONVENTIONS.md`, `DECISIONS.md`, `SPEC.md` y este plan.
+- **Estructura por capas** (ADR-013 / `docs/CONVENTIONS.md`): `src/app/<ruta>/page.tsx` (server, ≤20 líneas) + `(sections)/`; `src/server/<e>/<e>.{actions,queries}.ts`; `src/components/ui`, `src/hooks`; `src/lib/utils.ts` (comunes) y `src/utils/<e>.utils.ts`; `src/types`, `src/schemas` (zod), `src/constants`; `src/db` (Drizzle). Alias `@/*` → `./src/*`.
+- **Reglas de código:** arrow functions; solo `;` necesarios (Prettier `semi:false`); comillas dobles; 1 componente por archivo; archivos cortos (componer); nunca `any`/`as`; investigar antes de improvisar. (La formalización como lint/skills es sesión posterior a Fase 0.)
+- **Package manager:** pnpm. `packageManager: pnpm@11.1.2`. Builds de deps con scripts habilitados vía `allowBuilds` en `pnpm-workspace.yaml` (pnpm 11 los bloquea por defecto y ya no lee el campo `pnpm` de package.json).
+- **Commits:** convencionales `feat(scope): ...`. **NUNCA `Co-Authored-By`**.
+- **Fase 0 NO usa Railway ni datos reales.** `DATABASE_URL` real es Fase 1. Postgres efímero (servicio en CI) + schema _placeholder_ (`_health`) que se elimina en Fase 1.
+- **Éxito:** `pnpm dev`, `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint` verdes local + **CI verde** en el PR a `develop`.
+
+## File Structure
+
+```
+.
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx · globals.css · favicon.ico
+│   │   ├── page.tsx                         # redirect("/dashboard") (server, ≤20 líneas)
+│   │   └── dashboard/
+│   │       ├── page.tsx                     # compone DashboardView (server, ≤20 líneas)
+│   │       └── (sections)/dashboard.view.tsx
+│   ├── server/dashboard/dashboard.queries.ts # getDashboardStats() (placeholder)
+│   ├── components/ui/button.tsx              # shadcn
+│   ├── lib/utils.ts                          # cn()
+│   ├── utils/money.utils.ts                  # formatCLP() (+ .test.ts en Vitest)
+│   ├── types/dashboard.types.ts              # DashboardStats
+│   ├── schemas/dashboard.schema.ts           # zod
+│   ├── constants/dashboard.constants.ts
+│   └── db/
+│       ├── client.ts                         # drizzle(postgres(DATABASE_URL))
+│       └── schema.ts                         # placeholder _health (se borra en Fase 1)
+├── drizzle/                                  # output de migraciones
+├── .github/workflows/ci.yml
+├── drizzle.config.ts · vitest.config.ts
+├── eslint.config.mjs · .prettierrc.json · components.json
+├── pnpm-workspace.yaml · .env.example · tsconfig.json · package.json
+```
+
+---
+
+## Task 1: Scaffold Next.js + pnpm ✅ (hecho)
+
+create-next-app aborta en dir con conflictos (`index.html`). Generar en tmp y copiar.
+
+- [x] `pnpm dlx create-next-app@latest sci-scaffold --yes --ts --tailwind --eslint --app --no-src-dir --import-alias "@/*" --use-pnpm` en `<scratchpad>`.
+- [x] `rm -rf .git node_modules .next` y `rsync -a --exclude '.git' --exclude 'README.md' ./ <repo>/`. Verificar `git status` no marca `index.html`.
+- [x] `tsconfig.json`: `paths { "@/*": ["./src/*"] }`.
+- [x] `pnpm install`; pinear `packageManager: "pnpm@11.1.2"`; `pnpm-workspace.yaml` con `allowBuilds: { sharp: true, unrs-resolver: true, "@tailwindcss/oxide": true }`; `rm -rf node_modules && pnpm install`.
+- [x] `pnpm build` verde. Commit.
+
+## Task 2: Capa de routing + slice `dashboard` de ejemplo ✅ (hecho)
+
+Demuestra `app → server → {types, schemas, constants, utils, components}` con el lint de boundaries.
+
+- [x] `src/types/dashboard.types.ts`: `export type DashboardStats = { totalProductos: number; totalBodegas: number; valorInventario: number }`.
+- [x] `src/schemas/dashboard.schema.ts`: `dashboardStatsSchema` (zod).
+- [x] `src/constants/dashboard.constants.ts`: `DASHBOARD_TITLE`, `DASHBOARD_SUBTITLE`.
+- [x] `src/server/dashboard/dashboard.queries.ts`: `export const getDashboardStats = async (): Promise<DashboardStats> => dashboardStatsSchema.parse({...0})` (placeholder; Fase 1 leerá de Drizzle).
+- [x] `src/utils/money.utils.ts`: `export const formatCLP = (amount: number): string => ...`.
+- [x] `src/app/page.tsx`: `const Page = () => { redirect("/dashboard") }; export default Page`.
+- [x] `src/app/dashboard/page.tsx`: compone `<DashboardView />` (≤20 líneas).
+- [x] `src/app/dashboard/(sections)/dashboard.view.tsx`: server component async que usa `getDashboardStats`, `Button`, constantes y `formatCLP`.
+- [x] `pnpm build` + `pnpm typecheck` verdes. Commit.
+
+## Task 3: shadcn/ui ✅ (hecho)
+
+- [x] `pnpm dlx shadcn@latest init -d` (Found Next.js + Tailwind v4; instala `shadcn` como dep porque base-nova importa `shadcn/tailwind.css`).
+- [x] `components.json` con aliases por defecto (alineados a las reglas): `ui: @/components/ui`, `utils: @/lib/utils`, `rsc: true`.
+- [x] `pnpm dlx shadcn@latest add button` → `src/components/ui/button.tsx` (importa `cn` de `@/lib/utils`). Commit.
+
+## Task 4: ESLint boundaries (por capas) + Prettier ✅ (hecho)
+
+- [x] `pnpm add -D eslint-plugin-boundaries prettier eslint-config-prettier`.
+- [x] `eslint.config.mjs`: `settings."boundaries/elements"` define una capa por carpeta (`app, server, components, hooks, db, lib, utils, schemas, types, constants`); regla `boundaries/dependencies` (v6, no deprecada) con `default: "disallow"` y allow-list por capa (ver `docs/CONVENTIONS.md` → Boundaries). `eslint-config-prettier` al final.
+- [x] `.prettierrc.json`: `{ "semi": false, "singleQuote": false, "trailingComma": "all", "printWidth": 80 }`; `.prettierignore`.
+- [x] Scripts: `lint: "eslint ."`, `typecheck: "tsc --noEmit"`, `format`/`format:check`, `test`/`db:*`.
+- [x] Verde + **prueba negativa**: import `server → components` falla con `boundaries/dependencies`. Commit (incluido en el commit del pivot).
+
+## Task 5: Drizzle + drizzle-kit + client + schema placeholder + .env.example
+
+**Files:** Create `drizzle.config.ts`, `src/db/schema.ts`, `src/db/client.ts`, `.env.example`. Modify `package.json` (deps), `.gitignore` (excepción `!.env.example`).
+
+- [ ] **Step 1:** `pnpm add drizzle-orm pg` && `pnpm add -D drizzle-kit dotenv @types/pg`. (Drizzle recomienda el driver `pg`/node-postgres.) Habilitar build de `esbuild` en `pnpm-workspace.yaml` (`allowBuilds`).
+- [ ] **Step 2:** `src/db/schema.ts` (placeholder, arrow no aplica — es schema):
+
+```ts
+import { pgTable, serial, timestamp } from "drizzle-orm/pg-core"
+
+// PLACEHOLDER Fase 0: prueba el pipeline de migraciones. Reemplazado por el schema real en Fase 1.
+export const health = pgTable("_health", {
+  id: serial("id").primaryKey(),
+  checkedAt: timestamp("checked_at").defaultNow().notNull(),
+})
+```
+
+- [ ] **Step 3:** `src/db/client.ts`:
+
+```ts
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
+import * as schema from "./schema"
+
+const connectionString = process.env.DATABASE_URL
+if (!connectionString) throw new Error("DATABASE_URL no está definida")
+
+const pool = new Pool({ connectionString })
+export const db = drizzle(pool, { schema })
+```
+
+- [ ] **Step 4:** `drizzle.config.ts`:
+
+```ts
+import "dotenv/config"
+import { defineConfig } from "drizzle-kit"
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL! },
+})
+```
+
+- [ ] **Step 5:** `.env.example` con `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/sci"`; en `.gitignore` añadir `!.env.example` (create-next-app ignora `.env*`).
+- [ ] **Step 6:** Verificar contra Postgres efímero (Docker): `docker run --rm -d --name sci-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=sci -p 5432:5432 postgres:16`; `export DATABASE_URL=...`; `pnpm db:generate` (crea `drizzle/0000_*.sql`); `pnpm db:migrate` (aplica). `docker stop sci-pg`. Commit.
+
+## Task 6: Vitest con un test verde
+
+**Files:** Create `vitest.config.ts`, `src/utils/money.utils.test.ts`. (`src/utils/money.utils.ts` ya existe — Task 2.)
+
+- [ ] **Step 1:** `pnpm add -D vitest`.
+- [ ] **Step 2:** `src/utils/money.utils.test.ts`:
+
+```ts
+import { describe, it, expect } from "vitest"
+import { formatCLP } from "./money.utils"
+
+describe("formatCLP", () => {
+  it("formatea pesos chilenos sin decimales", () => {
+    expect(formatCLP(1000)).toBe("$1.000")
+    expect(formatCLP(2500000)).toBe("$2.500.000")
+    expect(formatCLP(0)).toBe("$0")
+  })
+})
+```
+
+- [ ] **Step 3:** `vitest.config.ts` con `resolve: { tsconfigPaths: true }` (nativo en Vitest 4, sin plugin), `environment: "node"`, `include: ["src/**/*.{test,spec}.ts"]`, `exclude: ["e2e/**", "node_modules/**"]`.
+- [ ] **Step 4:** `pnpm test` → verde. Si el locale es-CL de Node no diera `"$1.000"`, ajustar `formatCLP` a formateo manual. Commit.
+
+## Task 7: ~~Playwright~~ — DESCARTADO
+
+Playwright y los navegadores (Chromium/Chrome) quedan **descartados** por decisión del usuario. No hay e2e en Fase 0; la herramienta e2e queda por definir. Los tests de Fase 0 son unit/integración con Vitest (Task 6).
+
+## Task 8: GitHub Actions CI (PR → develop)
+
+**Files:** Create `.github/workflows/ci.yml`.
+
+- [ ] Job único `verify` (con servicio `postgres:16`, `env.DATABASE_URL`): `pnpm/action-setup@v4` + `actions/setup-node@v4 {node-version: 24, cache: pnpm}` + `pnpm install --frozen-lockfile` + `pnpm typecheck` + `pnpm lint` + `pnpm test` + `pnpm db:migrate` + `pnpm build`. (Sin job e2e.)
+- [ ] Sanity local: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`. Commit.
+
+## Task 9: Actualizar HANDOFF y abrir PR a develop
+
+- [ ] `docs/HANDOFF.md`: Fase 0 → `HECHO`, rama `feat/fase-0-scaffold` + PR, "Última actualización" 2026-06-26, "En curso", "Próximos pasos" (Fase 1), bitácora. Anotar pivot a ADR-013 y pnpm.
+- [ ] `git push -u origin feat/fase-0-scaffold` + `gh pr create --base develop` con checklist de entregables.
+
+---
+
+## Self-Review
+
+**Cobertura de entregables Fase 0:** Next+TS+Tailwind + estructura por capas + slice ejemplo (Tasks 1–2) ✓ · shadcn + ESLint boundaries + Prettier (Tasks 3–4) ✓ · Drizzle + drizzle-kit + config + scripts (Task 5) · Vitest verde (Task 6) · CI typecheck+lint+test+build (+db:migrate) (Task 8) · `.env.example` + `src/db/client.ts` (Task 5) · HANDOFF + PR (Task 9).
+
+**Desviaciones respecto al prompt original (decididas por el usuario en Fase 0):** (1) pnpm en vez de npm. (2) Arquitectura por capas (ADR-013) en vez de screaming-modular; el client de DB es `src/db/client.ts` (no `src/shared/db`). (3) Driver `pg` en vez de postgres-js. (4) **Sin Playwright/e2e** (entregable original de Playwright descartado).
+
+**Riesgos:** `Intl` es-CL en Node (fallback manual en `formatCLP`). `next build` no importa `src/db/client.ts` en Fase 0 (no se ejecuta el throw); CI define `DATABASE_URL`. shadcn `Button` quedó como `function` (rule 1 arrow) — vendored; se revisa en la sesión de reglas/skills.
