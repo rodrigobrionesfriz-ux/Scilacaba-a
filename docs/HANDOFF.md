@@ -2,9 +2,9 @@
 
 > **Este es el PUNTO DE ENTRADA.** Cualquier sesión nueva (humano o agente) empieza leyendo este archivo de principio a fin antes de tocar nada. Se actualiza **cada sesión**.
 
-**Última actualización**: 2026-06-25 por sesión de bootstrap (Claude)
-**Rama activa**: `develop`
-**Estado global**: Bootstrap hecho (ramas + sistema de handoff). Fase 0 pendiente.
+**Última actualización**: 2026-06-26 por sesión Fase 0 (Claude)
+**Rama activa**: `feat/fase-0-scaffold` (PR a `develop`)
+**Estado global**: Fase 0 (scaffold + tooling) HECHA. Pendiente: merge del PR + Fase 1.
 
 ---
 
@@ -12,8 +12,8 @@
 
 1. `git fetch && git checkout develop && git pull`
 2. Si vas a trabajar una fase: `git checkout -b feat/fase-<n>-<modulo>` desde `develop`.
-3. Lee `docs/SPEC.md` (qué construimos), `docs/DECISIONS.md` (por qué así) y el `docs/modules/<modulo>.md` de lo que toques.
-4. (Cuando exista el proyecto Next.js) baseline verde antes de tocar: `npm ci && npm run db:migrate && npm test && npm run typecheck`.
+3. Lee `docs/SPEC.md` (qué construimos), `docs/DECISIONS.md` (por qué así), `docs/CONVENTIONS.md` (reglas de código/estructura) y el `docs/modules/<modulo>.md` de lo que toques.
+4. Baseline verde antes de tocar (con un Postgres y `DATABASE_URL`): `pnpm install --frozen-lockfile && pnpm db:migrate && pnpm test && pnpm typecheck && pnpm lint && pnpm build`.
 5. Mira **"En curso ahora mismo"** y **"Próximos pasos"** abajo.
 6. Al terminar la sesión: **actualiza este archivo** (estado, en curso, próximos pasos) y commitea, aunque el trabajo quede a medias. El estado vive en el repo, no en la memoria de la sesión.
 
@@ -26,7 +26,7 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 | Fase | Módulo / contenido | Estado | Rama / PR | Verificado |
 |------|--------------------|--------|-----------|------------|
 | —    | Bootstrap (ramas + docs/) | HECHO | develop | sí |
-| 0    | Scaffold + tooling + CI + Railway/Postgres | PENDIENTE | — | — |
+| 0    | Scaffold + tooling + CI (Postgres efímero) | HECHO | feat/fase-0-scaffold (PR a develop) | local (dev/build/test/typecheck/lint + db:migrate) |
 | 1    | Schema Drizzle + migrador + datos reales | PENDIENTE | — | — |
 | 2    | better-auth + usuarios + permisos + layout/sidebar | PENDIENTE | — | — |
 | 3    | Maestros CRUD (productos, bodegas, prov., clientes, centros) | PENDIENTE | — | — |
@@ -61,27 +61,30 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 
 ## En curso ahora mismo
 
-**Nada en curso.** Bootstrap recién terminado: rama `develop` creada desde `origin/main`, sistema de handoff (`docs/`) materializado.
+**Fase 0 entregada en `feat/fase-0-scaffold` (PR abierto a `develop`).** Lo hecho:
+- Next.js 16 (App Router, Turbopack) + TS + Tailwind v4, **pnpm** (`packageManager` pineado; `allowBuilds` en `pnpm-workspace.yaml`).
+- **Arquitectura por capas (ADR-013)**: `src/app` (rutas + `(sections)`), `src/server`, `src/components/ui`, `src/lib`, `src/utils`, `src/types`, `src/schemas`, `src/constants`, `src/db`. Slice `dashboard` de ejemplo (page→view→query→types/schemas/constants/utils/components).
+- shadcn/ui (base-nova) + Button. ESLint flat config con **lint de boundaries por capas** (`boundaries/dependencies`) + Prettier (`semi:false`, comillas dobles). Reglas de código en `docs/CONVENTIONS.md`.
+- Drizzle + drizzle-kit (driver **pg**), `src/db/{client,schema}.ts`, schema placeholder `_health`, migración `drizzle/0000_*`, `.env.example`.
+- Vitest verde (`formatCLP`). **Sin Playwright/e2e** (descartado por el usuario).
+- CI (`.github/workflows/ci.yml`): `pnpm install --frozen-lockfile` + typecheck + lint + test + db:migrate + build, con Postgres 16 efímero, en PR a `develop`.
+
+Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra Postgres efímero (Docker).
 
 ---
 
 ## Próximos pasos (orden)
 
-1. **Fase 0 — Scaffold + tooling**: convertir la Fase 0 en plan ejecutable con `writing-plans` (`docs/plans/fase-0.md`), luego:
-   - `create-next-app` (TS, App Router, Tailwind) dentro del repo, estructura `src/modules` + `src/shared`.
-   - Configurar shadcn/ui, ESLint (con lint de boundaries), Prettier, Vitest, Playwright.
-   - Drizzle + drizzle-kit + `drizzle.config.ts`.
-   - GitHub Actions CI (typecheck, lint, test, build).
-   - Provisionar Postgres en Railway; `.env.example` con `DATABASE_URL`.
-   - Entregable: app vacía corriendo, CI verde, `npm run db:migrate` funcionando.
-2. **Fase 1 — Schema + migrador**: ver plan.
+1. **Mergear el PR de Fase 0** a `develop` (revisar CI verde en GitHub).
+2. **Sesión de reglas + skills** (pedida por el usuario): formalizar las 14 reglas de `docs/CONVENTIONS.md` como lint automático (arrow functions, `no any`/`no as`, 1 componente por archivo, máximo de líneas, ubicación por capa) y crear skills de apoyo. Revisar también si el `Button` de shadcn (function decl.) se migra a arrow.
+3. **Fase 1 — Schema Drizzle real + migrador**: reemplazar el placeholder `_health` por el schema real; conseguir el export de los 3 docs Firestore; provisionar Postgres en Railway y obtener `DATABASE_URL` real; decidir herramienta e2e (Playwright descartado).
 
 ---
 
 ## Bloqueos / preguntas abiertas
 
 - **Export de Firebase**: confirmar cómo se obtendrá el dump de los 3 docs Firestore (`sci/main`, `cuaderno/main`, `presupuesto/main`) — credenciales firebase-admin o export manual. Necesario para Fase 1.
-- **Railway**: el usuario tiene cuenta. Falta crear el proyecto y obtener `DATABASE_URL` (Fase 0).
+- **Railway**: el usuario tiene cuenta. Falta crear el proyecto y obtener `DATABASE_URL` real (movido a **Fase 1**; Fase 0 se validó con Postgres efímero en CI/local).
 - **Usuarios sin password**: el origen usa Firebase anónimo; definir flujo de set-password en primer login (Fase 2).
 
 ---
@@ -91,3 +94,4 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 | Fecha | Sesión | Qué se hizo | Commit/PR |
 |-------|--------|-------------|-----------|
 | 2026-06-25 | bootstrap | Rama `develop` desde `origin/main`; sistema de handoff en `docs/` | (este commit) |
+| 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013) + `docs/CONVENTIONS.md`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | `feat/fase-0-scaffold` (PR a develop) |
