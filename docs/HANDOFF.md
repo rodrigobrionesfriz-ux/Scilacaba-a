@@ -76,7 +76,7 @@ Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra
 ## Próximos pasos (orden)
 
 1. **Mergear el PR de Fase 0** a `develop` (revisar CI verde en GitHub).
-2. **Sesión de reglas + skills** (pedida por el usuario): formalizar las 14 reglas de `docs/CONVENTIONS.md` como lint automático (arrow functions, `no any`/`no as`, 1 componente por archivo, máximo de líneas, ubicación por capa) y crear skills de apoyo. Revisar también si el `Button` de shadcn (function decl.) se migra a arrow.
+2. **Reglas + skills** (hecho en esta sesión): las 14 reglas viven en `.claude/rules/{estilo,estructura,boundaries}.md`, cargadas por `CLAUDE.md`; `docs/CONVENTIONS.md` es puntero. Skills en `.claude/skills/`: `sci-conventions`, `new-entity`, `new-page`, `new-component`. **Decidido:** shadcn vendored (`src/components/ui`) es la **única** excepción a la regla 1 → el `Button` se queda con `function`. Pendiente opcional: lint que falle ante `function`/`any`/`as` (las reglas hoy son guía + boundaries; el resto se vigila a mano).
 3. **Fase 1 — Schema Drizzle real + migrador**: reemplazar el placeholder `_health` por el schema real; conseguir el export de los 3 docs Firestore; provisionar Postgres en Railway y obtener `DATABASE_URL` real; decidir herramienta e2e (Playwright descartado).
 
 ---
