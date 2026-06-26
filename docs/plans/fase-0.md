@@ -6,7 +6,7 @@
 
 **Architecture:** Capas técnicas bajo `src/` (ADR-013, supersede la screaming-modular de ADR-006). Detalle de las 14 reglas de código/estructura en `docs/CONVENTIONS.md`. Dirección de dependencias vigilada por `eslint-plugin-boundaries` (`boundaries/dependencies`): la UI no es importada por capas inferiores, el acceso a datos pasa por `server`, las hojas no importan hacia arriba.
 
-**Tech Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 + shadcn/ui (base-nova/base-ui) · zod · ESLint flat config (`eslint-config-next` + `eslint-plugin-boundaries`) · Prettier · Drizzle ORM 0.45 + drizzle-kit 0.31 (postgres-js) · Vitest 4 · Playwright 1.61 · GitHub Actions. **pnpm** 11 como package manager.
+**Tech Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 + shadcn/ui (base-nova/base-ui) · zod · ESLint flat config (`eslint-config-next` + `eslint-plugin-boundaries`) · Prettier · Drizzle ORM 0.45 + drizzle-kit 0.31 (driver **pg** / node-postgres) · Vitest 4 · Playwright 1.61 · GitHub Actions. **pnpm** 11 como package manager.
 
 ## Global Constraints
 
@@ -91,7 +91,7 @@ Demuestra `app → server → {types, schemas, constants, utils, components}` co
 
 **Files:** Create `drizzle.config.ts`, `src/db/schema.ts`, `src/db/client.ts`, `.env.example`. Modify `package.json` (deps), `.gitignore` (excepción `!.env.example`).
 
-- [ ] **Step 1:** `pnpm add drizzle-orm postgres` && `pnpm add -D drizzle-kit dotenv`.
+- [ ] **Step 1:** `pnpm add drizzle-orm pg` && `pnpm add -D drizzle-kit dotenv @types/pg`. (Drizzle recomienda el driver `pg`/node-postgres.) Habilitar build de `esbuild` en `pnpm-workspace.yaml` (`allowBuilds`).
 - [ ] **Step 2:** `src/db/schema.ts` (placeholder, arrow no aplica — es schema):
 
 ```ts
@@ -107,15 +107,15 @@ export const health = pgTable("_health", {
 - [ ] **Step 3:** `src/db/client.ts`:
 
 ```ts
-import { drizzle } from "drizzle-orm/postgres-js"
-import postgres from "postgres"
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
 import * as schema from "./schema"
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) throw new Error("DATABASE_URL no está definida")
 
-const client = postgres(connectionString, { max: 1 })
-export const db = drizzle(client, { schema })
+const pool = new Pool({ connectionString })
+export const db = drizzle(pool, { schema })
 ```
 
 - [ ] **Step 4:** `drizzle.config.ts`:
@@ -139,7 +139,7 @@ export default defineConfig({
 
 **Files:** Create `vitest.config.ts`, `src/utils/money.utils.test.ts`. (`src/utils/money.utils.ts` ya existe — Task 2.)
 
-- [ ] **Step 1:** `pnpm add -D vitest vite-tsconfig-paths`.
+- [ ] **Step 1:** `pnpm add -D vitest`.
 - [ ] **Step 2:** `src/utils/money.utils.test.ts`:
 
 ```ts
@@ -155,7 +155,7 @@ describe("formatCLP", () => {
 })
 ```
 
-- [ ] **Step 3:** `vitest.config.ts` con `vite-tsconfig-paths`, `environment: "node"`, `include: ["src/**/*.{test,spec}.ts"]`, `exclude: ["e2e/**", "node_modules/**"]`.
+- [ ] **Step 3:** `vitest.config.ts` con `resolve: { tsconfigPaths: true }` (nativo en Vitest 4, sin plugin), `environment: "node"`, `include: ["src/**/*.{test,spec}.ts"]`, `exclude: ["e2e/**", "node_modules/**"]`.
 - [ ] **Step 4:** `pnpm test` → verde. Si el locale es-CL de Node no diera `"$1.000"`, ajustar `formatCLP` a formateo manual. Commit.
 
 ## Task 7: Playwright con un e2e verde
