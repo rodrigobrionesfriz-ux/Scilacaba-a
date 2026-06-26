@@ -54,6 +54,7 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 - PPP en función pura compartida action+migrador (ADR-008).
 - IDs determinísticos de lotes para recálculo idempotente (ADR-009).
 - Migración desde 3 docs Firestore, no del backup JSON (ADR-010).
+- Postgres reafirmado sobre Firestore (ADR-011); shadcn/ui + Tailwind confirmado (ADR-012).
 
 ---
 

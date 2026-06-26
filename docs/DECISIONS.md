@@ -61,3 +61,15 @@ Registro de decisiones de arquitectura (Architecture Decision Records). Una entr
 **Contexto**: El backup JSON local de la app omite 4 stores (`mantenciones, conteos, estimaciones, invplantas`) y el cuaderno. El cuaderno vive en un doc Firestore aparte.
 **Decisión**: El migrador lee los 3 docs Firestore: `sci/main` (18 stores), `cuaderno/main` (paños, registros, órdenes, fertirriego...) y `presupuesto/main`. Validación de integridad: conteos por entidad + stock recalculado == stock origen (±0.0001).
 **Consecuencias**: Migración completa y verificable. Requiere acceso firebase-admin o export manual de los 3 docs.
+
+## ADR-011 — Reafirmación de Postgres sobre Firestore como base de datos
+**Fecha**: 2026-06-25 · **Estado**: aceptada (reconsideración explícita de ADR-001)
+**Contexto**: Se reabrió la pregunta de si mantener Firestore como base de datos (cero migración de plataforma, offline/real-time nativos, menos infra) vs migrar a Postgres.
+**Decisión**: Migrar a **Postgres + Drizzle**. El dominio (inventario/contabilidad con costeo PPP, lotes, ajustes, correlativos sin huecos, reportes con agregaciones) es relacional y transaccional — el caso canónico de SQL. El patrón actual de Firestore (toda la BD en un único documento JSON) es un anti-patrón a corregir, no a preservar. El único punto fuerte de Firestore (offline gratis) ya está cubierto por la decisión de offline híbrido (ADR-003): solo importa en 2 módulos de terreno, resueltos con Dexie. La migración es un evento único y ya tiene migrador verificable (ADR-010).
+**Alternativa descartada**: Firestore bien modelado (colecciones reales) — descartada por pérdida de joins, transacciones SQL, integridad referencial y tipado Drizzle, que el negocio necesita.
+
+## ADR-012 — shadcn/ui (+ Tailwind + Radix) como capa de UI
+**Fecha**: 2026-06-25 · **Estado**: aceptada (confirmación)
+**Contexto**: shadcn/ui no es una librería instalable sino componentes copiados al repo, construidos sobre Tailwind CSS + Radix UI.
+**Decisión**: Usar shadcn/ui como base de componentes; implica Tailwind por debajo (van juntos). Los componentes viven en `src/shared/ui/` bajo control del repo.
+**Consecuencias**: Sin dependencia de una librería de estilos externa monolítica; máximo control y personalización de los ~236 estilos del monolito original.
