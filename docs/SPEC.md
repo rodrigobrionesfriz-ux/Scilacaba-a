@@ -25,20 +25,26 @@ SCI es un sistema de inventario para una empresa agrícola, con un fuerte compon
 1. **Reescritura completa**, no incremental. El monolito queda como referencia de funcionalidad.
 2. **Offline híbrido**: toda la app es online vía Server Actions, EXCEPTO los 2 módulos de terreno (Conteos, Inventario de huerto) que capturan offline y suben diferido.
 3. **better-auth** con role + `permissions[]` en tabla de dominio `users`.
-4. **Screaming Architecture modular**: la estructura grita el dominio (`src/modules/<modulo>`), no el framework. Cada módulo es un vertical slice (`domain/ data/ actions/ ui/` + `index.ts`).
+4. **Arquitectura por capas técnicas** (ADR-013, supersede la modular de ADR-006): organización bajo `src/` por capa (`app/ server/ components/ lib/ utils/ types/ schemas/ constants/ db/`). Convenciones completas en `docs/CONVENTIONS.md`.
 5. **Git-flow**: `develop` es la rama de integración; features salen de `develop`; `main` solo para releases.
 6. **PPP** (promedio ponderado) vive en una función pura única, compartida por la Server Action y el migrador.
 
 ## Arquitectura (resumen)
 
+Por capas técnicas bajo `src/` (ADR-013; ver `docs/CONVENTIONS.md`):
+
 ```
-app/                # routing fino: cada page.tsx delega en su módulo
-src/modules/<m>/    # vertical slices: domain/ data/ actions/ ui/ index.ts
-src/shared/         # kernel transversal: db, auth, actions, excel, pdf, offline, ui, utils
-docs/               # este sistema de handoff
+src/app/<ruta>/page.tsx          # server component, ≤20 líneas, compone
+src/app/<ruta>/(sections)/*.tsx  # componentes de la ruta
+src/server/<entidad>/*.actions.ts | *.queries.ts   # Server Actions / lecturas
+src/components/ui/   src/hooks/   # UI compartida / hooks
+src/lib/utils.ts     src/utils/<entidad>.utils.ts   # utils comunes / por entidad
+src/types/  src/schemas/ (zod)  src/constants/      # tipos / validación / constantes
+src/db/                          # Drizzle client + schema
+docs/                            # sistema de handoff
 ```
 
-**Regla de dependencias**: `app → modules (vía index.ts) → shared`. Un módulo nunca importa los internals de otro. Vigilado por lint de boundaries en CI.
+**Regla de dependencias** (lint de boundaries en CI): la UI (`app`, `components`) no es importada por capas inferiores; el acceso a datos pasa por `server`; las hojas (`types`, `constants`, `schemas`, `utils`, `lib`) no importan hacia arriba.
 
 ## Módulos (~17)
 

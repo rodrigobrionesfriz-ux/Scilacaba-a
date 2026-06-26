@@ -11,8 +11,8 @@ Reglas de código y estructura para SCI v2. Son **vinculantes** y mandan sobre c
 3. **Siempre comillas dobles** (`"..."`; Prettier `singleQuote: false`).
 4. **Nunca más de un componente por archivo.**
 5. **Nunca archivos demasiado largos** — preferir composición (extraer sub-componentes / helpers).
-11. **Nunca `any` ni cast con `as`** — tipar correctamente (usar genéricos, `unknown` + narrowing, o inferencia de zod).
-14. **Siempre investigar antes de improvisar** — leer docs/código existente antes de escribir.
+6. **Nunca `any` ni cast con `as`** — tipar correctamente (usar genéricos, `unknown` + narrowing, o inferencia de zod).
+7. **Siempre investigar antes de improvisar** — leer docs/código existente antes de escribir.
 
 ## Estructura de carpetas (capas técnicas bajo `src/`)
 
@@ -21,8 +21,8 @@ Reglas de código y estructura para SCI v2. Son **vinculantes** y mandan sobre c
 8. **Utilidades** → `src/utils/<entidad>.utils.ts`; si la utilidad es común a varios archivos → `src/lib/utils.ts`.
 9. **Páginas** = server components, **≤ 20 líneas**, siempre componer (delegar en secciones).
 10. **Componentes de cada ruta** → `src/app/<ruta>/(sections)/<ruta>.*.tsx` (p. ej. `src/app/productos/(sections)/productos.form.tsx`).
-12. **Tipos** → `src/types/<entidad>.types.ts`.
-13. **Schemas de validación (zod)** → `src/schemas/<entidad>.schema.ts`. Toda validación de tipos usa zod.
+11. **Tipos** → `src/types/<entidad>.types.ts`.
+12. **Schemas de validación (zod)** → `src/schemas/<entidad>.schema.ts`. Toda validación de tipos usa zod.
 
 ### Mapa de carpetas
 

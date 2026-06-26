@@ -49,12 +49,13 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 - Offline híbrido, solo terreno (ADR-003).
 - better-auth con role/permissions en `users` (ADR-004).
 - Hosting Railway (ADR-005).
-- Screaming Architecture modular (ADR-006).
+- ~~Screaming Architecture modular (ADR-006)~~ → **Arquitectura por capas técnicas (ADR-013)**; reglas de código/estructura en `docs/CONVENTIONS.md`. Package manager: **pnpm**.
 - Git-flow con `develop` (ADR-007).
 - PPP en función pura compartida action+migrador (ADR-008).
 - IDs determinísticos de lotes para recálculo idempotente (ADR-009).
 - Migración desde 3 docs Firestore, no del backup JSON (ADR-010).
 - Postgres reafirmado sobre Firestore (ADR-011); shadcn/ui + Tailwind confirmado (ADR-012).
+- **Arquitectura por capas técnicas (ADR-013, supersede ADR-006)** + 14 reglas de código en `docs/CONVENTIONS.md`.
 
 ---
 

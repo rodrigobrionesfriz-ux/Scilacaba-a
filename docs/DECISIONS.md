@@ -34,10 +34,11 @@ Registro de decisiones de arquitectura (Architecture Decision Records). Una entr
 **Consecuencias**: Migraciones Drizzle en el release. Diseñar agnóstico a proveedor por si se migra.
 
 ## ADR-006 — Screaming Architecture modular
-**Fecha**: 2026-06-25 · **Estado**: aceptada
+**Fecha**: 2026-06-25 · **Estado**: ~~aceptada~~ **SUPERSEDIDA por ADR-013** (2026-06-26)
 **Contexto**: Se descartó organizar por capas técnicas (`lib/db`, `lib/domain`...) porque "grita el framework", no el negocio.
 **Decisión**: Estructura por dominio: `src/modules/<modulo>/{domain,data,actions,ui,index.ts}`. `app/` es routing fino; `src/shared/` es el kernel transversal. Layering interno **pragmático** (domain/data/actions/ui), no hexagonal estricto.
 **Consecuencias**: Regla de dependencias `app → modules (vía index.ts) → shared`; un módulo no importa internals de otro. Vigilado por lint de boundaries.
+**Reversión**: el usuario optó (2026-06-26, durante Fase 0) por una estructura **por capas técnicas** bajo `src/`. Ver ADR-013.
 
 ## ADR-007 — Git-flow con rama `develop`
 **Fecha**: 2026-06-25 · **Estado**: aceptada
@@ -47,7 +48,7 @@ Registro de decisiones de arquitectura (Architecture Decision Records). Una entr
 ## ADR-008 — PPP en función pura única compartida
 **Fecha**: 2026-06-25 · **Estado**: aceptada
 **Contexto**: El costeo PPP es el corazón del sistema y la fuente más probable de regresiones.
-**Decisión**: La lógica de PPP vive en `src/modules/movimientos/domain/ppp.ts` (pura, sin I/O) y la usan tanto la Server Action `crearMovimiento` como el migrador. Cobertura de tests alta y obligatoria.
+**Decisión**: La lógica de PPP vive en una función pura sin I/O (tras ADR-013: `src/lib/ppp.ts`) y la usan tanto la Server Action `crearMovimiento` (`src/server/movimientos/movimientos.actions.ts`) como el migrador. Cobertura de tests alta y obligatoria.
 **Consecuencias**: Un solo lugar testeado para ENT/SAL/TRASPASO/lotes.
 
 ## ADR-009 — IDs determinísticos de lotes (recálculo idempotente)
@@ -67,6 +68,19 @@ Registro de decisiones de arquitectura (Architecture Decision Records). Una entr
 **Contexto**: Se reabrió la pregunta de si mantener Firestore como base de datos (cero migración de plataforma, offline/real-time nativos, menos infra) vs migrar a Postgres.
 **Decisión**: Migrar a **Postgres + Drizzle**. El dominio (inventario/contabilidad con costeo PPP, lotes, ajustes, correlativos sin huecos, reportes con agregaciones) es relacional y transaccional — el caso canónico de SQL. El patrón actual de Firestore (toda la BD en un único documento JSON) es un anti-patrón a corregir, no a preservar. El único punto fuerte de Firestore (offline gratis) ya está cubierto por la decisión de offline híbrido (ADR-003): solo importa en 2 módulos de terreno, resueltos con Dexie. La migración es un evento único y ya tiene migrador verificable (ADR-010).
 **Alternativa descartada**: Firestore bien modelado (colecciones reales) — descartada por pérdida de joins, transacciones SQL, integridad referencial y tipado Drizzle, que el negocio necesita.
+
+## ADR-013 — Arquitectura por capas técnicas (supersede ADR-006)
+**Fecha**: 2026-06-26 · **Estado**: aceptada (supersede ADR-006)
+**Contexto**: Durante Fase 0, el usuario definió 14 reglas de código/estructura (ver `docs/CONVENTIONS.md`). Las reglas 6–13 imponen una organización **por capas técnicas** bajo `src/`, incompatible con la screaming-modular de ADR-006. El prompt original pedía "respetar" la modular, pero la instrucción explícita del usuario manda.
+**Decisión**: Estructura por capas bajo `src/`:
+- `src/app/<ruta>/page.tsx` (server component, ≤20 líneas, compone) + `src/app/<ruta>/(sections)/<ruta>.*.tsx` (componentes de ruta).
+- `src/server/<entidad>/<entidad>.actions.ts` (Server Actions) y `.queries.ts` (lecturas).
+- `src/components/ui/` (componentes compartidos / shadcn), `src/hooks/`.
+- `src/lib/utils.ts` (utils comunes: `cn`), `src/utils/<entidad>.utils.ts` (utils por entidad).
+- `src/types/<entidad>.types.ts`, `src/schemas/<entidad>.schema.ts` (zod), `src/constants/<entidad>.constants.ts`.
+- `src/db/` (Drizzle client + schema), antes `src/shared/db`.
+**Consecuencias**: Se eliminan `src/modules` y `src/shared`. El lint de boundaries (`eslint-plugin-boundaries`, rule `boundaries/dependencies`) ahora vigila la **dirección entre capas** (UI no es importada por capas inferiores; el acceso a datos pasa por `server`; las hojas no importan hacia arriba). El detalle de las 14 reglas vive en `docs/CONVENTIONS.md`. La formalización de las reglas de estilo como lint/skills se hace en sesión posterior a Fase 0.
+**Alternativa descartada**: Mantener screaming-modular y meter las capas dentro de cada módulo — descartada porque las reglas del usuario referencian rutas `src/<capa>` absolutas.
 
 ## ADR-012 — shadcn/ui (+ Tailwind + Radix) como capa de UI
 **Fecha**: 2026-06-25 · **Estado**: aceptada (confirmación)
