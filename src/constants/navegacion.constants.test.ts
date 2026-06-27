@@ -17,9 +17,21 @@ describe("NAV", () => {
     }
   })
 
-  it("solo el dashboard está disponible en esta fase", () => {
-    const disponibles = NAV.flatMap((s) => s.items).filter((i) => i.disponible)
-    expect(disponibles.map((i) => i.id)).toEqual(["dashboard"])
+  it("los módulos disponibles son los construidos hasta esta fase", () => {
+    const disponibles = NAV.flatMap((s) => s.items)
+      .filter((i) => i.disponible)
+      .map((i) => i.id)
+    // Fase 2: dashboard. Fase 3 (maestros): se habilitan progresivamente.
+    expect([...disponibles].sort()).toEqual(
+      [
+        "dashboard",
+        "productos",
+        "bodegas",
+        "proveedores",
+        "clientes",
+        "centrosCosto",
+      ].sort(),
+    )
   })
 })
 
