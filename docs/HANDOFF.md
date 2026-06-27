@@ -2,9 +2,9 @@
 
 > **Este es el PUNTO DE ENTRADA.** Cualquier sesión nueva (humano o agente) empieza leyendo este archivo de principio a fin antes de tocar nada. Se actualiza **cada sesión**.
 
-**Última actualización**: 2026-06-27 por sesión Fase 1 (Claude)
-**Rama activa**: `feat/fase-1-schema-migrador` (desde `develop`)
-**Estado global**: Fase 1 **HECHA y VERIFICADA** contra datos reales. Schema real (33 tablas) + PPP puro + migrador **completo (todos los dominios)**: corrida end-to-end con **0 discrepancias** (PPP, conteos, líneas, huérfanos, correlativos) e **idempotente** (re-correr converge), **contra `develop` y `production`** (ambos: 0001 aplicada + 0 discrepancias). La corrida en `production` es un **ensayo** (la fuente Firestore sigue viva) → re-correr en el cutover real tras congelar el monolito. Falta solo el merge del PR #2 a `develop`.
+**Última actualización**: 2026-06-27 por sesión Fase 2 (Claude)
+**Rama activa**: `feat/fase-2-auth` (desde `develop`)
+**Estado global**: Fase 2 **HECHA y VERIFICADA** contra datos reales. **better-auth** (tabla única: la tabla `users` ES la tabla user de better-auth, con role/permissions/activo de dominio leídos aparte) + tablas `sessions`/`accounts`/`verifications` + **login por username** (el origen usa usuarios, no emails → plugin `username`) + autorización `can()`/`requirePermiso()` (38 permisos, 6 roles desde el monolito) + **shell con sidebar** (8 secciones gateadas por permiso; módulos de Fases 3-12 deshabilitados) + topbar con menú de usuario/logout + cambio de password. Provisión por **seed** (`pnpm seed:auth`): 7 credenciales creadas, password inicial fuera de banda. Verificado e2e en `develop`: migrate `0002`/`0003` aplicadas, `migrate:data` 0 discrepancias, login/redirect/logout/permisos OK, build + 39 tests verdes. Fase 1 sigue HECHA. **Pendiente**: re-correr el seed en el cutover (set-password lo hace cada usuario tras login).
 
 ---
 
@@ -27,8 +27,8 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 |------|--------------------|--------|-----------|------------|
 | —    | Bootstrap (ramas + docs/) | HECHO | develop | sí |
 | 0    | Scaffold + tooling + CI (Postgres efímero) | HECHO (merged) | develop (PR #1) | CI verde + local (dev/build/test/typecheck/lint + db:migrate) |
-| 1    | Schema Drizzle + migrador + datos reales | HECHO | feat/fase-1-schema-migrador | migrador completo en develop: 0 discrepancias (PPP+conteos+correlativos), idempotente. Falta correr en production + PR |
-| 2    | better-auth + usuarios + permisos + layout/sidebar | PENDIENTE | — | — |
+| 1    | Schema Drizzle + migrador + datos reales | HECHO (merged) | develop (PR #2) | migrador completo: 0 discrepancias (PPP+conteos+correlativos), idempotente, develop+production (ensayo) |
+| 2    | better-auth + usuarios + permisos + layout/sidebar | VERIFICADO | feat/fase-2-auth | login por username, can()/requirePermiso, sidebar gateado, seed credenciales; e2e en develop (login/redirect/logout/build/39 tests) |
 | 3    | Maestros CRUD (productos, bodegas, prov., clientes, centros) | PENDIENTE | — | — |
 | 4    | Stock + movimientos + PPP + correlativos | PENDIENTE | — | — |
 | 5    | Tomas de inventario | PENDIENTE | — | — |
@@ -79,9 +79,9 @@ Verde local: `pnpm typecheck|lint|test` (27 tests) + `pnpm migrate:data` end-to-
 
 ## Próximos pasos (orden)
 
-1. **Merge del PR #2 → `develop`** (migrador completo + `drizzle/0001`).
-2. **Cutover real** (cuando toque): congelar el monolito → forzar último sync de dispositivos → re-correr `pnpm migrate:data` contra `production` (mismo comando: `DATABASE_URL=<prod> pnpm db:migrate && pnpm migrate:data`) → validar (esperado: 0 discrepancias) → invitar a usuarios a set-password. El ensayo de hoy confirmó que 0001 aplica y que la migración da 0 discrepancias en production.
-3. **Fase 2** (better-auth): tablas `auth_*` + flujo set-password para usuarios migrados sin credencial.
+1. **Merge del PR de Fase 2 → `develop`** (better-auth + auth schema `0002`/`0003` + shell/sidebar + seed).
+2. **Cutover real** (cuando toque): congelar el monolito → forzar último sync de dispositivos → `DATABASE_URL=<prod> pnpm db:migrate && pnpm migrate:data` → validar (esperado: 0 discrepancias) → `DATABASE_URL=<prod> SEED_PASSWORD="..." pnpm seed:auth` para provisionar credenciales → entregar password inicial fuera de banda; cada usuario la cambia en `/cambiar-password`. **Orden importante**: `seed:auth` va DESPUÉS de `migrate:data` (el TRUNCATE del migrador hace CASCADE y borra los `accounts`).
+3. **Fase 3** (Maestros CRUD): primer módulo de dominio. Reusar `requirePermiso(permiso)` (`src/server/auth/auth.queries.ts`) como guard en queries/actions y activar el ítem del sidebar (`disponible: true` en `src/constants/navegacion.constants.ts`).
 
 ---
 
@@ -89,7 +89,8 @@ Verde local: `pnpm typecheck|lint|test` (27 tests) + `pnpm migrate:data` end-to-
 
 - ~~**Export de Firebase**~~ — **resuelto**: lo de `index.html` es la **config web pública** (no admin); el migrador lee los 3 docs vía **SDK web + login anónimo** (igual que el monolito). Config en `.env` (gitignored).
 - ~~**Railway**~~ — **resuelto**: 2 environments (`develop`/`production`) con Postgres y schema aplicado. Ojo costo Hobby ($5/mes incl.): 2 Postgres ≈ doble consumo, vigilar *Usage*.
-- **Usuarios sin password**: el origen usa Firebase anónimo; el migrador inserta `users` de dominio sin credencial. Definir flujo de set-password en primer login (Fase 2, better-auth).
+- ~~**Usuarios sin password**~~ — **resuelto (Fase 2)**: provisión por admin vía `pnpm seed:auth` (crea `accounts` "credential" con password inicial para cada usuario activo sin credencial, idempotente); el usuario la cambia en `/cambiar-password`. Sin SMTP.
+- **Login por username, no email**: los identificadores del origen son usuarios (`admin`, `rbriones`…), no emails → se usa el plugin `username` de better-auth (`signIn.username`). La columna `email` se conserva (= id) porque el modelo user de better-auth la exige, pero no se usa para login.
 - **Inconsistencias de stock preexistentes**: el slice dio 0 discrepancias, pero al migrar todo conviene revisar si algún `(cod,bod)` difiere — se documentan, no se "arreglan" en silencio (migrator.md).
 
 ---
@@ -102,3 +103,4 @@ Verde local: `pnpm typecheck|lint|test` (27 tests) + `pnpm migrate:data` end-to-
 | 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013); reglas en `.claude/rules` + skills en `.claude/skills`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | PR #1 merged a `develop` (`8eac4e4`) |
 | 2026-06-26 | Fase 1 (parcial) | Infra Railway (2 envs develop/production + Postgres); schema real (33 tablas) por dominio + migración squasheada; PPP puro + tests; zod parse/normalize 3 docs + utils coerción; migrador `scripts/migracion` (fetch SDK web+anónimo → transform → load → recalc → validate). Slice maestros+inventario migrado a `develop`: 0 discrepancias de PPP. Falta resto de dominios | `feat/fase-1-schema-migrador` (`f33a88d`, `3ff09cf`) |
 | 2026-06-27 | Fase 1 (completa) | Migrador extendido a **todos los dominios** (transform por dominio + `transformAll`, `loadAll`, `migration_log`, validación de integridad: conteos/líneas/huérfanos/correlativos/RUT, counters sembrados+reajustados). Ajuste schema `invplantas.secuencia`→jsonb (`0001`) + columnas blob legacy a `$type` laxo verbatim. Corrida end-to-end **contra `develop` y `production`** (ensayo): **0 discrepancias** e idempotente. 27 tests verdes. PR #2 a `develop` | `feat/fase-1-schema-migrador` |
+| 2026-06-27 | Fase 2 (auth) | **better-auth** (tabla única: `users` = tabla user de better-auth con remapeo `name`→`nombre`, `createdAt`→`creadoAt`, `updatedAt`→`modificadoAt`; role/permissions/activo leídos aparte en `getUsuarioActual`). Tablas `sessions`/`accounts`/`verifications` (`0002`, backfill `email`=`id`). **Login por username** (plugin `username`, `0003` backfill `username`=lower(id)). Catálogo `permisos`/`navegacion` desde el monolito; `can()`/`itemVisible`/`requireAuth`/`requirePermiso`. Shell `(app)` (sidebar gateado + topbar/logout), `(auth)` (login + cambiar-password), `proxy.ts` (chequeo optimista de cookie, Next 16 renombró middleware→proxy). Seed `pnpm seed:auth` (7 credenciales). e2e en develop: migrate+migrate:data 0 discrepancias, login/redirect/logout OK, build + 39 tests | `feat/fase-2-auth` |
