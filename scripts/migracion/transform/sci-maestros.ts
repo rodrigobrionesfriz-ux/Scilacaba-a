@@ -146,9 +146,15 @@ export const transformMaestros = (p: SciPayload): FilasMaestros => {
     }),
   )
 
+  // id = email (origen). emailVerified=true: los migrados ya son identidades
+  // confiables; better-auth (Fase 2) gestiona la credencial vía seed/set-password.
   const usersRows: FilasMaestros["users"] = (p.users ?? []).map((u) => ({
     id: u.id,
     nombre: u.nombre ?? u.id,
+    username: u.id.toLowerCase(),
+    displayUsername: u.id,
+    email: u.id,
+    emailVerified: true,
     role: u.role ?? "consulta",
     permissions: u.permissions ?? [],
     activo: boolDefaultTrue(u.activo),
