@@ -4,7 +4,7 @@
 
 **Última actualización**: 2026-06-27 por sesión Fase 1 (Claude)
 **Rama activa**: `feat/fase-1-schema-migrador` (desde `develop`)
-**Estado global**: Fase 1 **HECHA y VERIFICADA** contra datos reales. Schema real (33 tablas) + PPP puro + migrador **completo (todos los dominios)**: corrida end-to-end contra `develop` con **0 discrepancias** (PPP, conteos, líneas, huérfanos, correlativos) e **idempotente** (re-correr converge). Falta solo correr la migración contra `production` (pre-cutover) y el PR a `develop`.
+**Estado global**: Fase 1 **HECHA y VERIFICADA** contra datos reales. Schema real (33 tablas) + PPP puro + migrador **completo (todos los dominios)**: corrida end-to-end con **0 discrepancias** (PPP, conteos, líneas, huérfanos, correlativos) e **idempotente** (re-correr converge), **contra `develop` y `production`** (ambos: 0001 aplicada + 0 discrepancias). La corrida en `production` es un **ensayo** (la fuente Firestore sigue viva) → re-correr en el cutover real tras congelar el monolito. Falta solo el merge del PR #2 a `develop`.
 
 ---
 
@@ -79,8 +79,8 @@ Verde local: `pnpm typecheck|lint|test` (27 tests) + `pnpm migrate:data` end-to-
 
 ## Próximos pasos (orden)
 
-1. **PR de Fase 1 → `develop`** (migrador completo + ajustes de schema). Incluye la migración `drizzle/0001_abnormal_thanos.sql`.
-2. **Migrar a `production`**: hoy la migración completa solo corrió contra `develop`. Antes del cutover real, aplicar `drizzle/0001` y correr `pnpm migrate:data` también contra `production` (apuntar `DATABASE_URL`/`DATABASE_PUBLIC_URL` al env production). Revisar diffs de stock/conteos (esperado: 0).
+1. **Merge del PR #2 → `develop`** (migrador completo + `drizzle/0001`).
+2. **Cutover real** (cuando toque): congelar el monolito → forzar último sync de dispositivos → re-correr `pnpm migrate:data` contra `production` (mismo comando: `DATABASE_URL=<prod> pnpm db:migrate && pnpm migrate:data`) → validar (esperado: 0 discrepancias) → invitar a usuarios a set-password. El ensayo de hoy confirmó que 0001 aplica y que la migración da 0 discrepancias en production.
 3. **Fase 2** (better-auth): tablas `auth_*` + flujo set-password para usuarios migrados sin credencial.
 
 ---
@@ -101,4 +101,4 @@ Verde local: `pnpm typecheck|lint|test` (27 tests) + `pnpm migrate:data` end-to-
 | 2026-06-25 | bootstrap | Rama `develop` desde `origin/main`; sistema de handoff en `docs/` | (este commit) |
 | 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013); reglas en `.claude/rules` + skills en `.claude/skills`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | PR #1 merged a `develop` (`8eac4e4`) |
 | 2026-06-26 | Fase 1 (parcial) | Infra Railway (2 envs develop/production + Postgres); schema real (33 tablas) por dominio + migración squasheada; PPP puro + tests; zod parse/normalize 3 docs + utils coerción; migrador `scripts/migracion` (fetch SDK web+anónimo → transform → load → recalc → validate). Slice maestros+inventario migrado a `develop`: 0 discrepancias de PPP. Falta resto de dominios | `feat/fase-1-schema-migrador` (`f33a88d`, `3ff09cf`) |
-| 2026-06-27 | Fase 1 (completa) | Migrador extendido a **todos los dominios** (transform por dominio + `transformAll`, `loadAll`, `migration_log`, validación de integridad: conteos/líneas/huérfanos/correlativos/RUT, counters sembrados+reajustados). Ajuste schema `invplantas.secuencia`→jsonb (`0001`) + columnas blob legacy a `$type` laxo verbatim. Corrida end-to-end contra `develop`: **0 discrepancias** e idempotente. 27 tests verdes | `feat/fase-1-schema-migrador` |
+| 2026-06-27 | Fase 1 (completa) | Migrador extendido a **todos los dominios** (transform por dominio + `transformAll`, `loadAll`, `migration_log`, validación de integridad: conteos/líneas/huérfanos/correlativos/RUT, counters sembrados+reajustados). Ajuste schema `invplantas.secuencia`→jsonb (`0001`) + columnas blob legacy a `$type` laxo verbatim. Corrida end-to-end **contra `develop` y `production`** (ensayo): **0 discrepancias** e idempotente. 27 tests verdes. PR #2 a `develop` | `feat/fase-1-schema-migrador` |

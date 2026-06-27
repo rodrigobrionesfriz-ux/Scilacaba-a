@@ -24,7 +24,7 @@ const main = async () => {
   const docs = await fetchDocs()
   console.log("2/5 Transform (todos los dominios)...")
   const filas = transformAll(docs)
-  console.log("3/5 Load → develop...")
+  console.log("3/5 Load → DB (DATABASE_URL)...")
   await loadAll(filas)
   console.log("4/5 Recalcular PPP (stock + lotes)...")
   const recalc = await recalcularStock()
@@ -49,7 +49,7 @@ const main = async () => {
       (select count(*) from audit)::int audit,
       (select count(*) from counters)::int counters,
       (select count(*) from config)::int config`)
-  console.log("\n=== Conteos en develop ===")
+  console.log("\n=== Conteos en DB destino ===")
   console.table(r.rows)
 
   const sciP = sciPayloadSchema.parse(docs.sci.payload ?? {})
