@@ -3,3 +3,5 @@ allowBuilds:
   unrs-resolver: true
   "@tailwindcss/oxide": true
   esbuild: true
+  '@firebase/util': true
+  protobufjs: true

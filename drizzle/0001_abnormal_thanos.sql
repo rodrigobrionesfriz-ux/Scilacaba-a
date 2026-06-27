@@ -1,0 +1,1 @@
+ALTER TABLE "invplantas" ALTER COLUMN "secuencia" SET DATA TYPE jsonb USING to_jsonb("secuencia");

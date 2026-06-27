@@ -1,6 +1,6 @@
 {
-  "id": "97a74c4d-960a-4138-ad87-8c179bfc0f1e",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "546b2f7e-77c6-4358-b1d8-3efd7375d627",
+  "prevId": "97a74c4d-960a-4138-ad87-8c179bfc0f1e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1656,7 +1656,7 @@
         },
         "secuencia": {
           "name": "secuencia",
-          "type": "text[]",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
