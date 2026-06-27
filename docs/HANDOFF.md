@@ -2,9 +2,9 @@
 
 > **Este es el PUNTO DE ENTRADA.** Cualquier sesión nueva (humano o agente) empieza leyendo este archivo de principio a fin antes de tocar nada. Se actualiza **cada sesión**.
 
-**Última actualización**: 2026-06-26 por sesión Fase 0 (Claude)
-**Rama activa**: `develop`
-**Estado global**: Fase 0 (scaffold + tooling) **mergeada a `develop`** (PR #1). Siguiente: Fase 1.
+**Última actualización**: 2026-06-26 por sesión Fase 1 (Claude)
+**Rama activa**: `feat/fase-1-schema-migrador` (desde `develop`)
+**Estado global**: Fase 1 **EN CURSO**. Schema real (33 tablas) + PPP puro + migrador (slice maestros+inventario) **HECHO y validado contra datos reales** (0 discrepancias de PPP). Falta extender el migrador al resto de dominios.
 
 ---
 
@@ -27,7 +27,7 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 |------|--------------------|--------|-----------|------------|
 | —    | Bootstrap (ramas + docs/) | HECHO | develop | sí |
 | 0    | Scaffold + tooling + CI (Postgres efímero) | HECHO (merged) | develop (PR #1) | CI verde + local (dev/build/test/typecheck/lint + db:migrate) |
-| 1    | Schema Drizzle + migrador + datos reales | PENDIENTE | — | — |
+| 1    | Schema Drizzle + migrador + datos reales | EN CURSO | feat/fase-1-schema-migrador | slice maestros+inventario: PPP validado en develop (0 discrepancias) |
 | 2    | better-auth + usuarios + permisos + layout/sidebar | PENDIENTE | — | — |
 | 3    | Maestros CRUD (productos, bodegas, prov., clientes, centros) | PENDIENTE | — | — |
 | 4    | Stock + movimientos + PPP + correlativos | PENDIENTE | — | — |
@@ -61,31 +61,39 @@ Estados: `PENDIENTE` | `EN CURSO` | `HECHO` (código + tests) | `VERIFICADO` (e2
 
 ## En curso ahora mismo
 
-**Fase 0 entregada en `feat/fase-0-scaffold` (PR abierto a `develop`).** Lo hecho:
-- Next.js 16 (App Router, Turbopack) + TS + Tailwind v4, **pnpm** (`packageManager` pineado; `allowBuilds` en `pnpm-workspace.yaml`).
-- **Arquitectura por capas (ADR-013)**: `src/app` (rutas + `(sections)`), `src/server`, `src/components/ui`, `src/lib`, `src/utils`, `src/types`, `src/schemas`, `src/constants`, `src/db`. Slice `dashboard` de ejemplo (page→view→query→types/schemas/constants/utils/components).
-- shadcn/ui (base-nova) + Button. ESLint flat config con **lint de boundaries por capas** (`boundaries/dependencies`) + Prettier (`semi:false`, comillas dobles). Reglas de código en `docs/CONVENTIONS.md`.
-- Drizzle + drizzle-kit (driver **pg**), `src/db/{client,schema}.ts`, schema placeholder `_health`, migración `drizzle/0000_*`, `.env.example`.
-- Vitest verde (`formatCLP`). **Sin Playwright/e2e** (descartado por el usuario).
-- CI (`.github/workflows/ci.yml`): `pnpm install --frozen-lockfile` + typecheck + lint + test + db:migrate + build, con Postgres 16 efímero, en PR a `develop`.
+**Fase 1 en `feat/fase-1-schema-migrador` (desde `develop`).** Lo hecho y verificado:
 
-Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra Postgres efímero (Docker).
+- **Infra Railway (Hobby)**: proyecto con 2 environments (`develop` y `production`), cada uno con su Postgres independiente. Migración inicial aplicada en ambos (33 tablas, idénticas). App corre local apuntando a la DB `develop` vía `DATABASE_PUBLIC_URL` (en `.env`, gitignored). Deploy de la app → Fase 12.
+- **Schema real (33 tablas)**: reemplaza el placeholder `_health`. Dividido por dominio en `src/db/schema/{maestros,inventario,tomas,mantenciones,terreno,cuaderno,fertirriego,presupuesto,sistema}.ts` + barrel `index.ts`. `drizzle.config` apunta al barrel. Migración squasheada a `drizzle/0000_amazing_scream.sql`. Tablas better-auth (`auth_user`, etc.) NO incluidas → Fase 2.
+- **PPP puro** (`src/lib/ppp.ts`, ADR-008) + 8 tests: ENT/SAL/TRASPASO, lotes con id determinístico (ADR-009), orden cronológico, anulados, piso en 0. Tipos en `src/types/movimientos.types.ts`, constantes (11 tipos de movimiento + prefijos) en `src/constants/movimientos.constants.ts`.
+- **Capa parse/normalize**: zod lenient de los 3 docs (`src/schemas/firestore-{sci,cuaderno,presupuesto}.schema.ts`) + helpers de coerción puros y testeados (`src/utils/migracion.utils.ts`: fechas, numéricos, RUT, booleanos default). **Ojo:** `invplantas.secuencia` resultó ser array de objetos (no strings) en la data real → quedó como `z.array(z.unknown())`.
+- **Migrador** en `scripts/migracion/` (corre con `pnpm migrate:data` vía tsx): `firebase.ts` (fetch de los 3 docs vía **SDK web + login anónimo**, config pública en `.env`), `transform.ts` (raw→filas + huérfanos placeholder), `load.ts` (TRUNCATE idempotente + insert en orden de FKs), `recalc.ts` (usa `@/lib/ppp`, reescribe stock+lots), `validate.ts` (prueba dura: stock recalculado == origen ±0.0001), `run.ts` (orquestador).
+- **Corrida real contra `develop`** (solo slice maestros+inventario): 176 productos, 14 movimientos, 20 líneas, 14 stock, 7 lotes. **0 discrepancias de PPP.** ✅
+
+Verde local: `pnpm typecheck|lint|test` (23 tests) + `pnpm migrate:data` end-to-end.
+
+Datos reales en origen (para dimensionar lo que falta): cuaderno → panos 19, productos 154; presupuesto → rows 372; sci → audit 1704, invplantas 25, costCenters 14, conteos 5, etc.
 
 ---
 
 ## Próximos pasos (orden)
 
-1. ~~Mergear el PR de Fase 0~~ — **hecho** (PR #1 → `develop`).
-2. **Reglas + skills** (hecho en esta sesión): las 14 reglas viven en `.claude/rules/{estilo,estructura,boundaries}.md`, cargadas por `CLAUDE.md`; `docs/CONVENTIONS.md` es puntero. Skills en `.claude/skills/`: `sci-conventions`, `new-entity`, `new-page`, `new-component`. **Decidido:** shadcn vendored (`src/components/ui`) es la **única** excepción a la regla 1 → el `Button` se queda con `function`. Pendiente opcional: lint que falle ante `function`/`any`/`as` (las reglas hoy son guía + boundaries; el resto se vigila a mano).
-3. **Fase 1 — Schema Drizzle real + migrador**: reemplazar el placeholder `_health` por el schema real; conseguir el export de los 3 docs Firestore; provisionar Postgres en Railway y obtener `DATABASE_URL` real; decidir herramienta e2e (Playwright descartado).
+1. **Extender el migrador al resto de dominios** (aditivo: amplía `transform`/`load`; el `recalc`/`validate` del PPP ya está):
+   - tomas (`inventory_counts` + `inventory_count_lines`) · mantenciones (`maintenance_orders` + lines)
+   - terreno (`conteos`, `invplantas`, `estimaciones`) · cuaderno (`panos`, `field_records`, `field_products`, `application_orders`, `application_confirmations`, `fertirriego_*`)
+   - presupuesto (`budget_rows` + `budget_meta`) · sistema (`audit`, `config`, **`counters`** sembrados + validación de correlativos)
+   - **`migration_log`**: una fila por entidad por corrida (trazabilidad).
+2. **Migrar a `production`**: hoy solo se cargó el slice en `develop`. Antes del cutover real, correr la migración completa también contra `production` (cambiar `DATABASE_URL` o parametrizar).
+3. **PR de Fase 1 → `develop`** cuando la migración esté completa.
 
 ---
 
 ## Bloqueos / preguntas abiertas
 
-- **Export de Firebase**: confirmar cómo se obtendrá el dump de los 3 docs Firestore (`sci/main`, `cuaderno/main`, `presupuesto/main`) — credenciales firebase-admin o export manual. Necesario para Fase 1.
-- **Railway**: el usuario tiene cuenta. Falta crear el proyecto y obtener `DATABASE_URL` real (movido a **Fase 1**; Fase 0 se validó con Postgres efímero en CI/local).
-- **Usuarios sin password**: el origen usa Firebase anónimo; definir flujo de set-password en primer login (Fase 2).
+- ~~**Export de Firebase**~~ — **resuelto**: lo de `index.html` es la **config web pública** (no admin); el migrador lee los 3 docs vía **SDK web + login anónimo** (igual que el monolito). Config en `.env` (gitignored).
+- ~~**Railway**~~ — **resuelto**: 2 environments (`develop`/`production`) con Postgres y schema aplicado. Ojo costo Hobby ($5/mes incl.): 2 Postgres ≈ doble consumo, vigilar *Usage*.
+- **Usuarios sin password**: el origen usa Firebase anónimo; el migrador inserta `users` de dominio sin credencial. Definir flujo de set-password en primer login (Fase 2, better-auth).
+- **Inconsistencias de stock preexistentes**: el slice dio 0 discrepancias, pero al migrar todo conviene revisar si algún `(cod,bod)` difiere — se documentan, no se "arreglan" en silencio (migrator.md).
 
 ---
 
@@ -95,3 +103,4 @@ Verde local: `pnpm dev|build|test|typecheck|lint` + `db:generate/migrate` contra
 |-------|--------|-------------|-----------|
 | 2026-06-25 | bootstrap | Rama `develop` desde `origin/main`; sistema de handoff en `docs/` | (este commit) |
 | 2026-06-26 | Fase 0 | Scaffold Next 16 + pnpm; pivot a arquitectura por capas (ADR-013); reglas en `.claude/rules` + skills en `.claude/skills`; shadcn; lint de boundaries; Drizzle (pg) + placeholder `_health`; Vitest; CI; Playwright descartado | PR #1 merged a `develop` (`8eac4e4`) |
+| 2026-06-26 | Fase 1 (parcial) | Infra Railway (2 envs develop/production + Postgres); schema real (33 tablas) por dominio + migración squasheada; PPP puro + tests; zod parse/normalize 3 docs + utils coerción; migrador `scripts/migracion` (fetch SDK web+anónimo → transform → load → recalc → validate). Slice maestros+inventario migrado a `develop`: 0 discrepancias de PPP. Falta resto de dominios | `feat/fase-1-schema-migrador` (`f33a88d`, `3ff09cf`) |
