@@ -38,10 +38,20 @@ export const toNumericString = (value: unknown): string => {
   return Number.isFinite(n) ? String(n) : "0"
 }
 
-// number entero | null para columnas integer/bigint. No finito → null.
+// number entero | null para columnas integer/bigint. Ausente/no finito → null.
 export const toIntOrNull = (value: unknown): number | null => {
+  if (value == null || value === "") return null
   const n = typeof value === "number" ? value : Number(value)
   return Number.isFinite(n) ? Math.trunc(n) : null
+}
+
+// PK bigint (mode:"number"): ids epoch-ms del cuaderno (caben en 2^53). No finito → null.
+export const toBigIntId = (value: unknown): number | null => toIntOrNull(value)
+
+// Array de number|string → string[] (columnas text[] como pano_ids). Ausente → null.
+export const toStringArray = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) return null
+  return value.filter((v) => v != null).map((v) => String(v))
 }
 
 // Booleano con semántica "ausente = true" (inventariable, activo, aplicaIVA, manejaAtributos en algunos casos).

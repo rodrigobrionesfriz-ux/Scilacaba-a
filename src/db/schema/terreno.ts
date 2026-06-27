@@ -21,18 +21,10 @@ export const conteos = pgTable("conteos", {
   etapa: text("etapa"),
   fijosCodigos: text("fijos_codigos").array(),
   usuario: text("usuario"),
+  // Blob crudo del origen (captura offline): forma heterogénea entre versiones
+  // de la app (p. ej. campo `precision` extra) → se preserva verbatim (SPEC: 100%).
   arboles: jsonb("arboles")
-    .$type<
-      Array<{
-        n: number
-        centros: number
-        tipo: string
-        codigo: string
-        lat?: number
-        lng?: number
-        fecha?: string
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   promedioCentros: numeric("promedio_centros", { precision: 18, scale: 4 }),
@@ -58,29 +50,15 @@ export const invplantas = pgTable("invplantas", {
   usuario: text("usuario"),
   countPrincipal: integer("count_principal"),
   countPoliniz: integer("count_poliniz"),
-  secuencia: text("secuencia").array(),
-  gpsInicio: jsonb("gps_inicio").$type<{
-    lat: number
-    lng: number
-    precision?: number
-    hora?: string
-  }>(),
-  gpsFin: jsonb("gps_fin").$type<{
-    lat: number
-    lng: number
-    precision?: number
-    hora?: string
-  }>(),
+  // En el origen `secuencia` es heterogénea: en unos registros es string[]
+  // ("principal"/"poliniz") y en otros object[] ({tipo,estado}) → jsonb verbatim.
+  secuencia: jsonb("secuencia").$type<unknown[]>(),
+  gpsInicio: jsonb("gps_inicio").$type<Record<string, unknown>>(),
+  gpsFin: jsonb("gps_fin").$type<Record<string, unknown>>(),
+  // Blob crudo de plantas (offline): forma divergente entre versiones
+  // ({seq,codigo,tipo,estado,lat,lng}) → se preserva verbatim (SPEC: 100%).
   plantas: jsonb("plantas")
-    .$type<
-      Array<{
-        n: number
-        estado: "sano" | "debil" | "muerto" | "replante" | "falta"
-        codigo: string
-        lat?: number
-        lng?: number
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   sincronizado: boolean("sincronizado").notNull().default(false),
@@ -94,24 +72,9 @@ export const estimaciones = pgTable("estimaciones", {
   id: text("id").primaryKey(),
   nombre: text("nombre").notNull(),
   usuario: text("usuario"),
+  // Líneas de cálculo por paño (blob del origen) → verbatim (SPEC: 100%).
   lineas: jsonb("lineas")
-    .$type<
-      Array<{
-        panoId: number
-        panoNombre: string
-        variedad: string
-        plantas: number
-        plantasEquiv?: number | null
-        plantasInvTotal?: number | null
-        usarEquiv: boolean
-        centros: number
-        tieneCont: boolean
-        frutosCentro: number
-        kgFruto: number
-        plantasUsadas?: number
-        kgPano: number
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   totalKg: numeric("total_kg", { precision: 18, scale: 4 }),

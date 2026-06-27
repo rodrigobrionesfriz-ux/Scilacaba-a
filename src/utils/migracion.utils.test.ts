@@ -7,8 +7,10 @@ import {
   parseTimestamp,
   rutBody,
   rutValido,
+  toBigIntId,
   toIntOrNull,
   toNumericString,
+  toStringArray,
 } from "./migracion.utils"
 
 describe("parseTimestamp", () => {
@@ -62,6 +64,25 @@ describe("toIntOrNull", () => {
   })
   it("no finito → null", () => {
     expect(toIntOrNull("abc")).toBeNull()
+  })
+})
+
+describe("toBigIntId", () => {
+  it("conserva id epoch-ms grande", () => {
+    expect(toBigIntId(1778613683269)).toBe(1778613683269)
+  })
+  it("no parseable → null", () => {
+    expect(toBigIntId(null)).toBeNull()
+  })
+})
+
+describe("toStringArray", () => {
+  it("coacciona number|string a string[]", () => {
+    expect(toStringArray([1, "2", 3])).toEqual(["1", "2", "3"])
+  })
+  it("no array → null; descarta nullish", () => {
+    expect(toStringArray(undefined)).toBeNull()
+    expect(toStringArray([1, null, 2])).toEqual(["1", "2"])
   })
 })
 

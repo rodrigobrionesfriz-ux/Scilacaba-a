@@ -5,6 +5,8 @@ const s = z.string().nullish()
 const num = z.union([z.number(), z.string()]).nullish()
 const bln = z.boolean().nullish()
 const arrS = z.array(z.string()).nullish()
+// Blobs legacy heterogéneos: se preservan verbatim (jsonb) → record laxo.
+const rec = z.record(z.string(), z.unknown())
 
 // --- Sub-objetos anidados ---
 const detalleSchema = z.looseObject({
@@ -40,44 +42,6 @@ const mantencionLineaSchema = z.looseObject({
   detalle: s,
   cantidad: num,
   valorUnit: num,
-})
-
-const facturaSchema = z
-  .looseObject({ numeroDoc: s, fecha: s, movimiento: s, horometro: num })
-  .nullish()
-const arbolSchema = z.looseObject({
-  n: num,
-  centros: num,
-  tipo: s,
-  codigo: s,
-  lat: num,
-  lng: num,
-  fecha: s,
-})
-const plantaSchema = z.looseObject({
-  n: num,
-  estado: s,
-  codigo: s,
-  lat: num,
-  lng: num,
-})
-const gpsSchema = z
-  .looseObject({ lat: num, lng: num, precision: num, hora: s })
-  .nullish()
-const estimacionLineaSchema = z.looseObject({
-  panoId: num,
-  panoNombre: s,
-  variedad: s,
-  plantas: num,
-  plantasEquiv: num,
-  plantasInvTotal: num,
-  usarEquiv: bln,
-  centros: num,
-  tieneCont: bln,
-  frutosCentro: num,
-  kgFruto: num,
-  plantasUsadas: num,
-  kgPano: num,
 })
 
 // --- Stores (PK requerida donde es id estable) ---
@@ -231,7 +195,7 @@ const mantencionSchema = z.looseObject({
   lineas: z.array(mantencionLineaSchema).nullish(),
   total: num,
   estado: s,
-  factura: facturaSchema,
+  factura: rec.nullish(),
   creado: s,
   modificado: s,
   _mod: num,
@@ -248,7 +212,7 @@ const conteoSchema = z.looseObject({
   fechaInicio: s,
   fechaFin: s,
   usuario: s,
-  arboles: z.array(arbolSchema).nullish(),
+  arboles: z.array(rec).nullish(),
   promedioCentros: num,
   nArboles: num,
   sincronizado: bln,
@@ -270,9 +234,9 @@ const invplantaSchema = z.looseObject({
   countPrincipal: num,
   countPoliniz: num,
   secuencia: z.array(z.unknown()).nullish(),
-  gpsInicio: gpsSchema,
-  gpsFin: gpsSchema,
-  plantas: z.array(plantaSchema).nullish(),
+  gpsInicio: rec.nullish(),
+  gpsFin: rec.nullish(),
+  plantas: z.array(rec).nullish(),
   sincronizado: bln,
   fechaSync: s,
   _mod: num,
@@ -283,7 +247,7 @@ const estimacionSchema = z.looseObject({
   nombre: s,
   fecha: s,
   usuario: s,
-  lineas: z.array(estimacionLineaSchema).nullish(),
+  lineas: z.array(rec).nullish(),
   totalKg: num,
   modificado: s,
   _mod: num,

@@ -27,13 +27,8 @@ export const panos = pgTable("panos", {
   deh: integer("deh"),
   dsh: integer("dsh"),
   portaInjerto: text("porta_injerto"),
-  prodPct: jsonb("prod_pct").$type<{
-    sano: number
-    debil: number
-    replante: number
-    muerto: number
-    falta: number
-  }>(),
+  // prodPct opcional (% por estado) — blob del origen → verbatim (SPEC: 100%).
+  prodPct: jsonb("prod_pct").$type<Record<string, unknown>>(),
 })
 
 // Registros de campo (un registro por paño). Origen: cuaderno/main S.registros[]
@@ -61,7 +56,7 @@ export const fieldProducts = pgTable("field_products", {
   dosis: text("dosis"),
   ingredienteActivo: text("ingrediente_activo"),
   objetivo: text("objetivo"),
-  aportes: jsonb("aportes").$type<Record<string, number>>(),
+  aportes: jsonb("aportes").$type<Record<string, unknown>>(),
 })
 
 // Órdenes de aplicación (PK: id epoch-ms). Origen: cuaderno/main S.ordenes[]
@@ -79,39 +74,13 @@ export const applicationOrders = pgTable("application_orders", {
   responsable: text("responsable"),
   metodo: text("metodo"),
   panoIds: text("pano_ids").array(),
+  // productos[]/distribucion[] son blobs del origen → verbatim (SPEC: 100%).
   productos: jsonb("productos")
-    .$type<
-      Array<{
-        nombre: string
-        dosis: number
-        unidad: string
-        unitS: string
-        tProd?: number
-        margin?: number
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   distribucion: jsonb("distribucion")
-    .$type<
-      Array<{
-        panoId: number
-        panoNombre: string
-        variedad: string
-        anio: string
-        color: string
-        has: number
-        agua: number
-        prod: number
-        prods: Array<{
-          nombre: string
-          qty: number
-          unitS: string
-          unidad: string
-          dosis: number
-        }>
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   producto: text("producto"),
@@ -152,17 +121,9 @@ export const applicationConfirmations = pgTable("application_confirmations", {
   viento: numeric("viento", { precision: 18, scale: 4 }),
   condClima: text("cond_clima"),
   panoIds: text("pano_ids").array(),
+  // productosReales[] es blob del origen → verbatim (SPEC: 100%).
   productosReales: jsonb("productos_reales")
-    .$type<
-      Array<{
-        nombre: string
-        qtyAplicada: number
-        unitS: string
-        planeado: number
-        planeadoUS: string
-        factor: number
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   aguaReal: numeric("agua_real", { precision: 18, scale: 4 }),

@@ -30,15 +30,9 @@ export const fertirriegoOrdenes = pgTable("fertirriego_ordenes", {
   estado: text("estado"),
   responsable: text("responsable"),
   sectores: text("sectores").array(),
+  // lineas[] (productos de la orden) es blob del origen → verbatim (SPEC: 100%).
   lineas: jsonb("lineas")
-    .$type<
-      Array<{
-        prod: string
-        dosis: number
-        unidad: string
-        obs: string
-      }>
-    >()
+    .$type<Record<string, unknown>[]>()
     .notNull()
     .default([]),
   confirmada: boolean("confirmada").notNull().default(false),
@@ -49,21 +43,8 @@ export const fertirriegoOrdenes = pgTable("fertirriego_ordenes", {
 
 // Configuración de fertirriego (singleton). Origen: cuaderno/main S.fertirriego.cfg
 // Una sola fila (id = "main"); listas editables y rangos de numeración por especie.
+// Blob de configuración heterogéneo → se preserva verbatim (SPEC: 100%).
 export const fertirriegoConfig = pgTable("fertirriego_config", {
   id: text("id").primaryKey().default("main"),
-  cfg: jsonb("cfg").$type<{
-    empresa?: string
-    temporada?: string
-    documento?: string
-    obsDefecto?: string
-    rangos: Array<{ especie: string; desde: number; hasta: number }>
-    estados: string[]
-    condiciones: string[]
-    equipos: string[]
-    formas: string[]
-    unidades: string[]
-    horarios: string[]
-    tiposDoc: string[]
-    predios: Array<{ predio: string; admin: string }>
-  }>(),
+  cfg: jsonb("cfg").$type<Record<string, unknown>>(),
 })

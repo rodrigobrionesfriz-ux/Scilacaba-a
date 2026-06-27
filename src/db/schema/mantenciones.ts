@@ -22,12 +22,9 @@ export const maintenanceOrders = pgTable("maintenance_orders", {
   proveedorCodigo: text("proveedor_codigo").references(() => providers.codigo),
   total: numeric("total", { precision: 18, scale: 6 }).notNull().default("0"),
   estado: text("estado").notNull(),
-  factura: jsonb("factura").$type<{
-    numeroDoc?: string
-    fecha?: string
-    movimiento?: string
-    horometro?: number
-  }>(),
+  // Factura embebida del origen (tipoDoc, numeroDoc, fecha, monto, obs, horometro,
+  // movimiento). Heterogénea → se preserva verbatim como jsonb (SPEC: 100%).
+  factura: jsonb("factura").$type<Record<string, unknown>>(),
   creadoAt: timestamp("creado_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

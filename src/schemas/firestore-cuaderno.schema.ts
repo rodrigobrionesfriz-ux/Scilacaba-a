@@ -5,6 +5,8 @@ const num = z.union([z.number(), z.string()]).nullish()
 const bln = z.boolean().nullish()
 const arrS = z.array(z.string()).nullish()
 const arrNum = z.array(z.union([z.number(), z.string()])).nullish()
+// Blobs legacy heterogéneos: se preservan verbatim (jsonb) → record laxo.
+const rec = z.record(z.string(), z.unknown())
 
 const panoSchema = z.looseObject({
   id: num,
@@ -21,15 +23,7 @@ const panoSchema = z.looseObject({
   deh: num,
   dsh: num,
   portaInjerto: s,
-  prodPct: z
-    .looseObject({
-      sano: num,
-      debil: num,
-      replante: num,
-      muerto: num,
-      falta: num,
-    })
-    .nullish(),
+  prodPct: rec.nullish(),
 })
 
 const registroSchema = z.looseObject({
@@ -56,30 +50,6 @@ const fieldProductSchema = z.looseObject({
   aportes: z.record(z.string(), z.union([z.number(), z.string()])).nullish(),
 })
 
-const ordenProductoSchema = z.looseObject({
-  nombre: s,
-  dosis: num,
-  unidad: s,
-  unitS: s,
-  tProd: num,
-  margin: num,
-})
-const ordenDistribucionSchema = z.looseObject({
-  panoId: num,
-  panoNombre: s,
-  variedad: s,
-  anio: s,
-  color: s,
-  has: num,
-  agua: num,
-  prod: num,
-  prods: z
-    .array(
-      z.looseObject({ nombre: s, qty: num, unitS: s, unidad: s, dosis: num }),
-    )
-    .nullish(),
-})
-
 const ordenSchema = z.looseObject({
   id: num,
   numero: s,
@@ -92,8 +62,8 @@ const ordenSchema = z.looseObject({
   responsable: s,
   metodo: s,
   panoIds: arrNum,
-  productos: z.array(ordenProductoSchema).nullish(),
-  distribucion: z.array(ordenDistribucionSchema).nullish(),
+  productos: z.array(rec).nullish(),
+  distribucion: z.array(rec).nullish(),
   producto: s,
   dosis: num,
   unidad: s,
@@ -126,18 +96,7 @@ const confirmacionSchema = z.looseObject({
   viento: num,
   condClima: s,
   panoIds: arrNum,
-  productosReales: z
-    .array(
-      z.looseObject({
-        nombre: s,
-        qtyAplicada: num,
-        unitS: s,
-        planeado: num,
-        planeadoUS: s,
-        factor: num,
-      }),
-    )
-    .nullish(),
+  productosReales: z.array(rec).nullish(),
   aguaReal: num,
   notas: s,
   creada: s,
@@ -161,34 +120,12 @@ const fertOrdenSchema = z.looseObject({
   estado: s,
   responsable: s,
   sectores: arrS,
-  lineas: z
-    .array(z.looseObject({ prod: s, dosis: num, unidad: s, obs: s }))
-    .nullish(),
+  lineas: z.array(rec).nullish(),
   confirmada: bln,
   confirmadaFecha: s,
   creado: s,
   modificado: s,
 })
-
-const cfgSchema = z
-  .looseObject({
-    empresa: s,
-    temporada: s,
-    documento: s,
-    obsDefecto: s,
-    rangos: z
-      .array(z.looseObject({ especie: s, desde: num, hasta: num }))
-      .nullish(),
-    estados: arrS,
-    condiciones: arrS,
-    equipos: arrS,
-    formas: arrS,
-    unidades: arrS,
-    horarios: arrS,
-    tiposDoc: arrS,
-    predios: z.array(z.looseObject({ predio: s, admin: s })).nullish(),
-  })
-  .nullish()
 
 // Envelope del objeto S (payload de cuaderno/main ya JSON.parseado)
 export const cuadernoPayloadSchema = z.looseObject({
@@ -203,18 +140,10 @@ export const cuadernoPayloadSchema = z.looseObject({
       sectores: z.array(sectorSchema).optional(),
       ordenes: z.array(fertOrdenSchema).optional(),
       oCounter: num,
-      cfg: cfgSchema,
+      cfg: rec.nullish(),
     })
     .nullish(),
-  prodPorEstado: z
-    .looseObject({
-      sano: num,
-      debil: num,
-      replante: num,
-      muerto: num,
-      falta: num,
-    })
-    .nullish(),
+  prodPorEstado: rec.nullish(),
 })
 
 export type CuadernoPayload = z.infer<typeof cuadernoPayloadSchema>

@@ -1,35 +1,70 @@
 import "dotenv/config"
+import { randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db } from "@/db/client"
+import { sciPayloadSchema } from "@/schemas/firestore-sci.schema"
 import { fetchDocs } from "./firebase"
-import { loadSci } from "./load"
+import { loadAll } from "./load"
+import { logMigracion } from "./log"
 import { recalcularStock } from "./recalc"
-import { transformSci } from "./transform"
-import { validar } from "./validate"
+import { transformAll } from "./transform"
+import { validarIntegridad, validarPpp, type Discrepancia } from "./validate"
+
+const resumenPorTipo = (problemas: Discrepancia[]) => {
+  const m = new Map<string, number>()
+  for (const p of problemas) m.set(p.tipo, (m.get(p.tipo) ?? 0) + 1)
+  return [...m].map(([tipo, n]) => ({ tipo, n }))
+}
 
 const main = async () => {
-  console.log("1/4 Fetch Firebase...")
-  const { sci } = await fetchDocs()
-  console.log("2/4 Transform...")
-  const filas = transformSci(sci)
-  console.log("3/4 Load → develop...")
-  await loadSci(filas)
-  console.log("4/4 Recalcular PPP (stock + lotes)...")
+  const runId = randomUUID()
+  console.log(`Migración run ${runId}`)
+
+  console.log("1/5 Fetch Firebase (3 docs)...")
+  const docs = await fetchDocs()
+  console.log("2/5 Transform (todos los dominios)...")
+  const filas = transformAll(docs)
+  console.log("3/5 Load → develop...")
+  await loadAll(filas)
+  console.log("4/5 Recalcular PPP (stock + lotes)...")
   const recalc = await recalcularStock()
+  console.log("5/5 migration_log + validación...")
+  const conteos = await logMigracion(runId, docs, filas)
+
+  console.log("\n=== Conteos por entidad (origen → destino) ===")
+  console.table(conteos)
 
   const r = await db.execute(sql`select
       (select count(*) from products)::int productos,
       (select count(*) from movements)::int movimientos,
       (select count(*) from movement_lines)::int lineas,
       (select count(*) from stock)::int stock,
-      (select count(*) from lots)::int lotes`)
+      (select count(*) from lots)::int lotes,
+      (select count(*) from inventory_counts)::int tomas,
+      (select count(*) from maintenance_orders)::int mantenciones,
+      (select count(*) from panos)::int panos,
+      (select count(*) from invplantas)::int invplantas,
+      (select count(*) from conteos)::int conteos,
+      (select count(*) from budget_rows)::int presupuesto,
+      (select count(*) from audit)::int audit,
+      (select count(*) from counters)::int counters,
+      (select count(*) from config)::int config`)
   console.log("\n=== Conteos en develop ===")
   console.table(r.rows)
 
-  const problemas = validar(sci, recalc)
-  console.log(`\n=== Validación PPP: ${problemas.length} discrepancia(s) ===`)
-  if (problemas.length) console.table(problemas.slice(0, 50))
-  else console.log("✓ stock recalculado == stock origen (±0.0001)")
+  const sciP = sciPayloadSchema.parse(docs.sci.payload ?? {})
+  const ppp = validarPpp(docs.sci, recalc)
+  const integridad = validarIntegridad(sciP, filas, conteos)
+  const problemas = [...ppp, ...integridad]
+
+  console.log(`\n=== Validación: ${problemas.length} discrepancia(s) ===`)
+  if (ppp.length === 0) console.log("✓ PPP: stock recalculado == origen (±0.0001)")
+  if (problemas.length) {
+    console.table(resumenPorTipo(problemas))
+    console.table(problemas.slice(0, 80))
+  } else {
+    console.log("✓ sin discrepancias")
+  }
 }
 
 main()
