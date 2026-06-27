@@ -63,7 +63,7 @@ export const NAV: readonly NavSection[] = [
         icon: Package,
         href: "/productos",
         perm: "productos.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "bodegas",
@@ -71,7 +71,7 @@ export const NAV: readonly NavSection[] = [
         icon: Warehouse,
         href: "/bodegas",
         perm: "bodegas.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "proveedores",
@@ -79,7 +79,7 @@ export const NAV: readonly NavSection[] = [
         icon: Truck,
         href: "/proveedores",
         perm: "proveedores.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "clientes",
@@ -87,7 +87,7 @@ export const NAV: readonly NavSection[] = [
         icon: UserRound,
         href: "/clientes",
         perm: "clientes.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "centrosCosto",
@@ -95,7 +95,7 @@ export const NAV: readonly NavSection[] = [
         icon: Building2,
         href: "/centros-costo",
         perm: "centrosCosto.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "stock",
