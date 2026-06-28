@@ -1280,6 +1280,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
     <!-- RESUMEN -->
     <div class="cc-tab-c cc-act" id="cc-tab-resumen">
       <div id="cc-bk-alert"></div>
+      <div id="cc-compra-urgente"></div>
       <div class="cc-stat-g" id="cc-stats"></div>
       <div id="cc-res-years" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px"></div>
       <div class="cc-card"><div class="cc-card-ttl">📋 Últimas aplicaciones</div>
@@ -1476,6 +1477,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             <div class="cc-bw"><div class="cc-n" id="cc-bodega-agua">—</div><div class="cc-l">Litros de agua</div></div>
             <div class="cc-ba"><div class="cc-n" id="cc-bodega-qty">—</div><div class="cc-l" id="cc-bodega-lbl">producto</div></div>
           </div>
+          <div id="cc-stock-detalle"></div>
         </div>
 
         <div id="cc-o-err" style="display:none" class="cc-notice cc-notice-err"></div>
@@ -12711,7 +12713,7 @@ function sciFbWaitForSync(timeoutMs){
 /* ═══════════════ CUADERNO DE CAMPO — JS (transformado, sin window.onload) ═══════════════ */
 
 // ══ STATE ══
-var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[], equipos:[],
+var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[], equipos:[], comprasUrgentes:[],
   fertirriego: { sectores:[], ordenes:[], oCounter:1, cfg:{ equipos:[], formas:['POR GOTEO','MANUAL'], unidades:['GRS.','C.C','L','kg','mL'], horarios:['08:00 A 17:00','08:00 A 18:00','18:00 A 21:00'] } },
   // % de producción asignado a cada estado de planta (usado en estimaciones de cosecha)
   prodPorEstado: { sano:100, debil:60, replante:30, muerto:0, falta:0 }
@@ -13121,6 +13123,8 @@ function fbApplyRemote(data){
       S.equipos = S.equipos.map(function(e){ return (typeof e==='string')?{nombre:e,capacidad:0}:{nombre:(e&&e.nombre)||'',capacidad:(e&&parseFloat(e.capacidad))||0}; }).filter(function(e){ return e.nombre; });
       if(remote.prodPorEstado !== undefined) S.prodPorEstado = remote.prodPorEstado;
       if(remote.oCounter !== undefined) S.oCounter = remote.oCounter;
+      if(remote.comprasUrgentes !== undefined) S.comprasUrgentes = remote.comprasUrgentes;
+      if(!Array.isArray(S.comprasUrgentes)) S.comprasUrgentes = [];
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
       // Guardar en localStorage como respaldo
       try{ localStorage.setItem('cc_v2', JSON.stringify(S)); }catch(e){}
@@ -13173,7 +13177,7 @@ function fbPush(immediate){
     var payload = JSON.stringify({
       panos: S.panos, registros: S.registros, productos: S.productos,
       ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter,
-      equipos: S.equipos,
+      equipos: S.equipos, comprasUrgentes: S.comprasUrgentes,
       fertirriego: S.fertirriego, prodPorEstado: S.prodPorEstado
     });
     var userName = '';
@@ -13268,8 +13272,9 @@ function _migrarPanos(){
 function load(){
   try{
     var d = localStorage.getItem('cc_v2');
-    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego','equipos'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter;
+    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego','equipos','comprasUrgentes'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
+      if(!Array.isArray(S.comprasUrgentes)) S.comprasUrgentes = [];
       if(!Array.isArray(S.equipos)) S.equipos = [];
       // Normalizar equipos (nebulizadoras) a objetos {nombre,capacidad}
       S.equipos = S.equipos.map(function(e){ return (typeof e==='string')?{nombre:e,capacidad:0}:{nombre:(e&&e.nombre)||'',capacidad:(e&&parseFloat(e.capacidad))||0}; }).filter(function(e){ return e.nombre; });
@@ -13761,6 +13766,69 @@ function renderHeader(){
   document.getElementById('cc-h-has').textContent=tHas.toFixed(1);
   document.getElementById('cc-h-panos').textContent=S.panos.length;
   document.getElementById('cc-h-regs').textContent=S.registros.length;
+  renderCompraUrgente();
+}
+
+// ─── Tarjeta "Productos Compra Urgente" en el dashboard del Cuaderno ───
+// Reúne los faltantes de stock detectados al emitir órdenes de aplicación.
+function renderCompraUrgente(){
+  var box=document.getElementById('cc-compra-urgente'); if(!box) return;
+  var lista=Array.isArray(S.comprasUrgentes)?S.comprasUrgentes:[];
+  // Filtrar solo entradas cuya orden todavía exista (no anuladas/eliminadas)
+  var vigentes=lista.filter(function(e){ return S.ordenes.some(function(o){ return String(o.id)===String(e.ordenId); }); });
+  // Total de productos distintos faltantes
+  var prodset={};
+  vigentes.forEach(function(e){ (e.items||[]).forEach(function(it){ prodset[(it.nombre||'').toUpperCase()]=true; }); });
+  var nProd=Object.keys(prodset).length;
+  if(!vigentes.length || !nProd){ box.innerHTML=''; return; }
+  box.innerHTML=
+    '<div onclick="abrirCompraUrgente()" style="cursor:pointer;background:linear-gradient(135deg,#b91c1c,#ef4444);border-radius:11px;padding:16px 20px;margin-bottom:16px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(185,28,28,.25)">'+
+      '<span style="font-size:34px;flex-shrink:0">🛒</span>'+
+      '<div style="flex:1">'+
+        '<div style="font-size:16px;font-weight:800">Productos Compra Urgente</div>'+
+        '<div style="font-size:12px;color:#fde2e2;margin-top:2px">'+nProd+' producto(s) sin stock suficiente para '+vigentes.length+' orden(es) · Toca para ver el detalle</div>'+
+      '</div>'+
+      '<span style="font-size:22px;font-weight:700;background:rgba(255,255,255,.2);border-radius:8px;padding:4px 12px">'+nProd+'</span>'+
+    '</div>';
+}
+function abrirCompraUrgente(){
+  var lista=Array.isArray(S.comprasUrgentes)?S.comprasUrgentes:[];
+  var vigentes=lista.filter(function(e){ return S.ordenes.some(function(o){ return String(o.id)===String(e.ordenId); }); });
+  if(!vigentes.length){ if(typeof toast==='function') toast('Sin pendientes','No hay productos en compra urgente','info'); return; }
+  // Agrupar por producto: sumar lo que falta y registrar en qué órdenes se requiere
+  var porProd={};
+  vigentes.forEach(function(e){
+    (e.items||[]).forEach(function(it){
+      var k=(it.nombre||'').toUpperCase();
+      if(!porProd[k]) porProd[k]={ nombre:it.nombre, totalFalta:0, unit:it.unit||'', encontrado:it.encontrado, ordenes:[] };
+      porProd[k].totalFalta += (Number(it.falta)||0);
+      if(!it.encontrado) porProd[k].encontrado=false;
+      porProd[k].ordenes.push({ numero:e.numero, fecha:e.fecha, requerido:it.requerido, disponible:it.disponible, falta:it.falta, unit:it.unit, encontrado:it.encontrado });
+    });
+  });
+  var bodyRows=Object.keys(porProd).map(function(k){
+    var p=porProd[k];
+    var detOrdenes=p.ordenes.map(function(o){
+      return '<div style="font-size:12px;color:#475569;padding:3px 0;border-top:1px dashed #e2e8f0">'+
+        '<strong>'+escapeHtml(o.numero)+'</strong> ('+escapeHtml(o.fecha||'')+') — requiere '+fmtN(o.requerido,2)+' '+(o.unit||'')+
+        ' · stock '+(o.encontrado?fmtN(o.disponible,2)+' '+(o.unit||''):'no está en bodega')+
+        ' · <span style="color:#b91c1c;font-weight:700">falta '+fmtN(o.falta,2)+' '+(o.unit||'')+'</span></div>';
+    }).join('');
+    var badge=p.encontrado?('Comprar ≈ '+fmtN(p.totalFalta,2)+' '+(p.unit||'')):'No está en bodega';
+    return '<div style="border:1px solid #e2e8f0;border-radius:9px;padding:12px 14px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+        '<div style="font-weight:800;color:#1f2d3d;font-size:14px">'+escapeHtml(p.nombre)+'</div>'+
+        '<div style="background:#fef2f2;color:#b91c1c;font-weight:700;font-size:12px;padding:4px 10px;border-radius:8px">'+badge+'</div>'+
+      '</div>'+detOrdenes+
+    '</div>';
+  }).join('');
+  var html='<div style="max-height:60vh;overflow-y:auto">'+
+    '<div class="cc-notice" style="background:#fef2f2;border:1px solid #fecaca;color:#7f1d1d;margin-bottom:12px">Estos productos no tienen stock suficiente en bodega para las órdenes de aplicación emitidas. La cantidad a comprar es la suma de los faltantes de cada orden.</div>'+
+    bodyRows+'</div>';
+  if(typeof showModal==='function'){
+    showModal('🛒 Productos Compra Urgente', html,
+      '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>', 'lg');
+  }
 }
 
 // ══ TAB NAV ══
@@ -15874,6 +15942,25 @@ function renderOrdenChips(){
     el.appendChild(div);
   });
 }
+// ─── Stock de un producto de la orden (por nombre) ───────────────────────
+// Mapea el nombre del producto (como aparece en la orden) a su ficha del
+// catálogo SCI para obtener el codigoInterno y el stock total en bodega.
+// Devuelve {cod, disponible, encontrado, unidadBodega}.
+function _stockProductoOrden(nombre){
+  var nom=(nombre||'').toString().trim().toUpperCase();
+  if(!nom) return {cod:'', disponible:0, encontrado:false, unidadBodega:''};
+  var cat=_getProductosCatalogo();
+  var ficha=cat.find(function(p){ return (p.nombre||'').toString().trim().toUpperCase()===nom; });
+  if(!ficha || !ficha.codigoInterno){
+    return {cod:'', disponible:0, encontrado:false, unidadBodega:''};
+  }
+  var disp = (typeof getStockTotal==='function') ? (getStockTotal(ficha.codigoInterno)||0) : 0;
+  var prod = (typeof getProduct==='function') ? getProduct(ficha.codigoInterno) : null;
+  return {cod:ficha.codigoInterno, disponible:disp, encontrado:true, unidadBodega:(prod&&prod.unidadMedida)||''};
+}
+// Faltantes de la orden en curso (se persisten al emitir). Cada item:
+// {nombre, cod, requerido, disponible, falta, unit, encontrado}
+var draftFaltantes = [];
 function calcDist(){
   var dosis=parseFloat(document.getElementById('cc-o-dosis').value)||0;
   var unidad=document.getElementById('cc-o-unidad').value;
@@ -15993,6 +16080,36 @@ function calcDist(){
     document.getElementById('cc-bodega-qty').textContent = allProds.length + ' productos';
     document.getElementById('cc-bodega-lbl').textContent = 'en la mezcla';
     document.getElementById('cc-bodega-det').innerHTML = selPanosOrden.length+' paño(s) · Solicitar a bodega:<br>'+bodegaLista;
+  }
+  // ─── Stock disponible en bodega vs requerido (por producto) ───
+  draftFaltantes = [];
+  var stockRows = allProds.map(function(ap, i){
+    var totProd = i===0 ? tProd : draftDist.reduce(function(s,r){ return s + (r.extras['p'+(i-1)]||0); }, 0);
+    // Convertir requerido a kg/L (igual que se muestra) para comparar con stock
+    var conv = fmtQtyAuto(totProd, ap.unitS);
+    var req = conv.qty, unit = conv.unit;
+    var st = _stockProductoOrden(ap.nombre);
+    var disp = st.disponible;
+    var falta = Math.max(0, req - disp);
+    if(!st.encontrado || falta > 0.0001){
+      draftFaltantes.push({ nombre: ap.nombre, cod: st.cod, requerido: req, disponible: disp, falta: (st.encontrado?falta:req), unit: unit, encontrado: st.encontrado });
+    }
+    var estado, color, bg;
+    if(!st.encontrado){ estado='No está en bodega'; color='#b91c1c'; bg='#fef2f2'; }
+    else if(falta > 0.0001){ estado='Falta '+fmtN(falta,2)+' '+unit; color='#b91c1c'; bg='#fef2f2'; }
+    else { estado='OK'; color='#15803d'; bg='#f0fdf4'; }
+    return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 8px;border-radius:5px;background:'+bg+';margin-top:4px">'+
+      '<span style="color:#1f2d3d"><strong>'+escapeHtml(ap.nombre)+'</strong></span>'+
+      '<span style="color:#475569">Req: '+fmtN(req,2)+' '+unit+' · Stock: '+(st.encontrado?fmtN(disp,2)+' '+unit:'—')+'</span>'+
+      '<span style="color:'+color+';font-weight:700;white-space:nowrap">'+estado+'</span>'+
+    '</div>';
+  }).join('');
+  var stockBox=document.getElementById('cc-stock-detalle');
+  if(stockBox){
+    var nFalt = draftFaltantes.length;
+    var hdr = '<div style="font-size:12px;font-weight:700;color:'+(nFalt?'#b91c1c':'#15803d')+';margin-bottom:2px;text-transform:uppercase">'+
+      (nFalt? '⚠️ '+nFalt+' producto(s) sin stock suficiente' : '✓ Stock disponible en bodega')+'</div>';
+    stockBox.innerHTML = '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-top:12px">'+hdr+stockRows+'</div>';
   }
 }
 
@@ -16224,6 +16341,16 @@ function emitirOrden(){
     distribucion: distribucion,
     tHas:tHas, tAgua:tAgua, tProd:tProd, margin:tProd
   };
+  // Faltantes de stock detectados en calcDist: guardarlos en la orden y en la
+  // lista global de "Compra Urgente" del dashboard.
+  var faltantesOrden = (draftFaltantes||[]).map(function(f){
+    return { nombre:f.nombre, cod:f.cod, requerido:f.requerido, disponible:f.disponible, falta:f.falta, unit:f.unit, encontrado:f.encontrado };
+  });
+  orden.faltantes = faltantesOrden;
+  if(faltantesOrden.length){
+    if(!Array.isArray(S.comprasUrgentes)) S.comprasUrgentes = [];
+    S.comprasUrgentes.unshift({ ordenId:orden.id, numero:num, fecha:fecha, items:faltantesOrden });
+  }
   S.ordenes.unshift(orden); save(); renderHeader();
   // Navigate immediately to show the emitted order
   showOSub('lista', document.getElementById('cc-ot2'));
@@ -16259,6 +16386,8 @@ function limpiarOrden(){
   var objBox=document.getElementById('cc-o-obj-box');
   if(objBox){ objBox.innerHTML = renderObjetivosUI('cc-o-obj', [], ''); setTimeout(function(){ ccObjUpdateSummary('cc-o-obj'); }, 30); }
   hide('cc-bodega-box');
+  var sd=document.getElementById('cc-stock-detalle'); if(sd) sd.innerHTML='';
+  draftFaltantes=[];
   // Limpiar mezcla
   mixProds = [];
   var ml = document.getElementById('cc-o-mix-list'); if(ml) ml.innerHTML='';
@@ -17631,6 +17760,8 @@ function openPM(id){
         '<div class="cc-pm-fld"><div class="cc-l">M\u00e9todo</div><div class="cc-v">'+(o.metodo||'-')+'</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">Responsable</div><div class="cc-v">'+(o.responsable||'-')+'</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">H\u00e1 base ('+(isRiego?'riego':'plantadas')+')</div><div class="cc-v">'+fmtN(o.tHas||0,2)+' h\u00e1</div></div>'+
+        '<div class="cc-pm-fld"><div class="cc-l">\ud83d\ude9c Equipo de aplicaci\u00f3n</div><div class="cc-v">'+(o.equipo?escapeHtml(o.equipo):'-')+(o.equipoCap>0?' ('+fmtN(o.equipoCap,0)+' L)':'')+'</div></div>'+
+        '<div class="cc-pm-fld"><div class="cc-l">N\u00b0 Estanques / Pipas</div><div class="cc-v">'+(function(){ var n=o.nEstanques||0; if((!n||n<=0)&&o.equipoCap>0&&o.tAgua>0){ n=Math.ceil(o.tAgua/o.equipoCap); } return (n>0)?n+' estanque(s)':'-'; })()+'</div></div>'+
       '</div>'+
       notasHtml+
       '<table><thead><tr>'+
