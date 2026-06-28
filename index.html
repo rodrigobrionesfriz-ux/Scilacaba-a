@@ -16124,15 +16124,16 @@ function renderOrdenChips(){
         else { t.style.background='#fff'; t.style.borderColor='#cbd5e1'; t.textContent=''; }
       }
       btn.onclick=function(){
-        var grupo=(btn.dataset.grupo||p.id).split(',');
-        var yaSel=selPanosOrden.indexOf(p.id)>=0;
+        var grupo=(btn.dataset.grupo||String(p.id)).split(',');
+        // p.id puede ser número y el array/grupo strings: comparar como String.
+        var yaSel=selPanosOrden.some(function(sid){ return String(sid)===String(p.id); });
         if(yaSel){
           // Deseleccionar: quitar todo el grupo
-          grupo.forEach(function(gid){ var i=selPanosOrden.indexOf(gid); if(i>=0) selPanosOrden.splice(i,1); });
+          grupo.forEach(function(gid){ selPanosOrden=selPanosOrden.filter(function(sid){ return String(sid)!==String(gid); }); });
           btn.classList.remove('cc-sel'); btn.style.background=''; btn.style.borderColor=''; _setTick(false);
         } else {
           // Seleccionar: añadir todo el grupo (productivo + polinizantes)
-          grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
+          grupo.forEach(function(gid){ if(!selPanosOrden.some(function(sid){ return String(sid)===String(gid); })) selPanosOrden.push(gid); });
           btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color; _setTick(true);
         }
         var tHa=selPanosOrden.reduce(function(s,id){ var px=getPano(id); return s+getHas(px); },0);
