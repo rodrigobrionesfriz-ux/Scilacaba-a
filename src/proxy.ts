@@ -15,6 +15,8 @@ export const proxy = (request: NextRequest) => {
 
 export const config = {
   matcher: [
-    "/((?!api/auth|login|cambiar-password|_next/static|_next/image|favicon.ico).*)",
+    // Excluye rutas de auth, internos de Next y cualquier estático (rutas con
+    // extensión, p.ej. /logo-la-cabana.png) para no redirigirlos a /login.
+    "/((?!api/auth|login|cambiar-password|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 }

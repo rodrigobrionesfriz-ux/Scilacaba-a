@@ -20,7 +20,7 @@ export const AppSidebar = ({ role, permissions }: Props) => {
           alt="La Cabaña Forestal"
           width={36}
           height={36}
-          className="shrink-0"
+          className="h-9 w-9 shrink-0"
           priority
         />
         <div className="leading-tight">
