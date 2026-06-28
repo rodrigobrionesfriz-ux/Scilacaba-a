@@ -3632,8 +3632,8 @@ function renderPresupuesto(main){
   <div id="pz-criterios-list"></div>
 </div>
 <!-- Pane: Dashboard (visible por defecto) -->
-<div id="pz-pane-dashboard">
-<div class="resumen-banner" id="resumen-banner">
+<div id="pz-pane-dashboard" style="display:flex;flex-direction:column">
+<div class="resumen-banner" id="resumen-banner" style="order:2">
 
   <div class="rb-item">
     <div class="rb-label">Costo Huerto Real</div>
@@ -3699,7 +3699,7 @@ function renderPresupuesto(main){
 </div>
 
 <!-- FILTERS -->
-<div class="filters">
+<div class="filters" style="order:1">
   <div class="filter-group">
     <label>TEMPORADA</label>
     <select id="f-temporada"><option value="">Todas</option></select>
@@ -3723,7 +3723,7 @@ function renderPresupuesto(main){
   <button class="btn-reset" onclick="PZ.resetFilters()">↺ Limpiar filtros</button>
 </div>
 
-<div class="main">
+<div class="main" style="order:3">
   <!-- KPI ROW -->
   <div class="kpi-row">
     <div class="kpi-card blue">
@@ -19423,9 +19423,18 @@ function imprimirPDF() {
 
 // ===================== RESUMEN COSECHA BANNER =====================
 function updateBanner() {
-  const source = ACTIVE_DATA || RAW;
+  var base = ACTIVE_DATA || RAW;
+  // Respetar los filtros de temporada y mes (las tarjetas reflejan la
+  // temporada seleccionada, no el total del archivo).
+  var tempSel = (document.getElementById('f-temporada') || {}).value || '';
+  var mesSel  = (document.getElementById('f-mes') || {}).value || '';
+  const source = base.filter(function(d){
+    if (tempSel && _getTemporada(d) !== tempSel) return false;
+    if (mesSel && d.MES !== mesSel) return false;
+    return true;
+  });
 
-  // Totals from all data (unfiltered) — currency aware
+  // Totales de la selección — sensibles a la moneda activa
   const totalReal = source.reduce((s,d) => s + getReal(d), 0);
   const totalPpto = source.reduce((s,d) => s + getPpto(d), 0);
   const saldo     = totalPpto - totalReal;
@@ -19972,6 +19981,7 @@ function refreshLastUpdate() {
 
 function render() {
   refreshLastUpdate();
+  updateBanner();
   const data = filterData();
   renderWithData(data, ACTIVE_DATA || RAW);
 }
