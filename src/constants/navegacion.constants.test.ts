@@ -21,7 +21,7 @@ describe("NAV", () => {
     const disponibles = NAV.flatMap((s) => s.items)
       .filter((i) => i.disponible)
       .map((i) => i.id)
-    // Fase 2: dashboard. Fase 3 (maestros): se habilitan progresivamente.
+    // Fase 2: dashboard. Fase 3: maestros. Fase 4: stock + movimientos.
     expect([...disponibles].sort()).toEqual(
       [
         "dashboard",
@@ -30,6 +30,10 @@ describe("NAV", () => {
         "proveedores",
         "clientes",
         "centrosCosto",
+        "stock",
+        "movimientos",
+        "entradas",
+        "salidas",
       ].sort(),
     )
   })

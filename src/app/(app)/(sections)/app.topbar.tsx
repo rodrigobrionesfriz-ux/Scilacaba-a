@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -53,15 +54,17 @@ export const AppTopbar = ({ nombre, email, role }: Props) => {
           <ChevronDown className="size-4 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="font-medium">{nombre}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {email}
-            </span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {rolLabel}
-            </span>
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span className="font-medium">{nombre}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {email}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {rolLabel}
+              </span>
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem render={<Link href="/cambiar-password" />}>
             <KeyRound className="size-4" />

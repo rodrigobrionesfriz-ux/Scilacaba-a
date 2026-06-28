@@ -4,6 +4,7 @@ import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
 import type { Group, ProductType } from "@/types/catalogos.types"
 import type { ProductoRow } from "@/types/productos.types"
+import type { StockResumenProducto } from "@/types/stock.types"
 import { buildProductosColumns } from "./productos.columns"
 import { ProductoForm } from "./productos.form"
 
@@ -11,6 +12,7 @@ type ProductosTableProps = {
   productos: ProductoRow[]
   tipos: ProductType[]
   grupos: Group[]
+  stockPorProducto: Map<string, StockResumenProducto>
   puedeCrear: boolean
   puedeEliminar: boolean
 }
@@ -19,12 +21,14 @@ export const ProductosTable = ({
   productos,
   tipos,
   grupos,
+  stockPorProducto,
   puedeCrear,
   puedeEliminar,
 }: ProductosTableProps) => {
   const columns = buildProductosColumns({
     tipos,
     grupos,
+    stockPorProducto,
     puedeEditar: puedeCrear,
     puedeEliminar,
   })

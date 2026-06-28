@@ -48,3 +48,61 @@ export type ResultadoPpp = {
   stock: StockPpp[]
   lots: LotePpp[]
 }
+
+// Fila de la lista de movimientos (shape de display, más laxo que el subset PPP).
+export type MovimientoRow = {
+  numero: string
+  fecha: string
+  direccion: Direccion
+  tipoMovimiento: string
+  bodega: string
+  bodegaDestino: string
+  contraparte: string
+  totalLineas: number
+  valor: number
+  usuario: string
+  anulado: boolean
+}
+
+// Línea de un movimiento para la vista de detalle.
+export type MovimientoLineaDetalle = {
+  id: number
+  codigoInterno: string
+  descripcion: string
+  unidadMedida: string
+  cantidad: number
+  costo: number
+  lote: string
+  fechaVenc: string
+}
+
+// Estado de una línea en el formulario de creación (todo string para inputs).
+export type MovimientoLineaForm = {
+  codigoInterno: string
+  descripcion: string
+  unidadMedida: string
+  cantidad: string
+  costo: string
+  lote: string
+  fechaVenc: string
+}
+
+// Movimiento + líneas para la vista de detalle.
+export type MovimientoDetalle = {
+  numero: string
+  fecha: string
+  direccion: Direccion
+  tipoMovimiento: string
+  bodega: string
+  bodegaDestino: string
+  proveedor: string
+  cliente: string
+  centroCosto: string
+  documento: string
+  numeroDoc: string
+  observaciones: string
+  usuario: string
+  autorizadoPor: string
+  anulado: boolean
+  lineas: MovimientoLineaDetalle[]
+}
