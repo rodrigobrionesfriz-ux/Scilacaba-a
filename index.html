@@ -19384,7 +19384,9 @@ function renderDetalleTable(items) {
   countEl.textContent = `${items.length} registro${items.length !== 1 ? 's' : ''}`;
   // Pie del modal: además del gasto real, mostrar el presupuesto de la
   // descripción y el % de desviación (real vs presupuesto).
-  var pptoConv = convertVal(currentDetallePpto || 0);
+  // currentDetallePpto se suma desde getPpto(), que YA devuelve el valor en la
+  // moneda activa (PPTO_USD en modo USD). No se debe volver a convertir.
+  var pptoConv = currentDetallePpto || 0;
   var devPct = (pptoConv && pptoConv !== 0) ? ((total - pptoConv) / Math.abs(pptoConv)) * 100 : null;
   var devColor = (devPct == null) ? '#64748b' : (devPct > 0 ? '#ef4444' : '#16a34a');
   var devTxt = (devPct == null) ? 's/ppto' : ((devPct > 0 ? '+' : '') + devPct.toFixed(1) + '%');
