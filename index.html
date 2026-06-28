@@ -14469,12 +14469,16 @@ function frActualizarResumenSec(){
 function frRenderLineas(){
   var f = S.fertirriego;
   var cont=document.getElementById('fr-o-lineas'); if(!cont) return;
-  // Solo productos que sean fertilizantes de suelo/edáficos o enmiendas
-  var TIPOS_FR = ['fertilizante suelo','fertilizante edafico','fertilizante ed\u00e1fico','enmienda'];
-  var prods = (S.productos||[]).filter(function(p){
-    var t=(p.tipo||'').toLowerCase().trim();
-    return TIPOS_FR.indexOf(t)>=0;
-  }).slice().sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+  // Productos para fertirriego: fertilizantes/enmiendas. Se hace un match flexible
+  // (sin acentos, por inclusión) para no depender de un valor de "tipo" exacto.
+  // Si ningún producto coincide, se muestran TODOS para no bloquear el guardado.
+  var _norm=function(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); };
+  var todos = (S.productos||[]).slice().sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+  var prods = todos.filter(function(p){
+    var t=_norm(p.tipo);
+    return t.indexOf('fertiliz')>=0 || t.indexOf('enmienda')>=0 || t.indexOf('nutri')>=0;
+  });
+  if(!prods.length) prods = todos; // fallback: todo el catálogo
   cont.innerHTML = _frLineas.map(function(l,i){
     return '<div style="display:grid;grid-template-columns:1fr 90px 90px 1fr 32px;gap:8px;align-items:end;margin-bottom:7px;padding:7px;background:#fafafa;border-radius:6px">'+
       '<div class="cc-field"><label class="cc-lbl" style="font-size:10px">Producto</label>'+
@@ -14496,7 +14500,14 @@ function frGuardarOrden(){
   var f = S.fertirriego;
   if(_frSecSel.size===0){ toast('Sin sectores','Seleccione al menos un sector de riego','error'); return; }
   var lineasValidas = _frLineas.filter(function(l){ return l.prod; });
-  if(!lineasValidas.length){ toast('Sin productos','Agregue al menos un producto','error'); return; }
+  if(!lineasValidas.length){
+    if(!(S.productos||[]).length){
+      toast('Sin productos en catálogo','No hay productos cargados. Agregue productos en la pestaña "Productos" del fertirriego antes de crear la orden.','error');
+    }else{
+      toast('Sin productos','Seleccione al menos un producto en el desplegable de cada línea','error');
+    }
+    return;
+  }
   var existing = _frEditId ? f.ordenes.find(function(o){return String(o.id)===String(_frEditId);}) : null;
   var orden = {
     id: _frEditId || uid(),
