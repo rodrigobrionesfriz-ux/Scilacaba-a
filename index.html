@@ -7460,13 +7460,31 @@ function renderStockTable(){
     '</div>';
     return;
   }
-  let rows=STATE.cache.stock.map(s=>({...s,p:getProduct(s.codigoInterno),b:getWarehouse(s.bodegaId)})).filter(r=>r.p);
-  if(stockFilter.soloConSaldo)rows=rows.filter(r=>r.cantidad>0);
+  let rows;
+  if(stockFilter.search){
+    // Con texto de búsqueda: buscar en TODO el catálogo, incluyendo productos
+    // con saldo 0 o sin ningún registro de stock (que no están en cache.stock).
+    const s=stockFilter.search.toLowerCase();
+    const coincide=p=>(p.codigoInterno+' '+(p.codigoEAN||'')+' '+(p.descripcion||'')).toLowerCase().includes(s);
+    rows=[];
+    STATE.cache.products.filter(coincide).forEach(p=>{
+      const regs=STATE.cache.stock.filter(x=>x.codigoInterno===p.codigoInterno);
+      if(regs.length){
+        regs.forEach(x=>rows.push({...x,p:p,b:getWarehouse(x.bodegaId)}));
+      }else{
+        // Producto sin registro de stock: fila virtual con saldo 0
+        rows.push({codigoInterno:p.codigoInterno,bodegaId:null,cantidad:0,costoPromedio:0,p:p,b:null});
+      }
+    });
+    // Al buscar por texto, ignoramos "solo con saldo" para no ocultar coincidencias.
+  }else{
+    rows=STATE.cache.stock.map(s=>({...s,p:getProduct(s.codigoInterno),b:getWarehouse(s.bodegaId)})).filter(r=>r.p);
+    if(stockFilter.soloConSaldo)rows=rows.filter(r=>r.cantidad>0);
+  }
   if(stockFilter.bodega)rows=rows.filter(r=>r.bodegaId===stockFilter.bodega);
   if(stockFilter.tipo)rows=rows.filter(r=>r.p.tipoProducto===stockFilter.tipo);
   if(stockFilter.grupo)rows=rows.filter(r=>r.p.grupo===stockFilter.grupo);
   if(stockFilter.subgrupo)rows=rows.filter(r=>r.p.subGrupo===stockFilter.subgrupo);
-  if(stockFilter.search){const s=stockFilter.search.toLowerCase();rows=rows.filter(r=>(r.codigoInterno+' '+(r.p.codigoEAN||'')+' '+r.p.descripcion).toLowerCase().includes(s))}
   rows=rows.sort((a,b)=>(a.b?.nombre||'').localeCompare(b.b?.nombre||'')||a.codigoInterno.localeCompare(b.codigoInterno));
   const totVal=rows.reduce((s,r)=>s+r.cantidad*r.costoPromedio,0);
   if(rows.length===0){w.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Sin saldos</div></div>';return}
@@ -7492,7 +7510,7 @@ function renderStockTable(){
         });
         return dedup;
       })();
-      return `<tr><td>${escapeHtml(r.b?r.b.nombre:r.bodegaId)}</td>
+      return `<tr${(!r.bodegaId&&r.cantidad<=0)?' style="background:#fdeaea"':''}><td>${r.b?escapeHtml(r.b.nombre):(r.bodegaId?escapeHtml(r.bodegaId):'<span style="color:#c0392b">Sin existencias</span>')}</td>
         <td class="mono"><strong>${r.codigoInterno}</strong></td>
         <td>${escapeHtml(r.p.descripcion)}</td>
         <td style="font-size:12px;color:var(--mu)">${escapeHtml(r.p.grupo||'-')}${r.p.subGrupo?' / '+escapeHtml(r.p.subGrupo):''}</td>
