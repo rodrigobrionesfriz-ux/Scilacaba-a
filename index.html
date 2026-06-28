@@ -4692,6 +4692,26 @@ function renderDashboard(c){
   // Estado de respaldos
   const days=getDaysSinceBackup();
   // Backup ahora se gestiona solo en Configuración (visible para admin)
+  // Tarjeta de compra urgente (datos del Cuaderno de Campo)
+  var _cuHtml = '';
+  try{
+    if(typeof S!=='undefined' && Array.isArray(S.comprasUrgentes)){
+      var _cuVig = S.comprasUrgentes.filter(function(e){ return (S.ordenes||[]).some(function(o){ return String(o.id)===String(e.ordenId); }); });
+      var _cuSet={};
+      _cuVig.forEach(function(e){ (e.items||[]).forEach(function(it){ _cuSet[(it.nombre||'').toUpperCase()]=true; }); });
+      var _cuN=Object.keys(_cuSet).length;
+      if(_cuVig.length && _cuN){
+        _cuHtml='<div onclick="abrirCompraUrgente()" style="cursor:pointer;background:linear-gradient(135deg,#b91c1c,#ef4444);border-radius:11px;padding:16px 20px;margin-bottom:18px;color:#fff;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(185,28,28,.25)">'+
+          '<span style="font-size:34px;flex-shrink:0">🛒</span>'+
+          '<div style="flex:1">'+
+            '<div style="font-size:16px;font-weight:800">Productos Compra Urgente</div>'+
+            '<div style="font-size:12px;color:#fde2e2;margin-top:2px">'+_cuN+' producto(s) sin stock suficiente para '+_cuVig.length+' orden(es) de aplicación · Toca para ver el detalle</div>'+
+          '</div>'+
+          '<span style="font-size:22px;font-weight:700;background:rgba(255,255,255,.2);border-radius:8px;padding:4px 12px">'+_cuN+'</span>'+
+        '</div>';
+      }
+    }
+  }catch(e){}
   c.innerHTML=`
     <div class="page-header">
       <div>
@@ -4700,7 +4720,7 @@ function renderDashboard(c){
       </div>
     </div>
 
-
+    ${_cuHtml}
 
     <div class="stats-grid">
       <div class="stat-card">
