@@ -3622,11 +3622,10 @@ function renderPresupuesto(main){
     </div>
     <button onclick="pzGuardarCriterio()" style="padding:10px 20px;border:none;border-radius:8px;background:#1565c0;color:#fff;font-size:13px;font-weight:700;cursor:pointer">💾 Guardar criterio</button>
   </div>
-  <div style="margin-bottom:10px;display:flex;align-items:center;gap:12px">
-    <label style="font-size:12px;font-weight:700;color:#475569">Filtrar por temporada:</label>
-    <select id="pz-crit-filtro" onchange="pzRenderCriterios()" style="padding:7px 10px;border:1px solid #cdd5df;border-radius:7px;font-size:12px">
-      <option value="">Todas</option>
-    </select>
+  <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;background:#f1f6fc;border:1px solid #d6e4f5;border-radius:7px;padding:8px 12px">
+    <span style="font-size:12px;color:#475569">Mostrando criterios de la temporada:</span>
+    <strong id="pz-crit-temp-activa" style="font-size:13px;color:#1565c0">Todas</strong>
+    <span style="font-size:11px;color:#94a3b8">· se controla con el filtro de temporada del Dashboard</span>
   </div>
   <div id="pz-criterios-list"></div>
 </div>
@@ -4813,6 +4812,7 @@ function renderProductos(c){
           <label class="btn btn-secondary" style="cursor:pointer" title="Cargar productos desde un Excel"><span>📤 Importar Excel</span><input type="file" accept=".xlsx,.xls" style="display:none" onchange="if(this.files[0]){previewImportProductos(this.files[0]);this.value=''}"></label>
           <button class="btn btn-primary" onclick="openProductForm()">+ Nuevo Producto</button>
         `:''}
+        ${can('productos.eliminar')?`<button class="btn btn-secondary" onclick="previewLimpiezaProductos()" title="Unificar productos duplicados por nombre">🧹 Limpiar duplicados</button>`:''}
       </div>
     </div>
     <div class="card">
@@ -5146,6 +5146,198 @@ async function deleteProduct(codigo){
     toast('Producto eliminado','«'+p.descripcion+'» eliminado definitivamente','success');
   }, 'Eliminar', true);
 }
+// ══════════════════════════════════════════════════════════════
+// LIMPIEZA / UNIFICACIÓN DE PRODUCTOS DUPLICADOS
+// Agrupa por nombre normalizado (MAYÚSCULAS), elige un ganador y
+// reasigna stock/lotes/movimientos del resto, eliminando duplicados.
+// ══════════════════════════════════════════════════════════════
+function _normNombreProd(s){ return String(s||'').toUpperCase().trim().replace(/\s+/g,' '); }
+// Campos considerados para el "score de completitud"
+var _PROD_CAMPOS_SCORE = ['codigoEAN','descripcion','unidadMedida','tipoProducto','grupo','subGrupo','ccTipo','ccIngredienteActivo','ccObjetivo','ccDosis','ccUnidad','stockMinimo'];
+function _scoreCompletitud(p){
+  var n=0;
+  _PROD_CAMPOS_SCORE.forEach(function(c){ var v=p[c]; if(v!==undefined && v!==null && String(v).trim()!=='' && !(typeof v==='number' && v===0)) n++; });
+  return n;
+}
+function _prodTieneMovs(codigo){
+  return (STATE.cache.movements||[]).filter(function(m){ return !m.anulado && (m.detalles||[]).some(function(d){ return d.codigoInterno===codigo; }); }).length;
+}
+function _prodTieneStock(codigo){
+  return (STATE.cache.stock||[]).filter(function(s){ return s.codigoInterno===codigo && (Number(s.cantidad)||0)>0; }).length>0;
+}
+// Devuelve los grupos de duplicados: [{nombre, ganador, perdedores:[], fusion:{}}]
+function _analizarDuplicadosProductos(){
+  var porNombre={};
+  (STATE.cache.products||[]).forEach(function(p){
+    var k=_normNombreProd(p.descripcion);
+    if(!k) return;
+    (porNombre[k]=porNombre[k]||[]).push(p);
+  });
+  var grupos=[];
+  Object.keys(porNombre).forEach(function(k){
+    var lista=porNombre[k];
+    if(lista.length<2) return; // solo duplicados reales
+    // Enriquecer con métricas
+    var conMetrica=lista.map(function(p){
+      return { p:p, movs:_prodTieneMovs(p.codigoInterno), score:_scoreCompletitud(p), stock:_prodTieneStock(p.codigoInterno), creado:p.creado||'' };
+    });
+    // Orden de prioridad para el ganador:
+    // 1) más movimientos  2) mayor completitud  3) tiene stock  4) más antiguo
+    conMetrica.sort(function(a,b){
+      if(b.movs!==a.movs) return b.movs-a.movs;
+      if(b.score!==a.score) return b.score-a.score;
+      if(a.stock!==b.stock) return (b.stock?1:0)-(a.stock?1:0);
+      return String(a.creado).localeCompare(String(b.creado)); // más antiguo primero
+    });
+    var ganador=conMetrica[0];
+    var perdedores=conMetrica.slice(1);
+    // Fusión: el ganador hereda campos vacíos desde los perdedores (en orden de prioridad)
+    var fusion={};
+    _PROD_CAMPOS_SCORE.forEach(function(c){
+      var vg=ganador.p[c];
+      var vacio=(vg===undefined||vg===null||String(vg).trim()===''||(typeof vg==='number'&&vg===0));
+      if(vacio){
+        for(var i=0;i<perdedores.length;i++){
+          var vp=perdedores[i].p[c];
+          if(vp!==undefined&&vp!==null&&String(vp).trim()!==''&&!(typeof vp==='number'&&vp===0)){ fusion[c]=vp; break; }
+        }
+      }
+    });
+    grupos.push({ nombre:k, ganador:ganador, perdedores:perdedores, fusion:fusion });
+  });
+  // Ordenar por nombre
+  grupos.sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  return grupos;
+}
+// Vista previa (no destructiva)
+function previewLimpiezaProductos(){
+  if(!can('productos.eliminar')){ toast('Sin permiso','Solo un administrador puede unificar productos','error'); return; }
+  var grupos=_analizarDuplicadosProductos();
+  if(!grupos.length){
+    showModal('🧹 Limpieza de productos','<div class="empty-state" style="padding:30px"><div class="empty-state-icon">✅</div><div class="empty-state-title">Sin duplicados</div><div class="empty-state-text">No se encontraron productos con el mismo nombre. Igualmente se normalizarán a MAYÚSCULAS al aplicar.</div></div>',
+      '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button><button class="btn btn-primary" onclick="aplicarLimpiezaProductos()">Solo normalizar a MAYÚSCULAS</button>');
+    return;
+  }
+  var totalPerd=grupos.reduce(function(s,g){ return s+g.perdedores.length; },0);
+  var rows=grupos.map(function(g){
+    var gp=g.ganador;
+    var perdList=g.perdedores.map(function(x){
+      var tags=[];
+      if(x.movs) tags.push('<span class="badge badge-amber" style="font-size:10px">'+x.movs+' mov</span>');
+      if(x.stock) tags.push('<span class="badge badge-gray" style="font-size:10px">stock</span>');
+      return '<div style="font-size:12px;color:var(--mu);padding:2px 0">↳ '+escapeHtml(x.p.codigoInterno)+' · '+escapeHtml(x.p.descripcion)+' '+tags.join(' ')+'</div>';
+    }).join('');
+    var fusionTxt=Object.keys(g.fusion).length?('<div style="font-size:11px;color:#0a6e2e;margin-top:3px">+ hereda: '+Object.keys(g.fusion).join(', ')+'</div>'):'';
+    var gTags=[];
+    if(gp.movs) gTags.push('<span class="badge badge-green" style="font-size:10px">'+gp.movs+' mov</span>');
+    if(gp.stock) gTags.push('<span class="badge badge-gray" style="font-size:10px">stock</span>');
+    gTags.push('<span class="badge badge-gray" style="font-size:10px">'+gp.score+' campos</span>');
+    return '<div style="border:1px solid var(--bo);border-radius:8px;padding:10px 12px;margin-bottom:8px">'+
+      '<div style="font-weight:700;font-size:13px;color:var(--tx)">✅ '+escapeHtml(_normNombreProd(gp.p.descripcion))+'</div>'+
+      '<div style="font-size:12px;color:var(--mu);margin-top:2px">Ganador: <strong>'+escapeHtml(gp.p.codigoInterno)+'</strong> '+gTags.join(' ')+'</div>'+
+      fusionTxt+
+      '<div style="margin-top:6px;border-top:1px dashed var(--bo);padding-top:6px"><div style="font-size:11px;font-weight:700;color:#c0392b;margin-bottom:2px">Se eliminarán y reasignarán al ganador:</div>'+perdList+'</div>'+
+    '</div>';
+  }).join('');
+  showModal('🧹 Limpieza de productos · Vista previa',
+    '<div class="alert alert-info" style="margin-bottom:12px;font-size:13px">Se encontraron <strong>'+grupos.length+'</strong> grupo(s) de duplicados ('+totalPerd+' producto(s) a eliminar). '+
+      'El stock, lotes y movimientos de cada duplicado se <strong>reasignan al ganador</strong> (no se pierde historial). Las descripciones quedarán en MAYÚSCULAS.</div>'+
+    '<div style="max-height:50vh;overflow-y:auto">'+rows+'</div>',
+    '<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="aplicarLimpiezaProductos()">Aplicar unificación ('+totalPerd+')</button>');
+}
+// Aplicar (destructivo): fusiona, reasigna y elimina
+async function aplicarLimpiezaProductos(){
+  if(!can('productos.eliminar')){ toast('Sin permiso','','error'); return; }
+  closeModal();
+  if(typeof showLoading==='function') showLoading('Unificando productos...');
+  try{
+    var grupos=_analizarDuplicadosProductos();
+    var totalElim=0, totalReasig=0;
+    // 1) Procesar cada grupo de duplicados
+    for(var gi=0; gi<grupos.length; gi++){
+      var g=grupos[gi];
+      var ganCod=g.ganador.p.codigoInterno;
+      // 1a) Fusionar campos heredados + normalizar nombre en el ganador
+      var gan=g.ganador.p;
+      Object.keys(g.fusion).forEach(function(c){ gan[c]=g.fusion[c]; });
+      gan.descripcion=_normNombreProd(gan.descripcion);
+      gan.modificado=new Date().toISOString();
+      await dbPut('products', gan);
+      // 1b) Reasignar registros de cada perdedor → ganador
+      for(var pi=0; pi<g.perdedores.length; pi++){
+        var perdCod=g.perdedores[pi].p.codigoInterno;
+        // STOCK: clave = cod|bod ; al reasignar puede colisionar → sumar cantidades
+        var stocksP=(STATE.cache.stock||[]).filter(function(s){ return s.codigoInterno===perdCod; });
+        for(var si=0; si<stocksP.length; si++){
+          var sp=stocksP[si];
+          var bod=sp.bodegaId;
+          var newKey=ganCod+'|'+bod;
+          var dest=await dbGet('stock', newKey);
+          if(dest){
+            // Sumar cantidades y recalcular costo promedio ponderado
+            var qA=Number(dest.cantidad)||0, qB=Number(sp.cantidad)||0;
+            var cA=Number(dest.costoPromedio)||0, cB=Number(sp.costoPromedio)||0;
+            var qT=qA+qB;
+            dest.cantidad=qT;
+            dest.costoPromedio=qT>0?((qA*cA+qB*cB)/qT):cA;
+            await dbPut('stock', dest);
+            await dbDel('stock', sp.key);
+          }else{
+            // Mover: crear con nueva key y borrar la vieja
+            var nuevo={...sp, key:newKey, codigoInterno:ganCod};
+            await dbPut('stock', nuevo);
+            await dbDel('stock', sp.key);
+          }
+          totalReasig++;
+        }
+        // LOTES: id = lot|cod|bod ; reasignar conservando lote/fechaVenc, fusionando por lote
+        var lotsP=(STATE.cache.lots||[]).filter(function(l){ return l.codigoInterno===perdCod; });
+        for(var li=0; li<lotsP.length; li++){
+          var lp=lotsP[li];
+          var newId='lot|'+ganCod+'|'+(lp.bodegaId||'')+'|'+(lp.lote||'');
+          var destL=await dbGet('lots', newId);
+          if(destL){
+            destL.cantidad=(Number(destL.cantidad)||0)+(Number(lp.cantidad)||0);
+            await dbPut('lots', destL);
+            await dbDel('lots', lp.id);
+          }else{
+            var nuevoL={...lp, id:newId, codigoInterno:ganCod};
+            await dbPut('lots', nuevoL);
+            await dbDel('lots', lp.id);
+          }
+        }
+        // MOVIMIENTOS: reapuntar detalles del perdedor al ganador
+        var movsP=(STATE.cache.movements||[]).filter(function(m){ return (m.detalles||[]).some(function(d){ return d.codigoInterno===perdCod; }); });
+        for(var mi=0; mi<movsP.length; mi++){
+          var m=movsP[mi];
+          var cambio=false;
+          (m.detalles||[]).forEach(function(d){ if(d.codigoInterno===perdCod){ d.codigoInterno=ganCod; cambio=true; } });
+          if(cambio){ await dbPut('movements', m); }
+        }
+        // Eliminar el producto perdedor
+        await dbDel('products', perdCod);
+        totalElim++;
+      }
+    }
+    // 2) Normalizar a MAYÚSCULAS TODOS los productos restantes (aunque no tengan duplicados)
+    var todos=await dbAll('products');
+    for(var ti=0; ti<todos.length; ti++){
+      var pr=todos[ti];
+      var norm=_normNombreProd(pr.descripcion);
+      if(pr.descripcion!==norm){ pr.descripcion=norm; pr.modificado=new Date().toISOString(); await dbPut('products', pr); }
+    }
+    await reloadCache();
+    if(typeof hideLoading==='function') hideLoading();
+    await audit('producto.editar','Limpieza/unificación de productos: '+totalElim+' eliminados, '+totalReasig+' stocks reasignados');
+    toast('Limpieza completada', totalElim+' duplicado(s) unificado(s)', 'success');
+    navigate('productos');
+  }catch(e){
+    if(typeof hideLoading==='function') hideLoading();
+    console.error('Limpieza productos error:', e);
+    toast('Error','No se pudo completar la limpieza: '+(e.message||e),'error');
+  }
+}
+
 function viewProduct(codigo){
   const p=getProduct(codigo);if(!p)return;
   const stocks=STATE.cache.stock.filter(s=>s.codigoInterno===codigo&&s.cantidad>0);
@@ -5610,6 +5802,16 @@ function renderProveedores(c){
 }
 function renderProveedoresTable(){
   const w=document.getElementById('prvTable');
+  const hayFiltro = provFilter.search || provFilter.activo;
+  if(!hayFiltro){
+    w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
+      '<div class="empty-state-icon">🔍</div>'+
+      '<div class="empty-state-title">Busca o filtra proveedores</div>'+
+      '<div class="empty-state-text">Usa el buscador (código, razón social, RUT o giro) o el filtro de estado.<br>Hay <strong>'+STATE.cache.providers.length+'</strong> proveedor(es) registrados.</div>'+
+      (can('proveedores.crear')?'<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openProveedorForm()">+ Nuevo proveedor</button>':'')+
+    '</div>';
+    return;
+  }
   let rows=[...STATE.cache.providers];
   if(provFilter.search){
     const s=provFilter.search.toLowerCase();
@@ -5800,6 +6002,16 @@ function renderClientes(c){
 }
 function renderClientesTable(){
   const w=document.getElementById('cliTable');
+  const hayFiltro = cliFilter.search || cliFilter.activo;
+  if(!hayFiltro){
+    w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
+      '<div class="empty-state-icon">🔍</div>'+
+      '<div class="empty-state-title">Busca o filtra clientes</div>'+
+      '<div class="empty-state-text">Usa el buscador (código, razón social, RUT o giro) o el filtro de estado.<br>Hay <strong>'+STATE.cache.customers.length+'</strong> cliente(s) registrados.</div>'+
+      (can('clientes.crear')?'<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openClienteForm()">+ Nuevo cliente</button>':'')+
+    '</div>';
+    return;
+  }
   let rows=[...STATE.cache.customers];
   if(cliFilter.search){
     const s=cliFilter.search.toLowerCase();
@@ -7216,6 +7428,16 @@ function limpiarFiltrosStock(){
 }
 function renderStockTable(){
   const w=document.getElementById('stTable');
+  // soloConSaldo está activo por defecto y NO cuenta como filtro de búsqueda
+  const hayFiltro = stockFilter.search || stockFilter.bodega || stockFilter.tipo || stockFilter.grupo || stockFilter.subgrupo;
+  if(!hayFiltro){
+    w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
+      '<div class="empty-state-icon">🔍</div>'+
+      '<div class="empty-state-title">Busca o filtra el stock</div>'+
+      '<div class="empty-state-text">Usa el buscador (código, EAN o descripción) o filtra por bodega, tipo, grupo o sub-grupo para ver saldos.</div>'+
+    '</div>';
+    return;
+  }
   let rows=STATE.cache.stock.map(s=>({...s,p:getProduct(s.codigoInterno),b:getWarehouse(s.bodegaId)})).filter(r=>r.p);
   if(stockFilter.soloConSaldo)rows=rows.filter(r=>r.cantidad>0);
   if(stockFilter.bodega)rows=rows.filter(r=>r.bodegaId===stockFilter.bodega);
@@ -7639,6 +7861,15 @@ function renderMovimientos(c){
 }
 function renderMovimientosTable(){
   const w=document.getElementById('mvTable');
+  const hayFiltro = movFilter.search || movFilter.tipo || movFilter.bodega || movFilter.from || movFilter.to;
+  if(!hayFiltro){
+    w.innerHTML='<div class="empty-state" style="padding:40px 20px">'+
+      '<div class="empty-state-icon">🔍</div>'+
+      '<div class="empty-state-title">Busca o filtra movimientos</div>'+
+      '<div class="empty-state-text">Usa el buscador (N°, observación, documento, proveedor/cliente) o filtra por tipo, bodega o rango de fechas.<br>Hay <strong>'+STATE.cache.movements.length+'</strong> movimiento(s) registrados.</div>'+
+    '</div>';
+    return;
+  }
   let rows=[...STATE.cache.movements];
   if(movFilter.tipo){
     if(movFilter.tipo.includes(':')){
@@ -15624,13 +15855,14 @@ function renderOrdenChips(){
         var grupo=(btn.dataset.grupo||p.id).split(',');
         var yaSel=selPanosOrden.indexOf(p.id)>=0;
         if(yaSel){
-          // No se permite deseleccionar al hacer clic (evita quitar paños por error).
-          // Para corregir, usar el botón "Limpiar" y volver a seleccionar.
-          return;
+          // Deseleccionar: quitar todo el grupo
+          grupo.forEach(function(gid){ var i=selPanosOrden.indexOf(gid); if(i>=0) selPanosOrden.splice(i,1); });
+          btn.classList.remove('cc-sel'); btn.style.cssText='';
+        } else {
+          // Seleccionar: añadir todo el grupo (productivo + polinizantes)
+          grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
+          btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
         }
-        // Seleccionar: añadir todo el grupo (productivo + polinizantes)
-        grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
-        btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
         var tHa=selPanosOrden.reduce(function(s,id){ var px=getPano(id); return s+getHas(px); },0);
         // Contar grupos seleccionados (productivos visibles), no paños individuales.
         var gruposSel=chips.filter(function(c){ return selPanosOrden.some(function(sid){ return String(sid)===String(c.id); }); }).length;
@@ -15696,7 +15928,7 @@ function calcDist(){
   }).join('');
   document.getElementById('cc-dt-has').textContent=fmtN(tHas,2)+' há';
   document.getElementById('cc-dt-agua').textContent=tAgua>0?fmtN(tAgua,0)+' L':'—';
-  document.getElementById('cc-dt-prod').textContent=fmtQtyStr(tProd,unitS,3);
+  document.getElementById('cc-dt-prod').textContent=fmtQtyStr(tProd,unitS,2);
   // ─── Estanques (nebulizadora): N° estanques y producto por estanque ───
   var capEst=parseFloat((document.getElementById('cc-o-equipo-cap')||{}).value)||0;
   var estInput=document.getElementById('cc-o-estanques');
@@ -15714,7 +15946,7 @@ function calcDist(){
     if(nEst>0){
       var rowsEst=allProds.map(function(ap,i){
         var totP = i===0 ? tProd : draftDist.reduce(function(s,r){ return s+(r.extras['p'+(i-1)]||0); },0);
-        return '<div style="font-size:12px;line-height:1.6"><strong>'+escapeHtml(ap.nombre)+':</strong> '+fmtQtyStr(totP/nEst,ap.unitS,3)+' por estanque</div>';
+        return '<div style="font-size:12px;line-height:1.6"><strong>'+escapeHtml(ap.nombre)+':</strong> '+fmtQtyStr(totP/nEst,ap.unitS,2)+' por estanque</div>';
       }).join('');
       estBox.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-left:3px solid #16a34a;border-radius:6px;padding:10px 12px;margin-top:10px">'+
         '<div style="font-weight:700;color:#15803d;font-size:12px;margin-bottom:6px">🚜 Por estanque ('+fmtN(capEst,0)+' L · '+nEst+' estanques)</div>'+rowsEst+'</div>';
@@ -15730,13 +15962,13 @@ function calcDist(){
         var tot = draftDist.reduce(function(s,r){ return s + (r.extras['p'+i]||0); }, 0);
         var detalle = draftDist.map(function(r){
           var qty = r.extras['p'+i]||0;
-          return '<span class="cc-pano-tag" style="margin:2px;font-size:11px"><span class="cc-pano-dot" style="background:'+(r.p&&r.p.color||'#888')+'"></span>'+(r.p&&r.p.nombre||'?')+': <strong>'+fmtQtyStr(qty,ap.unitS,3)+'</strong></span>';
+          return '<span class="cc-pano-tag" style="margin:2px;font-size:11px"><span class="cc-pano-dot" style="background:'+(r.p&&r.p.color||'#888')+'"></span>'+(r.p&&r.p.nombre||'?')+': <strong>'+fmtQtyStr(qty,ap.unitS,2)+'</strong></span>';
         }).join(' ');
         return '<div style="background:#f5f9fd;border:1px solid #bcd9f5;border-left:3px solid #0a6ed1;border-radius:6px;padding:10px 12px;margin-bottom:8px">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">'+
             '<div><strong style="color:#354a5f">'+escapeHtml(ap.nombre)+'</strong> '+
               '<span style="font-size:11px;color:#666;margin-left:6px">'+ap.dosis+' '+ap.unidad+'</span></div>'+
-            '<div style="font-size:13px;font-weight:700;color:#354a5f">Total: '+fmtQtyStr(tot,ap.unitS,3)+'</div>'+
+            '<div style="font-size:13px;font-weight:700;color:#354a5f">Total: '+fmtQtyStr(tot,ap.unitS,2)+'</div>'+
           '</div>'+
           '<div style="font-size:11px;color:#555">'+detalle+'</div>'+
           '</div>';
@@ -15749,14 +15981,14 @@ function calcDist(){
   document.getElementById('cc-bodega-agua').textContent=tAgua>0?fmtN(tAgua,0):'—';
   // Cantidades netas (sin margen extra) — bodega entrega exactamente lo que la orden indica
   if(allProds.length===1){
-    document.getElementById('cc-bodega-qty').textContent=fmtQtyStr(tProd,unitS,3);
+    document.getElementById('cc-bodega-qty').textContent=fmtQtyStr(tProd,unitS,2);
     document.getElementById('cc-bodega-lbl').textContent='de '+(prodN||'producto');
-    document.getElementById('cc-bodega-det').textContent=selPanosOrden.length+' paño(s) · Total: '+fmtQtyStr(tProd,unitS,3);
+    document.getElementById('cc-bodega-det').textContent=selPanosOrden.length+' paño(s) · Total: '+fmtQtyStr(tProd,unitS,2);
   } else {
     // Mezcla: lista de productos con cantidades netas
     var bodegaLista = allProds.map(function(ap, i){
       var totProd = i===0 ? tProd : draftDist.reduce(function(s,r){ return s + (r.extras['p'+(i-1)]||0); }, 0);
-      return '<div style="font-size:12px;line-height:1.5"><strong>'+escapeHtml(ap.nombre)+':</strong> '+fmtQtyStr(totProd,ap.unitS,3)+'</div>';
+      return '<div style="font-size:12px;line-height:1.5"><strong>'+escapeHtml(ap.nombre)+':</strong> '+fmtQtyStr(totProd,ap.unitS,2)+'</div>';
     }).join('');
     document.getElementById('cc-bodega-qty').textContent = allProds.length + ' productos';
     document.getElementById('cc-bodega-lbl').textContent = 'en la mezcla';
@@ -15772,23 +16004,22 @@ function unitBase(u){
   if(!u) return '';
   return String(u).replace(/\/(100L|ha)$/i,'').trim();
 }
-// Convierte qty (en unidad base) a la unidad de mayor magnitud cuando corresponde.
-// 1500 mL -> "1.500 L";  50000 g -> "50.000 kg";  500 mL -> "500.000 mL"; etc.
-// Devuelve {qty, unit} ya convertidos para mostrar.
+// Convierte qty a unidad de distribución: SIEMPRE kg o L (nunca g, mL ni cc).
+// g → kg, mL → L, cc → L; kg y L se mantienen. Otras unidades quedan igual (fallback).
 function fmtQtyAuto(qty, baseUnit){
   qty = qty||0;
-  var u = (baseUnit||'').toString();
-  // mL → L cuando >= 1000
-  if(u === 'mL' && qty >= 1000){ return {qty: qty/1000, unit: 'L'}; }
-  // g → kg cuando >= 1000
-  if(u === 'g'  && qty >= 1000){ return {qty: qty/1000, unit: 'kg'}; }
-  // L → no escalamos a más (puede ser 1000L y sigue siendo L; la unidad base es L)
-  // kg → idem
+  var u = (baseUnit||'').toString().trim();
+  var ul = u.toLowerCase();
+  if(ul === 'g')  return {qty: qty/1000, unit: 'kg'};
+  if(ul === 'ml') return {qty: qty/1000, unit: 'L'};
+  if(ul === 'cc') return {qty: qty/1000, unit: 'L'};
+  if(ul === 'kg') return {qty: qty, unit: 'kg'};
+  if(ul === 'l')  return {qty: qty, unit: 'L'};
   return {qty: qty, unit: u};
 }
-// Helper que devuelve string formateado "<num> <unit>" con conversión automática
+// Helper que devuelve string formateado "<num> <unit>" con conversión a kg/L
 function fmtQtyStr(qty, baseUnit, dec){
-  if(dec===undefined) dec = 3;
+  if(dec===undefined) dec = 2;
   var r = fmtQtyAuto(qty, baseUnit);
   return fmtN(r.qty, dec) + ' ' + r.unit;
 }
@@ -16003,7 +16234,7 @@ function emitirOrden(){
   }, 100);
   var msg = 'Orden '+num+' emitida.';
   if(productos.length===1){
-    msg += ' Solicitar '+fmtQtyStr(orden.tProd,unitS,3)+' de '+prod+' a bodega.';
+    msg += ' Solicitar '+fmtQtyStr(orden.tProd,unitS,2)+' de '+prod+' a bodega.';
   } else {
     msg += ' Mezcla de '+productos.length+' productos. Ver detalle en la lista.';
   }
@@ -16054,7 +16285,7 @@ function renderOrdenesList(){
     var hdrProdSummary;
     if(prods.length===1){
       hdrProdSummary = '<span style="font-weight:700">'+escapeHtml(prods[0].nombre||'—')+'</span>'+
-        '<span style="font-size:12px;color:#888">'+fmtQtyStr(prods[0].tProd||0,(prods[0].unitS||unitBase(prods[0].unidad||'')),3)+'</span>';
+        '<span style="font-size:12px;color:#888">'+fmtQtyStr(prods[0].tProd||0,(prods[0].unitS||unitBase(prods[0].unidad||'')),2)+'</span>';
     } else {
       hdrProdSummary = '<span style="font-weight:700">'+escapeHtml(prods[0].nombre||'—')+'</span>'+
         '<span style="font-size:11px;color:#666">+'+(prods.length-1)+' producto'+(prods.length-1>1?'s':'')+' en mezcla</span>';
@@ -16111,7 +16342,7 @@ function renderOrdenesList(){
             return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed #d1e8ff;font-size:13px">'+
               '<div><strong>'+escapeHtml(ap.nombre||'—')+'</strong> '+
                 '<span style="font-size:11px;color:#666;margin-left:6px">'+ap.dosis+' '+(ap.unidad||'')+'</span></div>'+
-              '<div style="font-weight:700;color:#354a5f">'+fmtQtyStr(ap.tProd||0,apUS,3)+'</div>'+
+              '<div style="font-weight:700;color:#354a5f">'+fmtQtyStr(ap.tProd||0,apUS,2)+'</div>'+
             '</div>';
           }).join('')+
         '</div>'+
@@ -16123,9 +16354,9 @@ function renderOrdenesList(){
         (function(){ var _r=_recalcDistribucionOrden(o); return (_r.filas.length?_r.filas:(o.distribucion||[])); })().map(function(r){
           var prodCells;
           if(r.prods && r.prods.length){
-            prodCells = r.prods.map(function(rp){ return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(rp.qty||0,(rp.unitS||unitBase(rp.unidad||'')),3)+'</td>'; }).join('');
+            prodCells = r.prods.map(function(rp){ return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(rp.qty||0,(rp.unitS||unitBase(rp.unidad||'')),2)+'</td>'; }).join('');
           } else {
-            prodCells = '<td style="text-align:right;font-weight:700">'+fmtQtyStr(r.prod||0,(prods[0].unitS||unitBase(prods[0].unidad||'')),3)+'</td>';
+            prodCells = '<td style="text-align:right;font-weight:700">'+fmtQtyStr(r.prod||0,(prods[0].unitS||unitBase(prods[0].unidad||'')),2)+'</td>';
             for(var k=1;k<prods.length;k++) prodCells += '<td style="text-align:right;color:#bbb">—</td>';
           }
           return '<tr><td><span class="cc-pano-tag"><span class="cc-pano-dot" style="background:'+(r.color||'#888')+'"></span>'+(r.panoNombre||'—')+'</span></td>'+
@@ -16138,7 +16369,7 @@ function renderOrdenesList(){
         '</tbody><tfoot><tr><td colspan="3">TOTALES</td>'+
           '<td style="text-align:right">'+fmtN(o.tHas||0,2)+' há</td>'+
           '<td style="text-align:right">'+(o.tAgua>0?fmtN(o.tAgua,0)+' L':'—')+'</td>'+
-          prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(ap.tProd||0,apUS,3)+'</td>'; }).join('')+
+          prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(ap.tProd||0,apUS,2)+'</td>'; }).join('')+
         '</tr></tfoot></table></div>'+
         (o.editada ? '<div style="font-size:11px;color:#7a4200;background:#fff8e0;border-left:3px solid #e9730c;padding:6px 10px;margin-top:10px;border-radius:4px">✎ Esta orden fue editada el '+(o.editadaFecha||'—')+(o.editadaPor?' por '+o.editadaPor:'')+'</div>' : '')+
         // ── Bloque de confirmaciones registradas ──
@@ -16581,9 +16812,9 @@ function cfCargarDetalle(ordenId){
         '<div style="font-weight:700;font-size:13px">'+escapeHtml(ap.nombre||'—')+'</div>'+
         '<div style="font-size:11px;color:#666">Dosis: '+ap.dosis+' '+(ap.unidad||'')+'</div></div>'+
       '<div><label style="display:block;font-size:10px;color:#555;font-weight:600;margin-bottom:3px">Planificado (total)</label>'+
-        '<div style="padding:7px 9px;background:#fff;border:1px solid #d9d9d9;border-radius:5px;font-size:12px;color:#888">'+fmtN(convP.qty,3)+' '+convP.unit+'</div></div>'+
+        '<div style="padding:7px 9px;background:#fff;border:1px solid #d9d9d9;border-radius:5px;font-size:12px;color:#888">'+fmtN(convP.qty,2)+' '+convP.unit+'</div></div>'+
       '<div><label style="display:block;font-size:10px;color:#555;font-weight:600;margin-bottom:3px">Aplicado (calculado)</label>'+
-        '<div id="cc-cf-prod-'+i+'" style="padding:7px 9px;background:#fffefb;border:1px solid #0a6ed1;border-radius:5px;font-size:13px;font-weight:700;color:#354a5f">'+fmtN(convP.qty,3)+' '+convP.unit+'</div>'+
+        '<div id="cc-cf-prod-'+i+'" style="padding:7px 9px;background:#fffefb;border:1px solid #0a6ed1;border-radius:5px;font-size:13px;font-weight:700;color:#354a5f">'+fmtN(convP.qty,2)+' '+convP.unit+'</div>'+
         '<div style="font-size:10px;color:#888;margin-top:2px">se recalcula con el agua aplicada</div></div>'+
     '</div>';
   }).join('');
@@ -16738,7 +16969,7 @@ function cfRecalcProductos(){
     var conv = fmtQtyAuto(real, us);
     var display = document.getElementById('cc-cf-prod-'+i);
     if(display){
-      display.textContent = fmtN(conv.qty,3)+' '+conv.unit;
+      display.textContent = fmtN(conv.qty,2)+' '+conv.unit;
       // Alerta visual si difiere >10%
       var diffPct = factor>0 ? Math.abs(factor-1)*100 : 100;
       if(diffPct>10){
@@ -17314,7 +17545,7 @@ function openPM(id){
       prodsSummary = '<div class="cc-pm-fld"><div class="cc-l">Producto</div><div class="cc-v">'+escapeHtml(prods[0].nombre||'-')+'</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">Dosis</div><div class="cc-v">'+prods[0].dosis+' '+prods[0].unidad+'</div></div>';
     } else {
-      var prodsList = prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); return '<div style="font-size:11px;padding:2px 0"><strong>'+escapeHtml(ap.nombre||'-')+'</strong>: '+ap.dosis+' '+ap.unidad+' ('+fmtQtyStr(ap.tProd||0,apUS,3)+' neto)</div>'; }).join('');
+      var prodsList = prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); return '<div style="font-size:11px;padding:2px 0"><strong>'+escapeHtml(ap.nombre||'-')+'</strong>: '+ap.dosis+' '+ap.unidad+' ('+fmtQtyStr(ap.tProd||0,apUS,2)+' neto)</div>'; }).join('');
       prodsSummary = '<div class="cc-pm-fld" style="grid-column:span 2"><div class="cc-l">MEZCLA DE '+prods.length+' PRODUCTOS</div><div class="cc-v" style="font-size:12px">'+prodsList+'</div></div>';
     }
     // Solicitud a bodega: lista por producto
@@ -17324,12 +17555,12 @@ function openPM(id){
         '<div>'+
           '<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#0a6ed1;margin-bottom:3px">SOLICITUD A BODEGA</div>'+
           '<div style="font-size:11px;color:#444">'+(o.panoIds||[]).length+' pa\u00f1o(s) - '+fmtN(o.tHas||0,2)+' h\u00e1'+
-            ' - Neto: '+fmtQtyStr(prods[0].tProd||o.tProd||0,unitS,3)+
+            ' - Neto: '+fmtQtyStr(prods[0].tProd||o.tProd||0,unitS,2)+
             ' - Agua: '+(o.tAgua>0?fmtN(o.tAgua,0):'-')+' L</div>'+
           '<div style="font-size:10px;color:#888;margin-top:2px">Cantidad neta total a aplicar</div>'+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:20px;font-weight:700;color:#354a5f">'+fmtQtyStr(prods[0].margin||o.margin||0,unitS,3)+'</div>'+
+          '<div style="font-size:20px;font-weight:700;color:#354a5f">'+fmtQtyStr(prods[0].margin||o.margin||0,unitS,2)+'</div>'+
           '<div style="font-size:11px;color:#555">de '+escapeHtml(prods[0].nombre||'-')+'</div>'+
         '</div>'+
       '</div>';
@@ -17339,7 +17570,7 @@ function openPM(id){
         var us = ap.unitS||unitBase(ap.unidad||'');
         return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #ddd;font-size:11px">'+
           '<div><strong>'+escapeHtml(ap.nombre||'-')+'</strong> <span style="color:#666">('+ap.dosis+' '+ap.unidad+')</span></div>'+
-          '<div style="font-weight:700;color:#354a5f">'+fmtQtyStr(ap.tProd||0,us,3)+'</div>'+
+          '<div style="font-weight:700;color:#354a5f">'+fmtQtyStr(ap.tProd||0,us,2)+'</div>'+
         '</div>';
       }).join('');
       bodegaHtml = '<div class="cc-pm-bodega" style="display:block">'+
@@ -17355,7 +17586,7 @@ function openPM(id){
       var conv = fmtQtyAuto(ap.tProd||0, apUS);
       return '<th style="text-align:right">'+escapeHtml(ap.nombre||'Prod')+' ('+conv.unit+')</th>';
     }).join('');
-    var prodFooters = prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); var conv=fmtQtyAuto(ap.tProd||0,apUS); return '<td style="text-align:right"><strong>'+fmtN(conv.qty,3)+'</strong></td>'; }).join('');
+    var prodFooters = prods.map(function(ap){ var apUS=ap.unitS||unitBase(ap.unidad||''); var conv=fmtQtyAuto(ap.tProd||0,apUS); return '<td style="text-align:right"><strong>'+fmtN(conv.qty,2)+'</strong></td>'; }).join('');
     // Obtener datos de empresa para encabezado del documento
     var empCfg = (STATE && STATE.cache && STATE.cache.config && STATE.cache.config.empresa) || {};
     var empHeaderHtml = '';
@@ -19194,14 +19425,23 @@ function rebuildFilters(data) {
     arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
     if (arr.includes(cur)) sel.value = cur;
   };
-  // Temporada: usa "Todas" como etiqueta del vacío
+  // Temporada: usa "Todas" como etiqueta del vacío.
+  // Por defecto (sin selección previa) selecciona la temporada actual, o la última disponible.
   (function(){
     const sel = document.getElementById('f-temporada');
     if(!sel) return;
     const cur = sel.value;
     sel.innerHTML = '<option value="">Todas</option>';
     temporadas.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
-    if (temporadas.includes(cur)) sel.value = cur;
+    if (cur && temporadas.includes(cur)) {
+      sel.value = cur;
+    } else if (!cur && !sel.dataset.pzInit) {
+      // Primera carga: elegir temporada actual si existe en los datos, si no la última
+      var def = '';
+      try { var ta = (typeof temporadaActual==='function') ? temporadaActual() : ''; if(ta && temporadas.includes(ta)) def = ta; } catch(e){}
+      if(!def && temporadas.length) def = temporadas[temporadas.length-1];
+      if(def){ sel.value = def; sel.dataset.pzInit = '1'; }
+    }
   })();
   rebuild('f-mes', meses);
   rebuild('f-tipo', tipos);
@@ -19336,8 +19576,12 @@ function fmtPct(r, p) { if (!p) return '—'; return ((r-p)/p*100).toFixed(1)+'%
 // ── Actualiza la etiqueta "Última actualización" desde la fuente activa ──
 function refreshLastUpdate() {
   var source = (typeof ACTIVE_DATA !== 'undefined' && ACTIVE_DATA) ? ACTIVE_DATA : RAW;
-  // Meses con datos reales, en orden de temporada
-  var conReal = source.filter(function(d) { return d['MONTO REAL'] > 0; });
+  // Respetar la temporada seleccionada en el filtro global
+  var tempSel = (document.getElementById('f-temporada') || {}).value || '';
+  // Meses con datos reales, dentro de la temporada seleccionada (o todas si no hay selección)
+  var conReal = source.filter(function(d) {
+    return d['MONTO REAL'] > 0 && (!tempSel || _getTemporada(d) === tempSel);
+  });
   if (!conReal.length) {
     document.getElementById('last-update').textContent = '—';
     return;
@@ -20035,7 +20279,7 @@ document.getElementById('f-mes').addEventListener('change', render);
 document.getElementById('f-tipo').addEventListener('change', render);
 document.getElementById('f-subgrupo').addEventListener('change', render);
 document.getElementById('f-desc').addEventListener('change', render);
-(function(){ var ft=document.getElementById('f-temporada'); if(ft) ft.addEventListener('change', render); })();
+(function(){ var ft=document.getElementById('f-temporada'); if(ft) ft.addEventListener('change', function(){ render(); try{ if(typeof pzRenderCriterios==='function') pzRenderCriterios(); }catch(e){} }); })();
 
 // ===================== DESCARGA HTML =====================
 function downloadDashboard() {
@@ -20365,14 +20609,7 @@ window.pzPopularSelectoresCriterios = function(){
     tList.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
     if(cur && tList.indexOf(cur)>=0) sel.value=cur;
   }
-  // Selector del filtro
-  var filt=document.getElementById('pz-crit-filtro');
-  if(filt){
-    var curF=filt.value;
-    filt.innerHTML='<option value="">Todas</option>';
-    tList.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; filt.appendChild(o); });
-    if(curF) filt.value=curF;
-  }
+  // (El filtro de temporada de criterios ahora es el filtro global del Dashboard: f-temporada)
   // Tipos de gasto: del Excel + algunos comunes
   var tipos={};
   allD.forEach(function(d){ var g=d.DESCRIPCION; if(g) tipos[g]=1; });
@@ -20423,7 +20660,9 @@ window.pzGuardarCriterio = async function(){
 window.pzRenderCriterios = function(){
   var el=document.getElementById('pz-criterios-list'); if(!el) return;
   var items=_pzGetCriterios();
-  var filtro=(document.getElementById('pz-crit-filtro')||{}).value||'';
+  // La temporada se controla con el filtro global del Dashboard (f-temporada)
+  var filtro=(document.getElementById('f-temporada')||{}).value||'';
+  var lbl=document.getElementById('pz-crit-temp-activa'); if(lbl) lbl.textContent = filtro || 'Todas';
   if(filtro) items=items.filter(function(c){ return c.temporada===filtro; });
   // Ordenar por temporada desc, luego por fecha desc
   items.sort(function(a,b){ return (b.temporada||'').localeCompare(a.temporada||'') || (b.fecha||'').localeCompare(a.fecha||''); });
