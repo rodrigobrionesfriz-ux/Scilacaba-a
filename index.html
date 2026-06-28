@@ -14187,6 +14187,16 @@ function frRenderInv(){
       '<div class="cc-field"><label class="cc-lbl">Variedad</label><input type="text" id="fr-sec-var" list="fr-vars-dl" placeholder="Variedad"><datalist id="fr-vars-dl">'+varsList.map(function(v){return '<option value="'+escapeHtml(v)+'">';}).join('')+'</datalist></div>'+
       '<div class="cc-field"><label class="cc-lbl">N° plantas (opc.)</label><input type="number" id="fr-sec-pl" step="1" min="0" placeholder="0"></div>'+
     '</div>'+
+    '<div class="cc-field" style="margin-top:10px"><label class="cc-lbl">Paños del huerto asociados (opcional)</label>'+
+      '<div style="font-size:11px;color:#888;margin-bottom:5px">Selecciona los cuarteles que riega este sector. Si se asignan, la distribución del producto se hace por paño según sus hectáreas. Si no, se usa la superficie del sector.</div>'+
+      '<div id="fr-sec-panos" style="display:flex;flex-wrap:wrap;gap:6px;max-height:130px;overflow-y:auto;padding:4px;border:1px solid #e5e5e5;border-radius:6px">'+
+        ((S.panos||[]).length? (S.panos||[]).slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).map(function(p){
+          var ha=(parseFloat(p.has_riego)||parseFloat(p.hectareas)||0);
+          return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;background:#f7f9fb;border:1px solid #e0e0e0;border-radius:6px;padding:4px 8px;cursor:pointer">'+
+            '<input type="checkbox" class="fr-sec-pano-cb" value="'+escapeHtml(String(p.id))+'"> '+escapeHtml(p.nombre||'')+' <span style="color:#999">('+ha.toFixed(2)+' ha)</span></label>';
+        }).join('') : '<span style="font-size:12px;color:#999;padding:4px">No hay paños cargados en el huerto todavía.</span>')+
+      '</div>'+
+    '</div>'+
     '<button class="cc-btn cc-btn-g cc-btn-sm" style="margin-top:10px" onclick="frAgregarSector()">+ Agregar sector</button>'+
   '</div>';
 
@@ -14221,13 +14231,22 @@ function frAgregarSector(){
   var nombre=(document.getElementById('fr-sec-nombre').value||'').trim();
   if(!nombre){ toast('Falta nombre','Ingrese el nombre del sector','error'); return; }
   var equipo=(document.getElementById('fr-sec-equipo').value||'').trim();
+  // Paños del huerto asociados (opcional)
+  var panosSel=[];
+  document.querySelectorAll('.fr-sec-pano-cb:checked').forEach(function(cb){ panosSel.push(cb.value); });
+  // Si hay paños asignados, la superficie del sector se toma como la suma de sus
+  // hectáreas de riego (a menos que el usuario haya escrito una ha mayor a 0).
+  var haInput=parseFloat(document.getElementById('fr-sec-ha').value)||0;
+  var haPanos=panosSel.reduce(function(a,pid){ var p=(S.panos||[]).find(function(x){return String(x.id)===String(pid);}); return a+(p?(parseFloat(p.has_riego)||parseFloat(p.hectareas)||0):0); },0);
+  var haFinal = haInput>0 ? haInput : haPanos;
   S.fertirriego.sectores.push({
     id: uid(),
     nombre: nombre,
     equipo: equipo,
-    ha: parseFloat(document.getElementById('fr-sec-ha').value)||0,
+    ha: haFinal,
     variedad: (document.getElementById('fr-sec-var').value||'').trim(),
-    plantas: parseFloat(document.getElementById('fr-sec-pl').value)||0
+    plantas: parseFloat(document.getElementById('fr-sec-pl').value)||0,
+    panos: panosSel
   });
   // Registrar el equipo en cfg si es nuevo
   if(equipo && S.fertirriego.cfg.equipos.indexOf(equipo)<0){ S.fertirriego.cfg.equipos.push(equipo); }
@@ -14574,6 +14593,80 @@ function frRenderLista(){
   cont.innerHTML = html;
 }
 
+function frImprimirOrden(id){
+  _ensureFertirriego();
+  var f=S.fertirriego;
+  var o=f.ordenes.find(function(x){return String(x.id)===String(id);}); if(!o) return;
+  var cfg=f.cfg||{};
+  function dosisAKg(dosis,unidad){ var d=parseFloat(dosis)||0; var u=(unidad||'').toUpperCase().trim();
+    if(u==='GRS.'||u==='GR'||u==='G'||u==='GRS'||u==='G/HA'||u==='GRS/HA') return d/1000;
+    if(u==='C.C'||u==='CC'||u==='ML'||u==='MML'||u==='ML/HA') return d/1000;
+    if(u==='KG'||u==='KG/HA'||u==='K') return d;
+    if(u==='L'||u==='LT'||u==='L/HA') return d; return d; }
+  function ubKg(unidad){ var u=(unidad||'').toUpperCase().trim(); if(u==='C.C'||u==='CC'||u==='ML'||u==='MML'||u==='ML/HA'||u==='L'||u==='LT'||u==='L/HA') return 'L'; return 'kg'; }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Unidades de distribución (paños o sector)
+  var unidades=[];
+  (o.sectores||[]).forEach(function(sid){
+    var s=f.sectores.find(function(x){return String(x.id)===String(sid);}); if(!s) return;
+    if(Array.isArray(s.panos)&&s.panos.length){
+      s.panos.forEach(function(pid){ var p=(S.panos||[]).find(function(x){return String(x.id)===String(pid);}); if(p){ unidades.push({nombre:p.nombre||'',variedad:p.variedad||s.variedad||'',ha:(parseFloat(p.has_riego)||parseFloat(p.hectareas)||0),sector:s.nombre}); } });
+    } else { unidades.push({nombre:s.nombre||'',variedad:s.variedad||'',ha:(parseFloat(s.ha)||0),sector:s.nombre}); }
+  });
+  var haTot=unidades.reduce(function(a,u){return a+u.ha;},0);
+
+  // Tabla detalle por paño
+  var aporteTotal={}; FR_NUTRIENTES.forEach(function(nu){aporteTotal[nu]=0;});
+  var filas=unidades.map(function(u){
+    var prods=(o.lineas||[]).map(function(l){ var tot=dosisAKg(l.dosis,l.unidad)*u.ha; return esc(l.prod)+': <b>'+tot.toFixed(2)+' '+ubKg(l.unidad)+'</b>'; }).join('<br>');
+    var apPano={}; FR_NUTRIENTES.forEach(function(nu){apPano[nu]=0;});
+    (o.lineas||[]).forEach(function(l){ var prod=(S.productos||[]).find(function(p){return p.nombre===l.prod;}); if(!prod||!prod.aportes) return; var kg=dosisAKg(l.dosis,l.unidad)*u.ha; FR_NUTRIENTES.forEach(function(nu){var pct=parseFloat(prod.aportes[nu])||0; if(pct>0){apPano[nu]+=kg*(pct/100); aporteTotal[nu]+=kg*(pct/100);}}); });
+    var ap=FR_NUTRIENTES.filter(function(nu){return apPano[nu]>0;}).map(function(nu){return nu+': '+apPano[nu].toFixed(2);}).join(' · ');
+    return '<tr><td>'+esc(u.nombre)+(u.variedad?'<br><span class="mu">'+esc(u.variedad)+'</span>':'')+'</td><td class="r">'+u.ha.toFixed(2)+'</td><td>'+prods+'</td><td class="mu">'+(ap||'—')+'</td></tr>';
+  }).join('');
+
+  // Tabla de productos/dosis
+  var prodRows=(o.lineas||[]).map(function(l){ return '<tr><td>'+esc(l.prod)+'</td><td class="r">'+esc(String(l.dosis||''))+' '+esc(l.unidad||'')+'/ha</td><td>'+esc(l.obs||'')+'</td></tr>'; }).join('');
+  var apTot=FR_NUTRIENTES.filter(function(nu){return aporteTotal[nu]>0;}).map(function(nu){return '<span class="chip">'+nu+': '+aporteTotal[nu].toFixed(2)+' kg</span>';}).join(' ');
+
+  var empresa=cfg.empresa||'SOC. AGRICOLA Y FORESTAL LA CABAÑA LTDA';
+  var temporada=cfg.temporada||'';
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(o.numero)+'</title>'+
+    '<style>*{font-family:Arial,Helvetica,sans-serif;box-sizing:border-box}body{margin:0;padding:24px;color:#1a2530}'+
+    '.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0854a0;padding-bottom:12px;margin-bottom:16px}'+
+    '.hdr h1{font-size:18px;margin:0;color:#0854a0}.hdr .sub{font-size:12px;color:#555;margin-top:3px}'+
+    '.num{text-align:right;font-size:13px}.num b{font-size:16px;color:#0854a0}'+
+    '.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 18px;font-size:12px;margin-bottom:14px}'+
+    '.grid .mu{color:#888}table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}'+
+    'th{background:#eef3f8;text-align:left;padding:6px 8px;border:1px solid #cdd9e5;font-size:11px}'+
+    'td{padding:6px 8px;border:1px solid #e0e6ec;vertical-align:top}.r{text-align:right}.mu{color:#888;font-size:11px}'+
+    'h3{font-size:13px;color:#23303d;margin:14px 0 6px;border-left:3px solid #0854a0;padding-left:8px}'+
+    '.chip{display:inline-block;background:#eef3f8;border:1px solid #d1e8ff;border-radius:10px;padding:2px 9px;font-size:11px;color:#0854a0;margin:2px}'+
+    '.firmas{display:flex;justify-content:space-around;margin-top:46px;font-size:12px}.firmas div{border-top:1px solid #333;padding-top:5px;width:200px;text-align:center}'+
+    '@media print{body{padding:0}.noprint{display:none}}</style></head><body>'+
+    '<div class="hdr"><div><h1>'+esc(empresa)+'</h1><div class="sub">'+esc(cfg.documento||'ORDEN DE APLICACIÓN')+' · FERTIRRIEGO'+(temporada?' · Temporada '+esc(temporada):'')+'</div></div>'+
+      '<div class="num">N°<br><b>'+esc(o.numero)+'</b><br>'+esc(o.fecha||'')+'</div></div>'+
+    '<div class="grid">'+
+      '<div><span class="mu">Forma:</span> '+esc(o.forma||'-')+'</div>'+
+      '<div><span class="mu">Horario:</span> '+esc(o.horario||'-')+'</div>'+
+      '<div><span class="mu">Estado fenológico:</span> '+esc(o.estado||'-')+'</div>'+
+      '<div><span class="mu">Responsable:</span> '+esc(o.responsable||'-')+'</div>'+
+      '<div><span class="mu">Superficie total:</span> '+haTot.toFixed(2)+' ha</div>'+
+      '<div><span class="mu">Estado:</span> '+(o.confirmada?'Confirmada':'Pendiente')+'</div>'+
+    '</div>'+
+    '<h3>Productos y dosis (por hectárea)</h3>'+
+    '<table><thead><tr><th>Producto</th><th class="r">Dosis</th><th>Observación</th></tr></thead><tbody>'+prodRows+'</tbody></table>'+
+    '<h3>Distribución por paño</h3>'+
+    '<table><thead><tr><th>Paño</th><th class="r">Sup. (ha)</th><th>Producto a aplicar</th><th>Aportes (kg)</th></tr></thead><tbody>'+filas+'</tbody></table>'+
+    (apTot?'<h3>Aporte nutricional total estimado</h3><div>'+apTot+'</div>':'')+
+    '<div class="firmas"><div>Preparado por</div><div>Aplicado por</div><div>Supervisado por</div></div>'+
+    '<div class="noprint" style="text-align:center;margin-top:24px"><button onclick="window.print()" style="padding:9px 20px;font-size:14px;background:#0854a0;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Imprimir</button></div>'+
+    '</body></html>';
+  var w=window.open('','_blank'); if(!w){ toast('Bloqueado','Permita ventanas emergentes para imprimir','error'); return; }
+  w.document.write(html); w.document.close();
+}
+
 function frVerOrden(id){
   _ensureFertirriego();
   var f = S.fertirriego;
@@ -14587,38 +14680,87 @@ function frVerOrden(id){
       '<td style="padding:6px 10px;color:#888">'+escapeHtml(l.obs||'')+'</td></tr>';
   }).join('');
 
-  // ── Cálculo de aporte nutricional según dosis × superficie ──
-  // Convierte la dosis a kg de producto, según unidad, multiplicado por ha total.
+  // ── Interpretación de la dosis: POR HECTÁREA ──
+  // dosisAKg(dosis,unidad) = kg de producto por hectárea (según la unidad).
   function dosisAKg(dosis, unidad){
     var d=parseFloat(dosis)||0;
     var u=(unidad||'').toUpperCase().trim();
-    // a kg por unidad de dosis
     if(u==='GRS.'||u==='GR'||u==='G'||u==='GRS'||u==='G/HA'||u==='GRS/HA') return d/1000;
     if(u==='C.C'||u==='CC'||u==='ML'||u==='MML'||u==='ML/HA') return d/1000; // ~1 g/mL aprox
     if(u==='KG'||u==='KG/HA'||u==='K') return d;
     if(u==='L'||u==='LT'||u==='L/HA') return d; // ~1 kg/L aprox
-    return d; // por defecto asumir kg
+    return d; // por defecto kg
   }
+  function unidadBaseKg(unidad){ // etiqueta resultante tras convertir
+    var u=(unidad||'').toUpperCase().trim();
+    if(u==='C.C'||u==='CC'||u==='ML'||u==='MML'||u==='ML/HA'||u==='L'||u==='LT'||u==='L/HA') return 'L';
+    return 'kg';
+  }
+
+  // ── Construir el universo de "paños" sobre los que se distribuye ──
+  // Para cada sector de la orden: si tiene paños asociados, se usan esos paños
+  // (con sus ha de riego); si no, el propio sector actúa como una unidad.
+  var unidades=[]; // {nombre, variedad, ha, sector}
+  (o.sectores||[]).forEach(function(sid){
+    var s=f.sectores.find(function(x){return String(x.id)===String(sid);}); if(!s) return;
+    if(Array.isArray(s.panos) && s.panos.length){
+      s.panos.forEach(function(pid){
+        var p=(S.panos||[]).find(function(x){return String(x.id)===String(pid);});
+        if(p){ unidades.push({ nombre:p.nombre||'', variedad:p.variedad||s.variedad||'', ha:(parseFloat(p.has_riego)||parseFloat(p.hectareas)||0), sector:s.nombre }); }
+      });
+    } else {
+      unidades.push({ nombre:s.nombre||'', variedad:s.variedad||'', ha:(parseFloat(s.ha)||0), sector:s.nombre });
+    }
+  });
+  var haTotDist=unidades.reduce(function(a,u){ return a+u.ha; },0) || haTot;
+
+  // ── Distribución por paño: cantidad de cada producto y aportes ──
+  // producto.totalKg = dosisKgHa × ha del paño
+  var distHtml='';
   var aporteTotal={}; FR_NUTRIENTES.forEach(function(nu){ aporteTotal[nu]=0; });
   var hayAportes=false;
-  (o.lineas||[]).forEach(function(l){
-    var prod=(S.productos||[]).find(function(p){ return p.nombre===l.prod; });
-    if(!prod||!prod.aportes) return;
-    var kgProd = dosisAKg(l.dosis, l.unidad) * haTot; // kg de producto total en la orden
-    FR_NUTRIENTES.forEach(function(nu){
-      var pct=parseFloat(prod.aportes[nu])||0;
-      if(pct>0){ aporteTotal[nu]+= kgProd*(pct/100); hayAportes=true; }
-    });
-  });
+  if(unidades.length){
+    var filas=unidades.map(function(u){
+      var prodCeldas=(o.lineas||[]).map(function(l){
+        var kgHa=dosisAKg(l.dosis,l.unidad);
+        var tot=kgHa*u.ha;
+        var ub=unidadBaseKg(l.unidad);
+        return '<div style="font-size:11px;padding:2px 0"><strong>'+escapeHtml(l.prod)+':</strong> '+tot.toFixed(2)+' '+ub+'</div>';
+      }).join('');
+      // Aportes nutricionales de este paño
+      var apPano={}; FR_NUTRIENTES.forEach(function(nu){apPano[nu]=0;});
+      (o.lineas||[]).forEach(function(l){
+        var prod=(S.productos||[]).find(function(p){return p.nombre===l.prod;});
+        if(!prod||!prod.aportes) return;
+        var kgProd=dosisAKg(l.dosis,l.unidad)*u.ha;
+        FR_NUTRIENTES.forEach(function(nu){
+          var pct=parseFloat(prod.aportes[nu])||0;
+          if(pct>0){ apPano[nu]+=kgProd*(pct/100); aporteTotal[nu]+=kgProd*(pct/100); hayAportes=true; }
+        });
+      });
+      var apTxt=FR_NUTRIENTES.filter(function(nu){return apPano[nu]>0;}).map(function(nu){return nu+': '+apPano[nu].toFixed(2)+' kg';}).join(' · ');
+      return '<tr style="border-bottom:1px solid #eee">'+
+        '<td style="padding:7px 10px;vertical-align:top"><strong>'+escapeHtml(u.nombre)+'</strong>'+(u.variedad?'<div style="font-size:11px;color:#888">'+escapeHtml(u.variedad)+'</div>':'')+'</td>'+
+        '<td style="padding:7px 10px;text-align:right;vertical-align:top;white-space:nowrap">'+u.ha.toFixed(2)+' ha</td>'+
+        '<td style="padding:7px 10px;vertical-align:top">'+prodCeldas+'</td>'+
+        '<td style="padding:7px 10px;vertical-align:top;font-size:11px;color:#0854a0">'+(apTxt||'—')+'</td>'+
+      '</tr>';
+    }).join('');
+    distHtml='<div style="margin-top:14px"><div style="font-weight:700;color:#23303d;margin-bottom:6px;font-size:13px">Distribución por paño (dosis interpretada por hectárea)</div>'+
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#eef3f8">'+
+        '<th style="padding:7px 10px;text-align:left">Paño</th><th style="padding:7px 10px;text-align:right">Sup.</th><th style="padding:7px 10px;text-align:left">Producto a aplicar</th><th style="padding:7px 10px;text-align:left">Aportes</th>'+
+      '</tr></thead><tbody>'+filas+'</tbody></table></div></div>';
+  }
+
   var aporteHtml='';
   if(hayAportes){
     var celdas=FR_NUTRIENTES.filter(function(nu){return aporteTotal[nu]>0;}).map(function(nu){
       return '<div style="text-align:center;padding:6px 10px;background:#fff;border-radius:6px;border:1px solid #d1e8ff"><div style="font-size:11px;color:#0854a0;font-weight:700">'+nu+'</div><div style="font-size:15px;font-weight:700;color:#23303d">'+aporteTotal[nu].toFixed(2)+'</div><div style="font-size:9px;color:#888">kg</div></div>';
     }).join('');
     aporteHtml='<div style="margin-top:14px;padding:12px;background:#f5f9fd;border-radius:8px">'+
-      '<div style="font-weight:700;color:#0854a0;margin-bottom:8px;font-size:13px">Aporte nutricional estimado (total orden · '+haTot.toFixed(2)+' ha)</div>'+
+      '<div style="font-weight:700;color:#0854a0;margin-bottom:8px;font-size:13px">Aporte nutricional estimado (total orden · '+haTotDist.toFixed(2)+' ha)</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+celdas+'</div>'+
-      '<div style="font-size:10px;color:#888;margin-top:8px">Estimación según dosis × superficie × % de cada producto. Conversión aproximada de unidades a kg.</div>'+
+      '<div style="font-size:10px;color:#888;margin-top:8px">Estimación: dosis (kg/ha) × superficie del paño × % de cada producto. Conversión aproximada de unidades a kg.</div>'+
     '</div>';
   }
 
@@ -14640,11 +14782,14 @@ function frVerOrden(id){
       '</div>'+
       '<div style="margin-bottom:12px"><span style="color:#888;font-size:12px">Sectores ('+haTot.toFixed(2)+' ha):</span><div style="margin-top:4px;font-size:13px">'+secNombres.map(function(n){return '<span style="background:#eef3f8;border-radius:10px;padding:2px 8px;margin:2px;display:inline-block;font-size:12px">'+escapeHtml(n)+'</span>';}).join('')+'</div></div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#f0f0f0"><th style="padding:7px 10px;text-align:left">Producto</th><th style="padding:7px 10px;text-align:right">Dosis</th><th style="padding:7px 10px;text-align:left">Obs.</th></tr></thead><tbody>'+lineasHtml+'</tbody></table>'+
+      '<div style="font-size:11px;color:#888;margin-top:4px">La dosis se interpreta <strong>por hectárea</strong>.</div>'+
+      distHtml+
       aporteHtml+
       (o.confirmada?'<div style="margin-top:14px;padding:12px;background:#d1f0d8;border-radius:8px;font-size:13px;color:#0a6e2e"><strong>✓ Orden confirmada</strong>'+(o.confirmadaFecha?(' el '+o.confirmadaFecha):'')+'. Recuerde realizar la rebaja de bodega manualmente.</div>':'')+
     '</div>'+
     '<div style="padding:14px 22px;background:#fafafa;border-top:1px solid #e5e5e5;display:flex;justify-content:flex-end;gap:10px;border-radius:0 0 10px 10px;flex-wrap:wrap">'+
       '<button class="cc-btn cc-btn-r cc-btn-sm" onclick="frEliminarOrden(\''+o.id+'\')" style="margin-right:auto">🗑️ Eliminar</button>'+
+      '<button class="cc-btn cc-btn-s cc-btn-sm" onclick="frImprimirOrden(\''+o.id+'\')">🖨️ Imprimir</button>'+
       '<button class="cc-btn cc-btn-s cc-btn-sm" onclick="document.getElementById(\'fr-ver-modal\').remove()">Cerrar</button>'+
       (!o.confirmada?'<button class="cc-btn cc-btn-s cc-btn-sm" onclick="frEditarOrden(\''+o.id+'\')">✏️ Editar</button>':'')+
       (!o.confirmada?'<button class="cc-btn cc-btn-g cc-btn-sm" onclick="frConfirmarOrden(\''+o.id+'\')">✓ Confirmar</button>':'<button class="cc-btn cc-btn-s cc-btn-sm" onclick="frDesconfirmarOrden(\''+o.id+'\')">↩️ Deshacer confirmación</button>')+
