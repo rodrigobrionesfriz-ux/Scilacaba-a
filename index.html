@@ -1398,6 +1398,19 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
           </div>
         </div>
         <div class="cc-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div class="cc-card-ttl" style="margin:0">🚜 Equipo de Aplicación</div>
+            <button type="button" class="cc-btn cc-btn-s cc-btn-sm" onclick="abrirGestionEquipos()">⚙️ Gestionar nebulizadoras</button>
+          </div>
+          <div class="cc-g3" style="margin-top:10px">
+            <div class="cc-field"><label class="cc-lbl">Nebulizadora / Equipo</label>
+              <select id="cc-o-equipo" onchange="ccEquipoSel()"><option value="">— Seleccione —</option></select>
+            </div>
+            <div class="cc-field"><label class="cc-lbl">Capacidad estanque (L)</label><input type="number" id="cc-o-equipo-cap" min="0" step="10" placeholder="0" oninput="calcDist()"></div>
+            <div class="cc-field"><label class="cc-lbl">N° de estanques necesarios</label><input type="text" id="cc-o-estanques" readonly style="background:#fafafa;font-weight:700;color:#354a5f"></div>
+          </div>
+        </div>
+        <div class="cc-card">
           <div class="cc-card-ttl">🗺️ Paños a Tratar</div>
           <div id="cc-o-chips"></div>
           <div id="cc-o-chips-info" style="font-size:13px;color:#0a6ed1;margin-top:7px;font-weight:700"></div>
@@ -1454,6 +1467,8 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             </table>
             <!-- Resumen de mezcla: filas por cada producto adicional -->
             <div id="cc-mix-summary" style="margin-top:10px"></div>
+            <!-- Detalle por estanque (nebulizadora) -->
+            <div id="cc-est-detalle"></div>
           </div>
           <div class="cc-bodega-box" id="cc-bodega-box" style="display:none">
             <span class="cc-bi">🏪</span>
@@ -12465,7 +12480,7 @@ function sciFbWaitForSync(timeoutMs){
 /* ═══════════════ CUADERNO DE CAMPO — JS (transformado, sin window.onload) ═══════════════ */
 
 // ══ STATE ══
-var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[],
+var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[], equipos:[],
   fertirriego: { sectores:[], ordenes:[], oCounter:1, cfg:{ equipos:[], formas:['POR GOTEO','MANUAL'], unidades:['GRS.','C.C','L','kg','mL'], horarios:['08:00 A 17:00','08:00 A 18:00','18:00 A 21:00'] } },
   // % de producción asignado a cada estado de planta (usado en estimaciones de cosecha)
   prodPorEstado: { sano:100, debil:60, replante:30, muerto:0, falta:0 }
@@ -12867,10 +12882,12 @@ function fbApplyRemote(data){
     FB.applyingRemote = true;
     if(data.payload){
       var remote = (typeof data.payload === 'string') ? JSON.parse(data.payload) : data.payload;
-      ['panos','registros','productos','ordenes','confirmaciones'].forEach(function(k){
+      ['panos','registros','productos','ordenes','confirmaciones','equipos'].forEach(function(k){
         if(remote[k] !== undefined) S[k] = remote[k];
       });
       if(remote.fertirriego !== undefined) S.fertirriego = remote.fertirriego;
+      if(!Array.isArray(S.equipos)) S.equipos = [];
+      S.equipos = S.equipos.map(function(e){ return (typeof e==='string')?{nombre:e,capacidad:0}:{nombre:(e&&e.nombre)||'',capacidad:(e&&parseFloat(e.capacidad))||0}; }).filter(function(e){ return e.nombre; });
       if(remote.prodPorEstado !== undefined) S.prodPorEstado = remote.prodPorEstado;
       if(remote.oCounter !== undefined) S.oCounter = remote.oCounter;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
@@ -12925,6 +12942,7 @@ function fbPush(immediate){
     var payload = JSON.stringify({
       panos: S.panos, registros: S.registros, productos: S.productos,
       ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter,
+      equipos: S.equipos,
       fertirriego: S.fertirriego, prodPorEstado: S.prodPorEstado
     });
     var userName = '';
@@ -13019,8 +13037,11 @@ function _migrarPanos(){
 function load(){
   try{
     var d = localStorage.getItem('cc_v2');
-    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter;
+    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego','equipos'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
+      if(!Array.isArray(S.equipos)) S.equipos = [];
+      // Normalizar equipos (nebulizadoras) a objetos {nombre,capacidad}
+      S.equipos = S.equipos.map(function(e){ return (typeof e==='string')?{nombre:e,capacidad:0}:{nombre:(e&&e.nombre)||'',capacidad:(e&&parseFloat(e.capacidad))||0}; }).filter(function(e){ return e.nombre; });
       _ensureFertirriego();
       // ─── Migraciones automáticas ───
       var migrated = false;
@@ -13523,6 +13544,7 @@ function showTab(name,btn){
   if(name==='productos') renderProdList();
   if(name==='ordenes'){ 
     renderOrdenChips(); 
+    ccRenderEquipoSelect();
     document.getElementById('cc-o-num').value='OA-'+String(S.oCounter).padStart(5,'0');
     // Inicializar dropdown de objetivos si no existe
     var objBox = document.getElementById('cc-o-obj-box');
@@ -15468,6 +15490,69 @@ function exportCSV(){
   var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv); a.download='historial_'+today()+'.csv'; a.click();
 }
 
+// ══ EQUIPOS / NEBULIZADORAS (Cuaderno de Campo) ══
+// S.equipos = [{nombre, capacidad}]  · capacidad en litros del estanque
+function ccRenderEquipoSelect(){
+  var sel=document.getElementById('cc-o-equipo'); if(!sel) return;
+  var actual=sel.value;
+  sel.innerHTML='<option value="">— Seleccione —</option>'+(S.equipos||[]).map(function(e){
+    return '<option value="'+escapeHtml(e.nombre)+'" data-cap="'+(e.capacidad||0)+'">'+escapeHtml(e.nombre)+(e.capacidad?(' ('+fmtN(e.capacidad,0)+' L)'):'')+'</option>';
+  }).join('');
+  if(actual) sel.value=actual;
+}
+function ccEquipoSel(){
+  var sel=document.getElementById('cc-o-equipo');
+  var opt=sel.options[sel.selectedIndex];
+  var cap=opt?parseFloat(opt.getAttribute('data-cap'))||0:0;
+  var capInput=document.getElementById('cc-o-equipo-cap');
+  if(capInput) capInput.value=cap||'';
+  calcDist();
+}
+function abrirGestionEquipos(){
+  var html='<div style="max-width:520px">'+
+    '<div style="font-size:12px;color:#666;margin-bottom:12px">Configure las nebulizadoras y la capacidad del estanque de cada una. Se usan en las órdenes de aplicación para calcular el número de estanques y la cantidad de producto por estanque.</div>'+
+    '<div id="ge-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 130px auto;gap:6px;align-items:end;border-top:1px solid #eee;padding-top:12px">'+
+      '<div class="cc-field"><label class="cc-lbl">Nueva nebulizadora</label><input type="text" id="ge-new-nombre" placeholder="Ej: Nebulizadora 1"></div>'+
+      '<div class="cc-field"><label class="cc-lbl">Capacidad (L)</label><input type="number" id="ge-new-cap" min="0" step="10" placeholder="Ej: 2000"></div>'+
+      '<button class="cc-btn cc-btn-g cc-btn-sm" onclick="geAddEquipo()">+ Agregar</button>'+
+    '</div></div>';
+  showModal('🚜 Gestionar nebulizadoras', html);
+  geRenderList();
+}
+function geRenderList(){
+  var el=document.getElementById('ge-list'); if(!el) return;
+  if(!(S.equipos||[]).length){ el.innerHTML='<div style="color:#999;font-size:12px;text-align:center;padding:8px">Sin nebulizadoras configuradas</div>'; return; }
+  el.innerHTML=S.equipos.map(function(e,i){
+    return '<div style="display:grid;grid-template-columns:1fr 130px auto;gap:6px;align-items:center;background:#f7f9fc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px">'+
+      '<input type="text" value="'+escapeHtml(e.nombre)+'" onchange="geUpd('+i+',\'nombre\',this.value)" style="padding:5px 8px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px">'+
+      '<input type="number" min="0" step="10" value="'+(e.capacidad||0)+'" onchange="geUpd('+i+',\'capacidad\',this.value)" style="padding:5px 8px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px;text-align:right" placeholder="L">'+
+      '<button onclick="geDel('+i+')" style="background:none;border:none;color:#b00;cursor:pointer;font-size:15px;padding:0 6px">✕</button>'+
+    '</div>';
+  }).join('');
+}
+function geAddEquipo(){
+  var n=(document.getElementById('ge-new-nombre').value||'').trim();
+  var c=parseFloat(document.getElementById('ge-new-cap').value)||0;
+  if(!n){ toast('Falta nombre','Ingrese el nombre de la nebulizadora','error'); return; }
+  if(!Array.isArray(S.equipos)) S.equipos=[];
+  if(S.equipos.some(function(e){ return e.nombre.toLowerCase()===n.toLowerCase(); })){ toast('Duplicado','Ya existe una nebulizadora con ese nombre','error'); return; }
+  S.equipos.push({nombre:n, capacidad:c});
+  save();
+  document.getElementById('ge-new-nombre').value='';
+  document.getElementById('ge-new-cap').value='';
+  geRenderList(); ccRenderEquipoSelect();
+}
+function geUpd(i,campo,val){
+  var e=S.equipos[i]; if(!e) return;
+  e[campo]=(campo==='capacidad')?(parseFloat(val)||0):val.trim();
+  save(); ccRenderEquipoSelect();
+}
+function geDel(i){
+  if(!confirm('¿Eliminar esta nebulizadora?')) return;
+  S.equipos.splice(i,1); save(); geRenderList(); ccRenderEquipoSelect();
+}
+
 // ══ ÓRDENES ══
 var selPanosOrden=[];
 var ordenTipoApp='';
@@ -15539,14 +15624,13 @@ function renderOrdenChips(){
         var grupo=(btn.dataset.grupo||p.id).split(',');
         var yaSel=selPanosOrden.indexOf(p.id)>=0;
         if(yaSel){
-          // Deseleccionar: quitar todo el grupo
-          grupo.forEach(function(gid){ var i=selPanosOrden.indexOf(gid); if(i>=0) selPanosOrden.splice(i,1); });
-          btn.classList.remove('cc-sel'); btn.style.cssText='';
-        } else {
-          // Seleccionar: añadir todo el grupo (productivo + polinizantes)
-          grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
-          btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
+          // No se permite deseleccionar al hacer clic (evita quitar paños por error).
+          // Para corregir, usar el botón "Limpiar" y volver a seleccionar.
+          return;
         }
+        // Seleccionar: añadir todo el grupo (productivo + polinizantes)
+        grupo.forEach(function(gid){ if(selPanosOrden.indexOf(gid)<0) selPanosOrden.push(gid); });
+        btn.classList.add('cc-sel'); btn.style.background=p.color+'22'; btn.style.borderColor=p.color;
         var tHa=selPanosOrden.reduce(function(s,id){ var px=getPano(id); return s+getHas(px); },0);
         // Contar grupos seleccionados (productivos visibles), no paños individuales.
         var gruposSel=chips.filter(function(c){ return selPanosOrden.some(function(sid){ return String(sid)===String(c.id); }); }).length;
@@ -15613,6 +15697,29 @@ function calcDist(){
   document.getElementById('cc-dt-has').textContent=fmtN(tHas,2)+' há';
   document.getElementById('cc-dt-agua').textContent=tAgua>0?fmtN(tAgua,0)+' L':'—';
   document.getElementById('cc-dt-prod').textContent=fmtQtyStr(tProd,unitS,3);
+  // ─── Estanques (nebulizadora): N° estanques y producto por estanque ───
+  var capEst=parseFloat((document.getElementById('cc-o-equipo-cap')||{}).value)||0;
+  var estInput=document.getElementById('cc-o-estanques');
+  var nEst=0;
+  if(estInput){
+    if(capEst>0 && tAgua>0){
+      nEst=Math.ceil(tAgua/capEst);
+      estInput.value=nEst+' estanque(s) · '+fmtN(tProd/nEst,3)+' '+unitS+'/estanque';
+    } else {
+      estInput.value=capEst>0?'—':'Indique capacidad';
+    }
+  }
+  var estBox=document.getElementById('cc-est-detalle');
+  if(estBox){
+    if(nEst>0){
+      var rowsEst=allProds.map(function(ap,i){
+        var totP = i===0 ? tProd : draftDist.reduce(function(s,r){ return s+(r.extras['p'+(i-1)]||0); },0);
+        return '<div style="font-size:12px;line-height:1.6"><strong>'+escapeHtml(ap.nombre)+':</strong> '+fmtQtyStr(totP/nEst,ap.unitS,3)+' por estanque</div>';
+      }).join('');
+      estBox.innerHTML='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-left:3px solid #16a34a;border-radius:6px;padding:10px 12px;margin-top:10px">'+
+        '<div style="font-weight:700;color:#15803d;font-size:12px;margin-bottom:6px">🚜 Por estanque ('+fmtN(capEst,0)+' L · '+nEst+' estanques)</div>'+rowsEst+'</div>';
+    } else { estBox.innerHTML=''; }
+  }
   // ─── Resumen de mezcla (productos adicionales) ───
   var mixEl=document.getElementById('cc-mix-summary');
   if(mixEl){
@@ -15879,6 +15986,9 @@ function emitirOrden(){
     moj:parseFloat(document.getElementById('cc-o-moj').value)||0,
     vha:parseFloat(document.getElementById('cc-o-vha').value)||1,
     mojT:mojT_final,
+    equipo:(document.getElementById('cc-o-equipo').value||'').trim(),
+    equipoCap:parseFloat((document.getElementById('cc-o-equipo-cap')||{}).value)||0,
+    nEstanques:(function(){ var c=parseFloat((document.getElementById('cc-o-equipo-cap')||{}).value)||0; return (c>0&&tAgua>0)?Math.ceil(tAgua/c):0; })(),
     notas:document.getElementById('cc-o-notas').value,
     distribucion: distribucion,
     tHas:tHas, tAgua:tAgua, tProd:tProd, margin:tProd
@@ -15923,6 +16033,11 @@ function limpiarOrden(){
   var ml = document.getElementById('cc-o-mix-list'); if(ml) ml.innerHTML='';
   var ms = document.getElementById('cc-mix-summary'); if(ms) ms.innerHTML='';
   selPanosOrden=[]; renderOrdenChips();
+  ccRenderEquipoSelect();
+  var eqSel=document.getElementById('cc-o-equipo'); if(eqSel) eqSel.value='';
+  var eqCap=document.getElementById('cc-o-equipo-cap'); if(eqCap) eqCap.value='';
+  var eqEst=document.getElementById('cc-o-estanques'); if(eqEst) eqEst.value='';
+  var eqDet=document.getElementById('cc-est-detalle'); if(eqDet) eqDet.innerHTML='';
   document.getElementById('cc-o-chips-info').textContent='';
   document.getElementById('cc-o-num').value='OA-'+String(S.oCounter).padStart(5,'0');
 }
@@ -15930,7 +16045,7 @@ function renderOrdenesList(){
   var el=document.getElementById('cc-ordenes-list');
   if(!S.ordenes.length){ el.innerHTML='<div class="cc-no-data"><span>📋</span>Sin órdenes emitidas.</div>'; return; }
   el.innerHTML=S.ordenes.map(function(o){
-    var pNoms=(o.panoIds||[]).map(function(id){ var p=getPano(id); return p?p.nombre:'?'; }).join(', ');
+    var pNoms=(o.panoIds||[]).map(function(id){ var p=getPano(id); return p; }).filter(function(p){ return p && (p.tipo||'Productivo')!=='Polinizante'; }).map(function(p){ return p.nombre; }).join(', ');
     var editadaBadge = o.editada ? '<span class="cc-badge" style="background:#fff8e0;color:#7a4200;font-size:10px" title="Editada el '+(o.editadaFecha||'')+'">✎ Editada</span>' : '';
     // Resolver array de productos: compat hacia atrás
     var prods = (o.productos && o.productos.length) ? o.productos : [{nombre:o.producto, dosis:o.dosis, unidad:o.unidad, unitS:unitBase(o.unidad||''), tProd:o.tProd, margin:o.margin}];
@@ -17163,7 +17278,7 @@ function openPM(id){
     var prods = (o.productos && o.productos.length) ? o.productos : [{nombre:o.producto, dosis:o.dosis, unidad:o.unidad, unitS:unitBase(o.unidad||''), tProd:o.tProd, margin:o.margin}];
     var unitS = prods[0].unitS || unitBase(prods[0].unidad||'');
     var isRiego=o.tipoApp==='Fertirriego';
-    var pNoms=(o.panoIds||[]).map(function(pid){ var p=getPano(pid); return p?p.nombre:'?'; }).join(', ');
+    var pNoms=(o.panoIds||[]).map(function(pid){ return getPano(pid); }).filter(function(p){ return p && (p.tipo||'Productivo')!=='Polinizante'; }).map(function(p){ return p.nombre; }).join(', ');
     // Recalcular la distribución por hectáreas ACTUALES (corrige órdenes viejas).
     var _rec = _recalcDistribucionOrden(o);
     var _distrib = _rec.filas.length ? _rec.filas : (o.distribucion||[]);
