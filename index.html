@@ -15448,6 +15448,7 @@ async function _ejecutarMigracion(aCrear, aCompletar){
 }
 
 function renderResumen(){
+  if(typeof renderCompraUrgente==='function') renderCompraUrgente();
   // Mostrar la tarjeta de baja de bodega solo si el usuario tiene permiso.
   try{
     var cardBaja=document.getElementById('cc-card-baja-bodega');
@@ -16341,10 +16342,17 @@ function emitirOrden(){
     distribucion: distribucion,
     tHas:tHas, tAgua:tAgua, tProd:tProd, margin:tProd
   };
-  // Faltantes de stock detectados en calcDist: guardarlos en la orden y en la
-  // lista global de "Compra Urgente" del dashboard.
-  var faltantesOrden = (draftFaltantes||[]).map(function(f){
-    return { nombre:f.nombre, cod:f.cod, requerido:f.requerido, disponible:f.disponible, falta:f.falta, unit:f.unit, encontrado:f.encontrado };
+  // Faltantes de stock: se recalculan aquí desde los productos de la orden
+  // (no se depende de draftFaltantes para evitar desincronización con la UI).
+  var faltantesOrden = [];
+  productos.forEach(function(ap){
+    var conv = fmtQtyAuto(ap.tProd||0, ap.unitS);
+    var req = conv.qty, unit = conv.unit;
+    var st = _stockProductoOrden(ap.nombre);
+    var falta = Math.max(0, req - st.disponible);
+    if(!st.encontrado || falta > 0.0001){
+      faltantesOrden.push({ nombre:ap.nombre, cod:st.cod, requerido:req, disponible:st.disponible, falta:(st.encontrado?falta:req), unit:unit, encontrado:st.encontrado });
+    }
   });
   orden.faltantes = faltantesOrden;
   if(faltantesOrden.length){
@@ -17763,6 +17771,27 @@ function openPM(id){
         '<div class="cc-pm-fld"><div class="cc-l">\ud83d\ude9c Equipo de aplicaci\u00f3n</div><div class="cc-v">'+(o.equipo?escapeHtml(o.equipo):'-')+(o.equipoCap>0?' ('+fmtN(o.equipoCap,0)+' L)':'')+'</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">N\u00b0 Estanques / Pipas</div><div class="cc-v">'+(function(){ var n=o.nEstanques||0; if((!n||n<=0)&&o.equipoCap>0&&o.tAgua>0){ n=Math.ceil(o.tAgua/o.equipoCap); } return (n>0)?n+' estanque(s)':'-'; })()+'</div></div>'+
       '</div>'+
+      (function(){
+        // Cantidad de producto por pipa/estanque: total de cada producto ÷ N° estanques.
+        var cap = o.equipoCap||0;
+        var aguaT = (_rec && _rec.tAgua) ? _rec.tAgua : (o.tAgua||0);
+        var nEst = o.nEstanques||0;
+        if((!nEst||nEst<=0) && cap>0 && aguaT>0){ nEst=Math.ceil(aguaT/cap); }
+        if(!nEst || nEst<=0) return '';
+        var aguaPipa = nEst>0 ? aguaT/nEst : 0;
+        var filasP = prods.map(function(ap){
+          var us = ap.unitS||unitBase(ap.unidad||'');
+          var conv = fmtQtyAuto((ap.tProd||0)/nEst, us);
+          return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #ddd;font-size:11px">'+
+            '<div><strong>'+escapeHtml(ap.nombre||'-')+'</strong></div>'+
+            '<div style="font-weight:700;color:#354a5f">'+fmtN(conv.qty,3)+' '+conv.unit+' / pipa</div>'+
+          '</div>';
+        }).join('');
+        return '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-left:3px solid #16a34a;border-radius:5px;padding:9px 12px;margin-bottom:12px">'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#15803d;margin-bottom:5px">\ud83d\ude9c Dosificaci\u00f3n por pipa ('+nEst+' pipa(s) de '+fmtN(cap,0)+' L · '+fmtN(aguaPipa,0)+' L agua/pipa)</div>'+
+          filasP+
+        '</div>';
+      })()+
       notasHtml+
       '<table><thead><tr>'+
         '<th>Pa\u00f1o</th><th>Variedad</th><th>A\u00f1o</th>'+
