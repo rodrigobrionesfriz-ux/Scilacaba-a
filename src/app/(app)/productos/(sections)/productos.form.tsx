@@ -70,6 +70,10 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
     setForm((prev) => ({ ...prev, [key]: value }))
 
   const subgrupos = grupos.find((g) => g.nombre === form.grupo)?.subgrupos ?? []
+  const unidadItems = UNIDADES_MEDIDA.map((u) => ({ value: u, label: u }))
+  const tipoItems = tipos.map((t) => ({ value: t.nombre, label: t.nombre }))
+  const grupoItems = grupos.map((g) => ({ value: g.nombre, label: g.nombre }))
+  const subgrupoItems = subgrupos.map((s) => ({ value: s, label: s }))
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -142,6 +146,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
             <div className="flex flex-col gap-2">
               <Label>Unidad de medida *</Label>
               <Select
+                items={unidadItems}
                 value={form.unidadMedida}
                 onValueChange={(v) => set("unidadMedida", v ?? "")}
               >
@@ -162,6 +167,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
             <div className="flex flex-col gap-2">
               <Label>Tipo de producto *</Label>
               <Select
+                items={tipoItems}
                 value={form.tipoProducto}
                 onValueChange={(v) => set("tipoProducto", v ?? "")}
               >
@@ -180,6 +186,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
             <div className="flex flex-col gap-2">
               <Label>Grupo *</Label>
               <Select
+                items={grupoItems}
                 value={form.grupo}
                 onValueChange={(v) => {
                   set("grupo", v ?? "")
@@ -203,6 +210,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
             <div className="flex flex-col gap-2">
               <Label>Sub-grupo</Label>
               <Select
+                items={subgrupoItems}
                 value={form.subGrupo}
                 onValueChange={(v) => set("subGrupo", v ?? "")}
               >

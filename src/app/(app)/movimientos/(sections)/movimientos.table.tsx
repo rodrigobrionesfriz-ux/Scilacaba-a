@@ -29,6 +29,11 @@ export const MovimientosTable = ({
   const columns = buildMovimientosColumns({ puedeAnular })
   const [busqueda, setBusqueda] = useState("")
   const [direccion, setDireccion] = useState("todas")
+  const direccionItems = [
+    { value: "todas", label: "Todas" },
+    { value: "ENT", label: "Entradas" },
+    { value: "SAL", label: "Salidas" },
+  ]
 
   return (
     <DataTable
@@ -48,6 +53,7 @@ export const MovimientosTable = ({
               className="w-72"
             />
             <Select
+              items={direccionItems}
               value={direccion}
               onValueChange={(v) => {
                 const val = v ?? "todas"
@@ -61,9 +67,11 @@ export const MovimientosTable = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                <SelectItem value="ENT">Entradas</SelectItem>
-                <SelectItem value="SAL">Salidas</SelectItem>
+                {direccionItems.map((d) => (
+                  <SelectItem key={d.value} value={d.value}>
+                    {d.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

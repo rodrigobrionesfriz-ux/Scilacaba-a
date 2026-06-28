@@ -23,6 +23,10 @@ export const StockTable = ({ stock, bodegas }: StockTableProps) => {
   const columns = buildStockColumns()
   const [busqueda, setBusqueda] = useState("")
   const [bodega, setBodega] = useState("todas")
+  const bodegaItems = [
+    { value: "todas", label: "Todas las bodegas" },
+    ...bodegas.map((b) => ({ value: b.id, label: b.nombre })),
+  ]
 
   return (
     <DataTable
@@ -41,6 +45,7 @@ export const StockTable = ({ stock, bodegas }: StockTableProps) => {
             className="w-72"
           />
           <Select
+            items={bodegaItems}
             value={bodega}
             onValueChange={(v) => {
               const val = v ?? "todas"
@@ -52,10 +57,9 @@ export const StockTable = ({ stock, bodegas }: StockTableProps) => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todas">Todas las bodegas</SelectItem>
-              {bodegas.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.nombre}
+              {bodegaItems.map((b) => (
+                <SelectItem key={b.value} value={b.value}>
+                  {b.label}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -43,6 +43,7 @@ export const DataTableToolbar = <TData,>({
           className="w-72"
         />
         <Select
+          items={FILTRO_ESTADO}
           value={estado}
           onValueChange={(v) => {
             const val = v ?? "todos"
