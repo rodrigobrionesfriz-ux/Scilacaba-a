@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { NAV } from "@/constants/navegacion.constants"
@@ -14,12 +15,17 @@ export const AppSidebar = ({ role, permissions }: Props) => {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r bg-card">
       <div className="flex h-14 items-center gap-2 border-b px-4">
-        <span className="text-lg" aria-hidden>
-          🍒
-        </span>
+        <Image
+          src="/logo-la-cabana.png"
+          alt="La Cabaña Forestal"
+          width={36}
+          height={36}
+          className="h-9 w-9 shrink-0"
+          priority
+        />
         <div className="leading-tight">
-          <p className="text-sm font-semibold">SCI v2</p>
-          <p className="text-xs text-muted-foreground">Scilacaba</p>
+          <p className="text-sm font-semibold">SCI</p>
+          <p className="text-xs text-muted-foreground">La Cabaña Forestal</p>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto p-2">
@@ -49,7 +55,9 @@ export const AppSidebar = ({ role, permissions }: Props) => {
                       </li>
                     )
                   }
-                  const activo = pathname === item.href
+                  const activo =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`)
                   return (
                     <li key={item.id}>
                       <Link
