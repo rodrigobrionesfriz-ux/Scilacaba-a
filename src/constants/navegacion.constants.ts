@@ -153,7 +153,7 @@ export const NAV: readonly NavSection[] = [
         icon: Notebook,
         href: "/cuaderno",
         perm: "cuaderno.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },

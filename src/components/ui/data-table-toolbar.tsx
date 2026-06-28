@@ -18,6 +18,7 @@ type DataTableToolbarProps<TData> = {
   table: Table<TData>
   placeholder?: string
   estadoColumnId?: string
+  mostrarEstado?: boolean
   nuevo?: ReactNode
 }
 
@@ -25,6 +26,7 @@ export const DataTableToolbar = <TData,>({
   table,
   placeholder = "Buscar…",
   estadoColumnId = "activo",
+  mostrarEstado = true,
   nuevo,
 }: DataTableToolbarProps<TData>) => {
   const [busqueda, setBusqueda] = useState("")
@@ -42,28 +44,30 @@ export const DataTableToolbar = <TData,>({
           placeholder={placeholder}
           className="w-72"
         />
-        <Select
-          items={FILTRO_ESTADO}
-          value={estado}
-          onValueChange={(v) => {
-            const val = v ?? "todos"
-            setEstado(val)
-            table
-              .getColumn(estadoColumnId)
-              ?.setFilterValue(val === "todos" ? undefined : val)
-          }}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FILTRO_ESTADO.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {mostrarEstado && (
+          <Select
+            items={FILTRO_ESTADO}
+            value={estado}
+            onValueChange={(v) => {
+              const val = v ?? "todos"
+              setEstado(val)
+              table
+                .getColumn(estadoColumnId)
+                ?.setFilterValue(val === "todos" ? undefined : val)
+            }}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FILTRO_ESTADO.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       {nuevo}
     </div>

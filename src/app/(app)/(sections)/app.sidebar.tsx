@@ -18,8 +18,8 @@ export const AppSidebar = ({ role, permissions }: Props) => {
           🍒
         </span>
         <div className="leading-tight">
-          <p className="text-sm font-semibold">SCI v2</p>
-          <p className="text-xs text-muted-foreground">Scilacaba</p>
+          <p className="text-sm font-semibold">SCI</p>
+          <p className="text-xs text-muted-foreground">SCI La Cabaña</p>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto p-2">
@@ -49,7 +49,9 @@ export const AppSidebar = ({ role, permissions }: Props) => {
                       </li>
                     )
                   }
-                  const activo = pathname === item.href
+                  const activo =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`)
                   return (
                     <li key={item.id}>
                       <Link
