@@ -4,11 +4,15 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import type { Bodega } from "@/schemas/bodegas.schema"
+import type { StockResumenBodega } from "@/types/stock.types"
+import { formatCLP } from "@/utils/money.utils"
 import { BodegaForm } from "./bodegas.form"
 
 export const buildBodegasColumns = ({
+  stockPorBodega,
   puedeEditar,
 }: {
+  stockPorBodega: Map<string, StockResumenBodega>
   puedeEditar: boolean
 }): ColumnDef<Bodega>[] => [
   {
@@ -31,6 +35,23 @@ export const buildBodegasColumns = ({
       ) : (
         <Badge variant="outline">Inventario</Badge>
       ),
+  },
+  {
+    id: "items",
+    accessorFn: (r) => stockPorBodega.get(r.id)?.items ?? 0,
+    header: ({ column }) => (
+      <SortableHeader column={column}>Ítems</SortableHeader>
+    ),
+    cell: ({ row }) => stockPorBodega.get(row.original.id)?.items ?? 0,
+  },
+  {
+    id: "valorStock",
+    accessorFn: (r) => stockPorBodega.get(r.id)?.valor ?? 0,
+    header: ({ column }) => (
+      <SortableHeader column={column}>Valor</SortableHeader>
+    ),
+    cell: ({ row }) =>
+      formatCLP(stockPorBodega.get(row.original.id)?.valor ?? 0),
   },
   {
     accessorKey: "activo",

@@ -103,7 +103,7 @@ export const NAV: readonly NavSection[] = [
         icon: ClipboardList,
         href: "/stock",
         perm: "stock.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },
@@ -116,7 +116,7 @@ export const NAV: readonly NavSection[] = [
         icon: ArrowLeftRight,
         href: "/movimientos",
         perm: "movimientos.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "entradas",
@@ -124,7 +124,7 @@ export const NAV: readonly NavSection[] = [
         icon: ArrowDownToLine,
         href: "/movimientos/entradas",
         perm: "movimientos.crear",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "salidas",
@@ -132,7 +132,7 @@ export const NAV: readonly NavSection[] = [
         icon: ArrowUpFromLine,
         href: "/movimientos/salidas",
         perm: "movimientos.crear",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "tomas",
