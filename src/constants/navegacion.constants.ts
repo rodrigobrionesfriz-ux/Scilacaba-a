@@ -140,7 +140,7 @@ export const NAV: readonly NavSection[] = [
         icon: ClipboardCheck,
         href: "/tomas",
         perm: "tomas.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },

@@ -30,10 +30,17 @@ export const transformTomas = (p: SciPayload): FilasTomas => {
     usuario: c.usuario ?? "",
     autorizadoPor: c.autorizadoPor ?? null,
     devolucionMotivo: c.devolucionMotivo ?? null,
+    rechazoMotivo: c.rechazoMotivo ?? null,
     movimientosGenerados: c.movimientosGenerados ?? null,
     creadoAt: parseTimestamp(c.creado) ?? undefined,
+    cerradoAt: parseTimestamp(c.cerrado),
+    cerradoPor: c.cerradoPor ?? null,
     autorizadoAt: parseTimestamp(c.autorizado),
     aplicadoAt: parseTimestamp(c.aplicado),
+    devolucionAt: parseTimestamp(c.devolucionFecha),
+    devolucionPor: c.devolucionPor ?? null,
+    rechazoAt: parseTimestamp(c.rechazoFecha),
+    rechazoPor: c.rechazoPor ?? null,
   }))
 
   const linesRows: FilasTomas["inventoryCountLines"] = []

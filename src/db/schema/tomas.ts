@@ -10,7 +10,9 @@ import {
 import { products, warehouses } from "./maestros"
 
 // Tomas de inventario (PK: id). Origen store: inventoryCounts
-// estado: EN_PROCESO | DEVUELTA | CERRADA | AUTORIZADA | APLICADA
+// estado (strings verbatim del monolito, así los guarda la data migrada):
+//   EN_PROCESO → PENDIENTE_AUTORIZACION → (AUTORIZADA, transitorio) → APLICADA
+//   ramas: DEVUELTA (vuelve a editable) y RECHAZADA (archivada sin efecto).
 // alcance: conStock | todos. movimientosGenerados → text[] de números TIE/TIS.
 export const inventoryCounts = pgTable("inventory_counts", {
   id: text("id").primaryKey(),
@@ -26,12 +28,19 @@ export const inventoryCounts = pgTable("inventory_counts", {
   usuario: text("usuario").notNull(),
   autorizadoPor: text("autorizado_por"),
   devolucionMotivo: text("devolucion_motivo"),
+  rechazoMotivo: text("rechazo_motivo"),
   movimientosGenerados: text("movimientos_generados").array(),
   creadoAt: timestamp("creado_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  cerradoAt: timestamp("cerrado_at", { withTimezone: true }),
+  cerradoPor: text("cerrado_por"),
   autorizadoAt: timestamp("autorizado_at", { withTimezone: true }),
   aplicadoAt: timestamp("aplicado_at", { withTimezone: true }),
+  devolucionAt: timestamp("devolucion_at", { withTimezone: true }),
+  devolucionPor: text("devolucion_por"),
+  rechazoAt: timestamp("rechazo_at", { withTimezone: true }),
+  rechazoPor: text("rechazo_por"),
 })
 
 // Líneas de toma (¡el origen las llama `lineas`, no `detalles`!). Origen: inventoryCounts.lineas[]

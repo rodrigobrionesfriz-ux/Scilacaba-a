@@ -79,6 +79,20 @@ export const MovimientoForm = ({
   const [lineas, setLineas] = useState<MovimientoLineaForm[]>([lineaVacia()])
 
   const tipos = direccion === "ENT" ? TIPOS_MOV_ENT : TIPOS_MOV_SAL
+  const tipoItems = tipos.map((t) => ({ value: t, label: t }))
+  const bodegaItems = bodegas.map((b) => ({ value: b.id, label: b.nombre }))
+  const proveedorItems = proveedores.map((p) => ({
+    value: p.codigo,
+    label: p.razonSocial,
+  }))
+  const clienteItems = clientes.map((c) => ({
+    value: c.codigo,
+    label: c.razonSocial,
+  }))
+  const centroCostoItems = centrosCosto.map((c) => ({
+    value: c.codigo,
+    label: c.descripcion,
+  }))
 
   const set = <K extends keyof typeof form>(
     key: K,
@@ -125,6 +139,7 @@ export const MovimientoForm = ({
         <div className="flex flex-col gap-2">
           <Label>Tipo de movimiento *</Label>
           <Select
+            items={tipoItems}
             value={form.tipoMovimiento}
             onValueChange={(v) => set("tipoMovimiento", v ?? "")}
           >
@@ -155,6 +170,7 @@ export const MovimientoForm = ({
         <div className="flex flex-col gap-2">
           <Label>{esTraspaso ? "Bodega origen *" : "Bodega *"}</Label>
           <Select
+            items={bodegaItems}
             value={form.bodegaId}
             onValueChange={(v) => set("bodegaId", v ?? "")}
           >
@@ -174,6 +190,7 @@ export const MovimientoForm = ({
           <div className="flex flex-col gap-2">
             <Label>Bodega destino *</Label>
             <Select
+              items={bodegaItems}
               value={form.bodegaDestinoId}
               onValueChange={(v) => set("bodegaDestinoId", v ?? "")}
             >
@@ -194,6 +211,7 @@ export const MovimientoForm = ({
           <div className="flex flex-col gap-2">
             <Label>Proveedor *</Label>
             <Select
+              items={proveedorItems}
               value={form.proveedorCodigo}
               onValueChange={(v) => set("proveedorCodigo", v ?? "")}
             >
@@ -214,6 +232,7 @@ export const MovimientoForm = ({
           <div className="flex flex-col gap-2">
             <Label>Cliente *</Label>
             <Select
+              items={clienteItems}
               value={form.clienteCodigo}
               onValueChange={(v) => set("clienteCodigo", v ?? "")}
             >
@@ -234,6 +253,7 @@ export const MovimientoForm = ({
           <div className="flex flex-col gap-2">
             <Label>Centro de costo *</Label>
             <Select
+              items={centroCostoItems}
               value={form.centroCosto}
               onValueChange={(v) => set("centroCosto", v ?? "")}
             >

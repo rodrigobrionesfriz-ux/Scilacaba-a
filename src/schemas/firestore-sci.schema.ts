@@ -177,11 +177,18 @@ const inventoryCountSchema = z.looseObject({
   lineas: z.array(countLineaSchema).nullish(),
   usuario: s,
   creado: s,
+  cerrado: s,
+  cerradoPor: s,
   autorizado: s,
   autorizadoPor: s,
   aplicado: s,
   movimientosGenerados: arrS,
   devolucionMotivo: s,
+  devolucionFecha: s,
+  devolucionPor: s,
+  rechazoMotivo: s,
+  rechazoFecha: s,
+  rechazoPor: s,
 })
 
 const mantencionSchema = z.looseObject({

@@ -1,19 +1,14 @@
 "use server"
 
-import { eq, inArray, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
-import { counters, movementLines, movements, products } from "@/db/schema"
-import { type Movimiento, movimientoSchema } from "@/schemas/movimientos.schema"
+import { movementLines, movements } from "@/db/schema"
+import { movimientoSchema } from "@/schemas/movimientos.schema"
 import { getUsuarioActual, requirePermiso } from "@/server/auth/auth.queries"
+import { insertarMovimiento } from "@/server/inventario/inventario.core"
 import { recalcularStockScoped } from "@/server/inventario/inventario.recalc"
 import type { ActionResult } from "@/types/action.types"
-import type { Direccion } from "@/types/movimientos.types"
-import {
-  direccionDeTipo,
-  formatNumeroMovimiento,
-  prefijoDeTipo,
-} from "@/utils/movimientos.utils"
 
 // Revalida las rutas que dependen de stock/movimientos (incluye las columnas de
 // stock diferidas en los maestros Productos y Bodegas).
@@ -23,29 +18,6 @@ const revalidar = () => {
   revalidatePath("/productos")
   revalidatePath("/bodegas")
 }
-
-// Mapea el input validado + campos derivados a columnas de `movements`
-// (strings vacíos → null, igual que el patrón de Productos).
-const aColumnasMovimiento = (
-  data: Movimiento,
-  extra: { numero: string; direccion: Direccion; usuario: string },
-) => ({
-  numero: extra.numero,
-  direccion: extra.direccion,
-  tipoMovimiento: data.tipoMovimiento,
-  fecha: new Date(data.fecha),
-  bodegaId: data.bodegaId,
-  bodegaDestinoId: data.bodegaDestinoId || null,
-  documento: data.documento || null,
-  tipoDoc: data.tipoDoc || null,
-  numeroDoc: data.numeroDoc || null,
-  proveedorCodigo: data.proveedorCodigo || null,
-  clienteCodigo: data.clienteCodigo || null,
-  centroCosto: data.centroCosto || null,
-  observaciones: data.observaciones || null,
-  usuario: extra.usuario,
-  autorizadoPor: data.autorizadoPor || null,
-})
 
 export const crearMovimiento = async (
   input: unknown,
@@ -62,62 +34,38 @@ export const crearMovimiento = async (
   const usuario = await getUsuarioActual()
   if (!usuario) return { ok: false, error: "Sesión no válida" }
 
-  const direccion = direccionDeTipo(data.tipoMovimiento)
-  const prefijo = prefijoDeTipo(data.tipoMovimiento)
-  if (!prefijo) return { ok: false, error: "Tipo de movimiento inválido" }
-
   const codigos = [...new Set(data.lineas.map((l) => l.codigoInterno))]
 
-  await db.transaction(async (tx) => {
-    // Correlativo atómico por prefijo, sin huecos (mismo patrón que Productos).
-    const [counter] = await tx
-      .insert(counters)
-      .values({ clave: prefijo.toUpperCase(), valor: 1 })
-      .onConflictDoUpdate({
-        target: counters.clave,
-        set: { valor: sql`${counters.valor} + 1` },
+  try {
+    await db.transaction(async (tx) => {
+      await insertarMovimiento(tx, {
+        tipoMovimiento: data.tipoMovimiento,
+        fecha: new Date(data.fecha),
+        bodegaId: data.bodegaId,
+        bodegaDestinoId: data.bodegaDestinoId,
+        documento: data.documento,
+        tipoDoc: data.tipoDoc,
+        numeroDoc: data.numeroDoc,
+        proveedorCodigo: data.proveedorCodigo,
+        clienteCodigo: data.clienteCodigo,
+        centroCosto: data.centroCosto,
+        observaciones: data.observaciones,
+        usuario: usuario.nombre,
+        autorizadoPor: data.autorizadoPor,
+        lineas: data.lineas,
       })
-      .returning({ valor: counters.valor })
-    const numero = formatNumeroMovimiento(prefijo, counter.valor)
 
-    // Atributos de los productos de las líneas (decide si se persiste lote/venc).
-    const prods = await tx
-      .select({
-        codigoInterno: products.codigoInterno,
-        manejaAtributos: products.manejaAtributos,
-      })
-      .from(products)
-      .where(inArray(products.codigoInterno, codigos))
-    const manejaPorCodigo = new Map(
-      prods.map((p) => [p.codigoInterno, p.manejaAtributos]),
-    )
-
-    await tx
-      .insert(movements)
-      .values(aColumnasMovimiento(data, { numero, direccion, usuario: usuario.nombre }))
-
-    await tx.insert(movementLines).values(
-      data.lineas.map((l) => {
-        const maneja = manejaPorCodigo.get(l.codigoInterno) ?? false
-        return {
-          movementNumero: numero,
-          codigoInterno: l.codigoInterno,
-          descripcion: l.descripcion || null,
-          unidadMedida: l.unidadMedida || null,
-          cantidad: String(l.cantidad),
-          costo: String(l.costo),
-          lote: maneja && l.lote ? l.lote : null,
-          fechaVenc: maneja && l.fechaVenc ? l.fechaVenc : null,
-          loteId: null,
-        }
-      }),
-    )
-
-    // Recálculo PPP acotado a los productos afectados. El motor hace floor a 0 en
-    // salidas y origen de traspaso: el stock negativo se permite (paridad con el
-    // monolito) — intencional, no se valida ni bloquea.
-    await recalcularStockScoped(tx, codigos)
-  })
+      // Recálculo PPP acotado a los productos afectados. El motor hace floor a 0 en
+      // salidas y origen de traspaso: el stock negativo se permite (paridad con el
+      // monolito) — intencional, no se valida ni bloquea.
+      await recalcularStockScoped(tx, codigos)
+    })
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo crear el movimiento",
+    }
+  }
 
   revalidar()
   return { ok: true }

@@ -31,6 +31,10 @@ export const MovimientoLineaFila = ({
 }: MovimientoLineaFilaProps) => {
   const producto = productos.find((p) => p.codigoInterno === linea.codigoInterno)
   const maneja = producto?.manejaAtributos ?? false
+  const productoItems = productos.map((p) => ({
+    value: p.codigoInterno,
+    label: `${p.codigoInterno} · ${p.descripcion}`,
+  }))
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-3">
@@ -38,6 +42,7 @@ export const MovimientoLineaFila = ({
         <div className="flex flex-1 flex-col gap-2">
           <Label>Producto *</Label>
           <Select
+            items={productoItems}
             value={linea.codigoInterno}
             onValueChange={(v) => {
               const p = productos.find((x) => x.codigoInterno === (v ?? ""))
@@ -52,9 +57,9 @@ export const MovimientoLineaFila = ({
               <SelectValue placeholder="Selecciona un producto…" />
             </SelectTrigger>
             <SelectContent>
-              {productos.map((p) => (
-                <SelectItem key={p.codigoInterno} value={p.codigoInterno}>
-                  {p.codigoInterno} · {p.descripcion}
+              {productoItems.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
                 </SelectItem>
               ))}
             </SelectContent>
