@@ -11530,7 +11530,10 @@ function ipRenderCuartelSVG(cuartel, hileras){
     svg += '<line x1="'+margenIzq+'" y1="'+y+'" x2="'+(margenIzq+plantas.length*anchoPlanta)+'" y2="'+y+'" stroke="#5b9bd5" stroke-width="2"/>';
     var ultIdx = plantas.length - 1;
     plantas.forEach(function(p, pi){
-      var cx = margenIzq + pi*anchoPlanta + anchoPlanta/2;
+      // Orientación del huerto: la planta 1 es el extremo SUR y debe mostrarse a
+      // la DERECHA. Invertimos solo el eje horizontal (no el vertical: H1 arriba).
+      var col = ultIdx - pi;
+      var cx = margenIzq + col*anchoPlanta + anchoPlanta/2;
       var e = IP_ESTADOS[p.estado]||IP_ESTADOS.sano;
       var esInicio = (pi===0 && gpsIni);
       var esFin = (pi===ultIdx && gpsFin && ultIdx>0);
@@ -11550,8 +11553,9 @@ function ipRenderCuartelSVG(cuartel, hileras){
   return '<div style="margin-bottom:22px">'+
     '<div style="color:#23303d;font-size:16px;font-weight:800;margin-bottom:8px">📍 '+escapeHtml(cuartel)+' <span style="font-size:12px;font-weight:400;opacity:.7">— '+hileras.length+' hileras</span></div>'+
     '<div style="background:#fff;border:1px solid #e3e8ee;border-radius:10px;padding:12px;overflow:auto">'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#7a8794;margin-bottom:4px;padding:0 4px"><span>← NORTE</span><span>SUR (planta 1) →</span></div>'+
       '<div class="ip-map-svg-wrap" style="width:100%;margin:0 auto">'+svg+'</div>'+
-      '<div style="font-size:11px;color:#7a8794;margin-top:8px">▶ Inicio de hilera · ■ Fin de hilera — toque esos puntos para abrir Google Maps</div>'+
+      '<div style="font-size:11px;color:#7a8794;margin-top:8px">▶ Inicio de hilera · ■ Fin de hilera — toque esos puntos para abrir Google Maps · La planta 1 (sur) se muestra a la derecha.</div>'+
     '</div>'+
   '</div>';
 }
