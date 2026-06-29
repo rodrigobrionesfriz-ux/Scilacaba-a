@@ -42,7 +42,11 @@ export const ETAPAS_FENOLOGICAS = [
   "Post-cosecha",
 ] as const
 
-// ─── Inventario de huerto (invplantas) — definido para 7a, UI en 7b ───
+// ─── Inventario de huerto (invplantas) ───
+
+export const TERRENO_INVPLANTAS_TITLE = "Inventario de Huerto"
+export const TERRENO_INVPLANTAS_SUBTITLE =
+  "Conteo de plantas por hilera (principal / polinizante), captura offline"
 
 // Estados de planta (index.html:10371, IP_ESTADOS) — 5 opciones con color.
 export const ESTADOS_PLANTA = [
@@ -53,8 +57,61 @@ export const ESTADOS_PLANTA = [
   { value: "falta", label: "Falla/vacío", color: "#999999" },
 ] as const
 
+// Tupla de valores de estado (fuente para z.enum y el tipo EstadoPlanta).
+export const ESTADOS_PLANTA_VALUES = [
+  "sano",
+  "debil",
+  "muerto",
+  "replante",
+  "falta",
+] as const
+
+// Tipo de planta dentro de la hilera: variedad principal o polinizante
+// (index.html: dos contadores independientes).
+export const TIPOS_PLANTA = ["principal", "poliniz"] as const
+
+// Portainjertos conocidos (index.html: datalist de ipRenderInicio). Verbatim.
+export const PORTAINJERTOS = [
+  "Colt",
+  "MaxMa 14",
+  "MaxMa 60",
+  "Gisela 5",
+  "Gisela 6",
+  "Gisela 12",
+  "CAB",
+  "Santa Lucía",
+  "Mahaleb",
+  "Pontaleb",
+] as const
+
+// Variedades polinizantes conocidas (index.html: datalist). Verbatim.
+export const POLINIZANTES_CONOCIDOS = [
+  "Regina",
+  "Skeena",
+  "Lapins",
+  "Kordia",
+  "Bing",
+  "Santina",
+  "Sweetheart",
+  "Rainier",
+] as const
+
+// Abreviaturas de variedad para el código base de árbol (index.html:
+// ipAbrevVariedad). Si no está en el mapa → primeras 3 letras normalizadas.
+export const ABREV_VARIEDADES: Record<string, string> = {
+  regina: "REG",
+  skeena: "SKE",
+  lapins: "LAP",
+  kordia: "KOR",
+  bing: "BIN",
+  santina: "SAN",
+  sweetheart: "SWE",
+  rainier: "RAI",
+}
+
 // ─── Sub-navegación de Terreno ───
-// Solo Conteos en 7a; Inventario de huerto (7b) y Estimación (7c) se añaden luego.
+// Conteos (7a) + Inventario de huerto (7b). Estimación (7c) se añade luego.
 export const TABS_TERRENO = [
   { href: "/terreno/conteos", label: "Conteos" },
+  { href: "/terreno/invplantas", label: "Inventario de Huerto" },
 ] as const

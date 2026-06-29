@@ -4,6 +4,7 @@ import { arrayContains, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
 import { applicationOrders, fieldRecords, panos } from "@/db/schema"
+import { actualizarPanoPlantasSchema } from "@/schemas/invplantas.schema"
 import { type Pano, panoSchema } from "@/schemas/panos.schema"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -71,5 +72,26 @@ export const eliminarPano = async (id: number): Promise<ActionResult> => {
     }
   await db.delete(panos).where(eq(panos.id, id))
   revalidatePath("/cuaderno/panos")
+  return { ok: true }
+}
+
+// Write-back desde el Inventario de huerto: actualiza el nº de plantas del paño
+// con el total contado en terreno (index.html: "Actualizar paño a N plantas").
+export const actualizarPanoPlantas = async (
+  input: unknown,
+): Promise<ActionResult> => {
+  await requirePermiso("cuaderno.panos")
+  const parsed = actualizarPanoPlantasSchema.safeParse(input)
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Datos inválidos",
+    }
+  await db
+    .update(panos)
+    .set({ plantas: parsed.data.plantas })
+    .where(eq(panos.id, parsed.data.panoId))
+  revalidatePath("/cuaderno/panos")
+  revalidatePath("/terreno/invplantas")
   return { ok: true }
 }

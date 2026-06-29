@@ -187,7 +187,7 @@ export const NAV: readonly NavSection[] = [
         icon: TreeDeciduous,
         href: "/terreno/invplantas",
         perm: "invplantas.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },
