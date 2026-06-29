@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
 import { fieldProducts } from "@/db/schema"
+import { aportesSchema } from "@/schemas/aportes.schema"
 import {
   type ProductoCuaderno,
   productoCuadernoSchema,
@@ -58,5 +59,21 @@ export const eliminarProductoCuaderno = async (
   await requirePermiso("cuaderno.editar")
   await db.delete(fieldProducts).where(eq(fieldProducts.nombre, nombre))
   revalidatePath("/cuaderno/productos")
+  return { ok: true }
+}
+
+// Composición nutricional (fertirriego): actualiza el blob `aportes` + unidad/dosis
+// por defecto del producto. Revalida la pestaña Productos y aportes de fertirriego.
+export const guardarAportes = async (input: unknown): Promise<ActionResult> => {
+  await requirePermiso("cuaderno.editar")
+  const parsed = aportesSchema.safeParse(input)
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
+  const { nombre, unidad, dosis, aportes } = parsed.data
+  await db
+    .update(fieldProducts)
+    .set({ unidad: unidad || null, dosis: dosis || null, aportes })
+    .where(eq(fieldProducts.nombre, nombre))
+  revalidatePath("/cuaderno/fertirriego/productos")
   return { ok: true }
 }

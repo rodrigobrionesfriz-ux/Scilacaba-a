@@ -1,13 +1,13 @@
 # Módulo: Cuaderno de Campo
 
-**Fase**: 6 · **Estado** (slices 6a + 6b): HECHO (código + tests; e2e/manual por el usuario pendiente)
+**Fase**: 6 · **Estado** (slices 6a + 6b + 6c): HECHO (código + tests; e2e/manual por el usuario pendiente)
 **Ubicación**: capas bajo `src/` (ADR-013). Ruta `src/app/(app)/cuaderno/`.
 
 El Cuaderno de Campo del monolito tiene 8 sub-módulos. Se construye por slices:
 
 - **6a**: Paños, Catálogo de productos, Aplicaciones manuales. **HECHO**.
 - **6b**: Órdenes de Aplicación (OA) + distribución por paño + Confirmaciones. **HECHO**.
-- **6c (pendiente)**: Fertirriego (sectores/órdenes OAF/config/aportes).
+- **6c**: Fertirriego (sectores/órdenes OAF/config/aportes). **HECHO**.
 - **Estimación de cosecha → Fase 7** (depende de `conteos`/`invplantas`, datos de terreno offline; su tabla vive en `terreno.ts`).
 - Reportes Excel → Fase 10.
 
@@ -158,4 +158,107 @@ por `ordenId`), `getOrden`, `getConfirmaciones`. Reusa `getPanos` y
 
 - Estático (6a): `pnpm typecheck && pnpm lint && pnpm test` (83) `&& pnpm build` verdes (2026-06-28).
 - Estático (6b): `pnpm typecheck && pnpm lint && pnpm test` (106) `&& pnpm build` verdes (2026-06-28).
+- Estático (6c): `pnpm typecheck && pnpm lint && pnpm test` (131) `&& pnpm build` verdes (2026-06-29).
 - Manual e2e: pendiente (usuario).
+
+---
+
+# Slice 6c — Fertirriego (sectores · OAF · config · aportes)
+
+Módulo Fertirriego completo (las 5 sub-pestañas del monolito) bajo
+`/cuaderno/fertirriego`. **Sin migración nueva**: las tablas `fertirriego_sectores`/
+`fertirriego_ordenes`/`fertirriego_config` y el counter `OAF` ya existen desde Fase 1;
+los aportes reusan el blob `field_products.aportes`. El cuaderno **no descuenta stock**.
+
+## Diferencias con las OA de 6b (no asumir simetría)
+
+- **Sin distribución por sector.** Las líneas de una OAF aplican a la orden completa;
+  lo que se calcula es el **aporte nutricional total** (kg de cada nutriente) sobre la
+  há total de los sectores seleccionados (no hay reparto agua/producto por sector).
+- **Confirmación = toggle en la propia orden** (`confirmada`/`confirmadaFecha` en
+  `fertirriego_ordenes`), reversible, sin entidad aparte ni recálculo. No hay pestaña
+  "Confirmaciones" — confirmar/reabrir es una acción sobre la fila de la OAF.
+- **PK de texto (uid):** sectores y OAF usan `crypto.randomUUID()` (no epoch-ms).
+
+## Lógica replicada del monolito (`index.html`, rama `main`)
+
+- **Aporte nutricional** (`dosisAKg` + cálculo en `frVerOrden`, L14224-14240): por línea
+  `kgProd = dosisAKg(dosis,unidad) × haTotal`; por nutriente `total += kgProd × (%/100)`.
+  `dosisAKg`: GRS./G y C.C/mL → `/1000`; kg y L → ×1 (densidad ~1); resto passthrough.
+- **Autocompletado de aportes** (`frBuscarAporteBase`/`_frNorm`, L13685-13704): match por
+  patrones contra una base de 43 fertilizantes; gana la coincidencia más específica.
+- **`FR_NUTRIENTES`** = N, P, K, Mg, S, Ca, B, Zn (L13631). **Defaults de cfg** (formas,
+  horarios, unidades, estados, condiciones, tiposDoc, rangos) verbatim de
+  `_ensureFertirriego` (L12486). **`TIPOS_FR`** (fertilizante suelo/edáfico/enmienda,
+  L14114) filtra el catálogo de la pestaña Productos y de las líneas de OAF.
+- **Correlativo** `OAF-00001` (counter `OAF`, padding a 5).
+
+## Server (`src/server/`)
+
+| Action | Permiso | Efectos |
+|--------|---------|---------|
+| `sectores.crearSector`/`editarSector` | `cuaderno.editar` | CRUD `fertirriego_sectores` (id uid) |
+| `sectores.eliminarSector` | `cuaderno.editar` | delete (guard: rechaza si el sector está en alguna OAF — `arrayContains`) |
+| `oaf.crearOaf`/`editarOaf` | `cuaderno.editar` | CRUD `fertirriego_ordenes`; correlativo `OAF`; `lineas` al blob; `updatedAt` |
+| `oaf.eliminarOaf` | `cuaderno.editar` | delete |
+| `oaf.confirmarOaf`/`desconfirmarOaf` | `cuaderno.confirmar` | toggle `confirmada`+`confirmadaFecha` |
+| `productos-cuaderno.guardarAportes` | `cuaderno.editar` | update `aportes`/`unidad`/`dosis` de `field_products` |
+| `fertirriego-config.guardarConfigFert` | `cuaderno.editar` | upsert del blob `cfg` (singleton `id="main"`) |
+
+Queries: `getSectores`, `getOrdenesFert` (nombres de sectores + há total derivados),
+`getOrdenFert`, `getProductosFertirriego` (filtra por `TIPOS_FR`, incluye `aportes`),
+`getConfigFert` (fusiona el blob con los defaults). Blobs jsonb narroweados sin `as`
+(`aLineas`/`aAportes`/`aConfigFert` en `fertirriego.utils.ts`).
+
+## Cálculo, tipos, schemas, constantes
+
+- **Pura** `src/utils/fertirriego.utils.ts` (única fuente de verdad, form + vistas):
+  `dosisAKg`, `haTotalSectores`, `calcularAportes`, `frNorm`, `buscarAporteBase` +
+  narrowing de blobs. Tests en `fertirriego.utils.test.ts`.
+- `src/types/fertirriego.types.ts` (SectorRow, LineaOaf, OafRow, AporteTotal,
+  ProductoFertRow, ConfigFert, Aportes, …).
+- `src/schemas/{sectores,oaf,fertirriego-config,aportes}.schema.ts` (zod). El record de
+  aportes usa `z.partialRecord(z.enum(FR_NUTRIENTES), …)`. Tests en
+  `fertirriego.schema.test.ts`.
+- `src/constants/fertirriego.constants.ts`: `PREFIJO_OAF`/`OAF_PADDING`, `FR_NUTRIENTES`,
+  `TIPOS_FR`, defaults de cfg, `FERTILIZANTES_BASE` (43), `TABS_FERTIRRIEGO`, títulos.
+  Pestaña "Fertirriego" añadida a `TABS_CUADERNO` (resaltado activo por `startsWith`).
+
+## UI (`src/app/(app)/cuaderno/fertirriego/`)
+
+Sub-sección anidada **bajo** el `layout.tsx` de cuaderno (guard `cuaderno.ver` ya
+aplicado). `layout.tsx` + `(sections)/fertirriego.subtabs.tsx` (sub-nav Órdenes ·
+Sectores · Productos y aportes · Parámetros); `page.tsx` → redirect a `ordenes`.
+
+- `ordenes/` — page + `oaf.{view,table,columns,form,detalle,confirmar,delete}.tsx`. El
+  form (multi-select de sectores + sub-lista de líneas + selects desde la cfg) con
+  **preview en vivo del aporte** reusando `calcularAportes`. `detalle` muestra la grilla
+  de aportes totales. `confirmar` es un botón toggle (no diálogo).
+- `sectores/` — page + `sectores.{view,table,columns,form,delete}.tsx` (maestro simple).
+- `productos/` — page + `aportes.{view,table,columns,form}.tsx`: edición de la
+  composición por nutriente + botón "Autocompletar desde base".
+- `parametros/` — page + `parametros.{view,form,lista}.tsx`: identificación + listas
+  editables (chips, `ListaEditable` reutilizable) + rangos + predios.
+
+## Reglas de negocio (lo no obvio)
+
+- OAF: validar ≥1 sector y ≥1 línea (como el monolito).
+- Borrar sector bloqueado si está en alguna OAF. Borrar OAF: sin guard (no hay entidad
+  de confirmación); confirmar/reabrir es reversible.
+- El aporte nutricional es **autoritativo en la vista/util** (el form solo previsualiza);
+  `dosisAKg` asume densidad ~1 (C.C/mL ≈ g; L ≈ kg) — verbatim del monolito, no "corregir".
+
+## Checklist de verificación end-to-end (6c)
+
+- [ ] Login agrónomo/admin → pestaña **Fertirriego**; sub-pestañas navegan; sectores/OAF
+  migrados se listan.
+- [ ] Sectores: crear/editar/eliminar; borrar sector usado en una OAF → rechazado.
+- [ ] Parámetros: añadir/quitar una forma/horario/unidad/estado → persiste y aparece en el
+  form de OAF.
+- [ ] Productos y Aportes: editar % de N-P-K; "Autocompletar" rellena desde la base; guardar.
+- [ ] OAF: crear con 2 sectores + 2 líneas → preview de aporte cuadra con `dosisAKg×ha×%`;
+  guardar → `OAF-000NN`, estado Pendiente; confirmar → Confirmada + fecha; reabrir; editar;
+  eliminar.
+- [ ] Rol `gerente` (solo `cuaderno.ver`): tablas sin botones de crear/editar/confirmar.
+- [ ] Validación zod: OAF sin sectores o sin líneas → error.
+- [x] typecheck/lint/131 tests/build verdes.
