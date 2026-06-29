@@ -19691,8 +19691,39 @@ function processExcel(file) {
         }catch(e){}
       }
 
-      // Update global data
-      ACTIVE_DATA = merged;
+      // ── Detección de temporada del Excel cargado (sólo col MES+AÑO vía _getTemporada) ──
+      // Se cuentan los registros por temporada y se toma la dominante como la
+      // temporada que trae este archivo. El usuario confirma antes de aplicar.
+      const _tempCount = {};
+      merged.forEach(d => { const t = _getTemporada(d); if(t){ _tempCount[t] = (_tempCount[t]||0) + 1; } });
+      const _tempsOrdenadas = Object.keys(_tempCount).sort((a,b) => _tempCount[b] - _tempCount[a]);
+      const _tempDetectada = _tempsOrdenadas.length ? _tempsOrdenadas[0] : '';
+      // Dataset base actual sobre el que se va a fusionar (lo ya cargado, o el RAW embebido).
+      const _datasetActual = (typeof ACTIVE_DATA !== 'undefined' && ACTIVE_DATA && ACTIVE_DATA.length) ? ACTIVE_DATA : RAW;
+
+      // Aplica el reemplazo: si hay temporada elegida, conserva las demás temporadas
+      // del dataset actual y reemplaza SÓLO los registros de esa temporada por los del Excel.
+      // Si tempElegida es vacío, hace reemplazo total (comportamiento antiguo).
+      function _aplicarPorTemporada(tempElegida){
+        let resultado;
+        if(tempElegida){
+          const otras = _datasetActual.filter(d => _getTemporada(d) !== tempElegida);
+          const nuevosDeTemp = merged.filter(d => _getTemporada(d) === tempElegida);
+          resultado = otras.concat(nuevosDeTemp);
+          // Orden estable por temporada y luego por mes.
+          resultado.sort((a,b) => {
+            const ta = _getTemporada(a), tb = _getTemporada(b);
+            if(ta !== tb) return ta < tb ? -1 : 1;
+            return (a.MES_ORDER||0) - (b.MES_ORDER||0);
+          });
+        } else {
+          resultado = merged;
+        }
+        ACTIVE_DATA = resultado;
+        _continuarProcesamiento();
+      }
+
+      function _continuarProcesamiento(){
       window.MONTHS_WITH_REAL = mesesConReal;
       // ── Persistencia en la nube (Parte 2): si el usuario puede editar,
       // subir TODO el dataset a presupuesto/main (reemplazo total). ──
@@ -19756,16 +19787,62 @@ function processExcel(file) {
       // Update last-update label
       refreshLastUpdate();
 
-      const nRows = merged.length;
+      const _datasetFinal = (typeof ACTIVE_DATA !== 'undefined' && ACTIVE_DATA && ACTIVE_DATA.length) ? ACTIVE_DATA : merged;
+      const nRows = _datasetFinal.length;
       const nMeses = mesesConReal.length;
       setStatus(`✅ Archivo cargado correctamente. ${nRows} registros, ${nMeses} meses con datos reales.`, 'ok');
 
       // Rebuild filters and re-render
-      rebuildFilters(merged);
-      renderAll(merged);
+      rebuildFilters(_datasetFinal);
+      renderAll(_datasetFinal);
       updateBanner();
 
       setTimeout(closeUploadModal, 2200);
+      } // ← fin de _continuarProcesamiento
+
+      // ── Disparador: confirmar la temporada detectada antes de aplicar ──
+      if(_tempDetectada){
+        // Construir resumen de temporadas presentes en el Excel.
+        const _resumen = _tempsOrdenadas
+          .map(t => `${t} (${_tempCount[t]} registros)`)
+          .join(', ');
+        const _otrasTemps = [...new Set(_datasetActual.map(d => _getTemporada(d)).filter(t => t && t !== _tempDetectada))].sort();
+        const _conserva = _otrasTemps.length
+          ? `Se conservarán intactas las temporadas: <strong>${_otrasTemps.join(', ')}</strong>.`
+          : 'No hay otras temporadas cargadas que conservar.';
+        const _modalHtml = `
+          <div style="padding:4px 2px">
+            <p style="margin:0 0 10px">El archivo corresponde a la temporada <strong>${_tempDetectada}</strong>.</p>
+            <p style="margin:0 0 10px;font-size:13px;color:#555">Detalle del archivo: ${_resumen}.</p>
+            <p style="margin:0 0 14px;font-size:13px;color:#555">Se reemplazarán <strong>solo</strong> los datos de la temporada ${_tempDetectada}. ${_conserva}</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+              <button id="pz-temp-cancel" class="btn btn-secondary btn-sm">Cancelar</button>
+              <button id="pz-temp-ok" class="btn btn-primary btn-sm">Reemplazar temporada ${_tempDetectada}</button>
+            </div>
+          </div>`;
+        try{
+          showModal(`Actualizar temporada ${_tempDetectada}`, _modalHtml);
+        }catch(e){
+          // Si no hay modal disponible, aplicar directo a la temporada detectada.
+          _aplicarPorTemporada(_tempDetectada);
+          return;
+        }
+        // Enlazar botones (diferido para asegurar que el modal ya está en el DOM).
+        setTimeout(function(){
+          const okBtn = document.getElementById('pz-temp-ok');
+          const cancelBtn = document.getElementById('pz-temp-cancel');
+          if(okBtn) okBtn.onclick = function(){ try{ closeModal(); }catch(e){} _aplicarPorTemporada(_tempDetectada); };
+          if(cancelBtn) cancelBtn.onclick = function(){
+            try{ closeModal(); }catch(e){}
+            if(typeof PZFB!=='undefined') PZFB._localEditing = false;
+            setStatus('Actualización cancelada por el usuario.', 'error');
+            setTimeout(closeUploadModal, 1200);
+          };
+        }, 50);
+      } else {
+        // Sin temporada detectable: reemplazo total (comportamiento antiguo).
+        _aplicarPorTemporada('');
+      }
 
     } catch(err) {
       console.error('processExcel error:', err);
