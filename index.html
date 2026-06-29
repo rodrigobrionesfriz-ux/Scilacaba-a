@@ -3954,8 +3954,6 @@ function renderPresupuesto(main){
           <tr>
             <th>Descripción</th>
             <th>Proveedor</th>
-            <th>N°</th>
-            <th class="num">Cantidad</th>
             <th>Mes</th>
             <th class="num">Total</th>
           </tr>
@@ -19303,64 +19301,11 @@ function fmtValK(v)   {
 let currentDetalleItems = [];
 let currentDetallePpto = 0;
 
-/* _isSeasonDetalle(obj): true si el detalle ya está segmentado por temporada
-   (el primer nivel es {temporada:{familia:[...]}}), false si es el formato
-   plano antiguo ({familia:[...]}). Heurística: en el formato nuevo el valor
-   del primer nivel es un objeto (no array); en el viejo es un array. */
-function _isSeasonDetalle(obj){
-  if(!obj || typeof obj!=='object') return false;
-  const keys = Object.keys(obj);
-  if(!keys.length) return false;
-  const first = obj[keys[0]];
-  return first != null && typeof first==='object' && !Array.isArray(first);
-}
-/* _toSeasonDetalle(obj): normaliza cualquier detalle al formato segmentado por
-   temporada. Si ya lo está, lo devuelve tal cual (copia superficial). Si es
-   plano, lo agrupa derivando la temporada de cada item (campo .temporada, o
-   .anio+.mes, o 'SIN TEMPORADA'). */
-function _toSeasonDetalle(obj){
-  if(!obj || typeof obj!=='object') return {};
-  if(_isSeasonDetalle(obj)){
-    const out={}; Object.keys(obj).forEach(t=>{ out[t]=obj[t]; }); return out;
-  }
-  const out={};
-  Object.keys(obj).forEach(familia=>{
-    const arr = obj[familia]; if(!Array.isArray(arr)) return;
-    arr.forEach(it=>{
-      let temp = (it && it.temporada) ? String(it.temporada).trim() : '';
-      if(!temp && it && it.anio!=null && typeof temporadaDeMesAnio==='function'){
-        try{ temp = temporadaDeMesAnio(it.mes, it.anio) || ''; }catch(e){}
-      }
-      if(!temp) temp = 'SIN TEMPORADA';
-      if(!out[temp]) out[temp]={};
-      if(!out[temp][familia]) out[temp][familia]=[];
-      out[temp][familia].push(it);
-    });
-  });
-  return out;
-}
-/* _getDetalleFamilia(familia, temporada): devuelve el array de gastos de una
-   familia para la temporada dada. Si temporada es '' (Todas), concatena todas
-   las temporadas. Tolera el formato plano antiguo. */
-function _getDetalleFamilia(familia, temporada){
-  const src = (window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS);
-  if(!_isSeasonDetalle(src)){
-    // Formato plano: sin segmentación, devolver la familia tal cual.
-    return src[familia] || [];
-  }
-  if(temporada){
-    return (src[temporada] && src[temporada][familia]) ? src[temporada][familia] : [];
-  }
-  // Todas las temporadas: concatenar.
-  let acc=[];
-  Object.keys(src).forEach(t=>{ if(src[t] && src[t][familia]) acc = acc.concat(src[t][familia]); });
-  return acc;
-}
 function openDetalleModal(descripcion) {
   const MONTH_ORDER = ['MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE','ENERO','FEBRERO','MARZO','ABRIL'];
-  // Detalle filtrado por la TEMPORADA seleccionada en el dashboard (o todas).
-  const tempSel = (document.getElementById('f-temporada') || {}).value || '';
-  const allItems = _getDetalleFamilia(descripcion, tempSel);
+  // Use reloaded data from file upload if available, otherwise fall back to embedded JSON
+  const source = (window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS);
+  const allItems = source[descripcion] || [];
   const mesFiltro = document.getElementById('f-mes').value;
 
   // Filter by month if one is selected
@@ -19470,8 +19415,6 @@ function renderDetalleTable(items) {
     return `<tr>
       <td class="desc" title="${x.desc}">${x.desc.length > 55 ? x.desc.slice(0,55)+'…' : x.desc}</td>
       <td class="prov" title="${x.proveedor}">${x.proveedor.length > 30 ? x.proveedor.slice(0,30)+'…' : x.proveedor}</td>
-      <td style="color:#64748b;font-size:11px;white-space:nowrap;">${x.numero != null ? x.numero : '—'}</td>
-      <td class="num" style="color:#64748b;">${x.cantidad != null && x.cantidad !== '' ? x.cantidad : '—'}</td>
       <td style="color:#64748b;font-size:11px;white-space:nowrap;">${x.mes}</td>
       <td class="num ${cls}">${sign}${totalFmt}</td>
     </tr>`;
@@ -19780,58 +19723,32 @@ function processExcel(file) {
               dHeaders.forEach((h, idx) => { if (h) obj[h] = row[idx] ?? null; });
               dRows.push(obj);
             }
-            // Reconstruir el detalle de gastos SEGMENTADO POR TEMPORADA:
-            //   newDetalle[temporada][familia] = [ {desc, proveedor, numero,
-            //   cantidad, total, mes, anio, ...} ]
-            // La temporada se toma de la columna TEMPORADA (W) y, si viene
-            // vacía, se deriva de MES (B) + AÑO (C). Esto permite que el modal
-            // filtre por temporada+mes y que cada upload reemplace SOLO su
-            // temporada sin pisar las demás (ver merge más abajo).
-            const newDetalleSeason = {};
+            // Rebuild DETALLE_GASTOS lookup by FAMILIA
+            const newDetalle = {};
             dRows.forEach(r => {
               const familia = (r['FAMILIA'] || '').toString().trim();
               const total   = parseFloat(r['TOTAL']);
               if (!familia || !total) return;
-              const mesDet  = (r['MES'] || r['FECHA'] || '—').toString().trim().toUpperCase();
-              const anioDet = (r['AÑO'] != null && r['AÑO'] !== '') ? parseInt(r['AÑO']) : null;
-              // Temporada: columna TEMPORADA o derivada de MES+AÑO.
-              let tempDet = (r['TEMPORADA'] || '').toString().trim();
-              if (!tempDet && anioDet != null && typeof temporadaDeMesAnio === 'function') {
-                try { tempDet = temporadaDeMesAnio(mesDet, anioDet) || ''; } catch(e){}
-              }
-              if (!tempDet) tempDet = 'SIN TEMPORADA';
-              if (!newDetalleSeason[tempDet]) newDetalleSeason[tempDet] = {};
-              if (!newDetalleSeason[tempDet][familia]) newDetalleSeason[tempDet][familia] = [];
-              newDetalleSeason[tempDet][familia].push({
+              if (!newDetalle[familia]) newDetalle[familia] = [];
+              newDetalle[familia].push({
                 desc:      (r['DESCRIPCIÓN'] || r['DESCRIPCION'] || '—').toString().trim(),
-                numero:    (r['NUMERO'] != null && r['NUMERO'] !== '') ? String(r['NUMERO']).trim() : '—',
-                cantidad:  (r['CANTIDAD'] != null && r['CANTIDAD'] !== '') ? r['CANTIDAD'] : '—',
                 total:     Math.round(total),
                 proveedor: (r['PROVEEDOR'] || '—').toString().trim(),
-                mes:       mesDet,
-                fecha:     (r['FECHA'] || mesDet || '—').toString().trim().toUpperCase(),
-                anio:      anioDet,
-                temporada: tempDet,
+                mes:       (r['FECHA'] || '—').toString().trim().toUpperCase(),
+                fecha:     (r['FECHA'] || '—').toString().trim().toUpperCase(),
                 cuenta:    (r['CUENTA'] || '—').toString().trim(),
               });
             });
-            // Ordenar cada familia por orden de mes, dentro de cada temporada.
+            // Sort each familia by month order
             const MO = ["MAYO","JUNIO","JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE","ENERO","FEBRERO","MARZO","ABRIL"];
-            Object.keys(newDetalleSeason).forEach(temp => {
-              Object.keys(newDetalleSeason[temp]).forEach(fam => {
-                newDetalleSeason[temp][fam].sort((a,b) => {
-                  const ai = MO.indexOf(a.mes), bi = MO.indexOf(b.mes);
-                  return (ai===-1?99:ai) - (bi===-1?99:bi);
-                });
+            Object.keys(newDetalle).forEach(k => {
+              newDetalle[k].sort((a,b) => {
+                const ai = MO.indexOf(a.mes), bi = MO.indexOf(b.mes);
+                return (ai===-1?99:ai) - (bi===-1?99:bi);
               });
             });
-            // MERGE incremental: partir del detalle actual (ya segmentado) y
-            // REEMPLAZAR solo las temporadas presentes en este Excel, dejando
-            // intactas las demás. _toSeasonDetalle normaliza formato viejo.
-            const baseSeason = _toSeasonDetalle(window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS);
-            Object.keys(newDetalleSeason).forEach(temp => { baseSeason[temp] = newDetalleSeason[temp]; });
             // Update global — reassign the constant via window
-            window.DETALLE_GASTOS_LIVE = baseSeason;
+            window.DETALLE_GASTOS_LIVE = newDetalle;
           }
         } catch(e) { console.warn('Detalle Gastos reload failed:', e); }
       }
@@ -20848,7 +20765,7 @@ function pzSerializeDataset(){
     var n=parseFloat(v); return isNaN(n)?null:n; }
   return {
     rows: (ACTIVE_DATA || RAW) || [],
-    detalle: _toSeasonDetalle(window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS) || {},
+    detalle: (window.DETALLE_GASTOS_LIVE || DETALLE_GASTOS) || {},
     monthsWithReal: (window.MONTHS_WITH_REAL || MONTHS_WITH_REAL) || [],
     kpis: { kg: num('rb-kg'), tc: num('rb-tc'), ha: num('rb-ha'), kgEst: num('rb-kg-est') }
   };
@@ -20864,7 +20781,7 @@ function pzLoadDataset(obj){
   try{
     PZFB.applyingRemote = true;
     if(Array.isArray(obj.rows) && obj.rows.length){ ACTIVE_DATA = obj.rows; }
-    if(obj.detalle && typeof obj.detalle==='object'){ window.DETALLE_GASTOS_LIVE = _toSeasonDetalle(obj.detalle); }
+    if(obj.detalle && typeof obj.detalle==='object'){ window.DETALLE_GASTOS_LIVE = obj.detalle; }
     if(Array.isArray(obj.monthsWithReal)){ window.MONTHS_WITH_REAL = obj.monthsWithReal; }
     // KPIs editables
     if(obj.kpis){
