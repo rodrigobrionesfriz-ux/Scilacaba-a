@@ -23,6 +23,7 @@ describe("NAV", () => {
       .map((i) => i.id)
     // Fase 2: dashboard. Fase 3: maestros. Fase 4: stock + movimientos.
     // Fase 5: tomas de inventario. Fase 6a: cuaderno de campo.
+    // Fase 7a: conteos en terreno.
     expect([...disponibles].sort()).toEqual(
       [
         "dashboard",
@@ -37,6 +38,7 @@ describe("NAV", () => {
         "salidas",
         "tomas",
         "cuaderno",
+        "conteos",
       ].sort(),
     )
   })
