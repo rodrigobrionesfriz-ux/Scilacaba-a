@@ -27,6 +27,7 @@ export const TABS_CUADERNO = [
   { href: "/cuaderno/aplicaciones", label: "Aplicaciones" },
   { href: "/cuaderno/ordenes", label: "Órdenes" },
   { href: "/cuaderno/confirmaciones", label: "Confirmaciones" },
+  { href: "/cuaderno/fertirriego", label: "Fertirriego" },
 ] as const
 
 // Tipos de producto (index.html:1297) — 15 opciones.

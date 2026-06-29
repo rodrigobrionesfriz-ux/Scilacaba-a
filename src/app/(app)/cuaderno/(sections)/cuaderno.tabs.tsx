@@ -10,7 +10,8 @@ export const CuadernoTabs = () => {
   return (
     <nav className="flex gap-1 border-b">
       {TABS_CUADERNO.map((tab) => {
-        const activo = pathname === tab.href
+        const activo =
+          pathname === tab.href || pathname.startsWith(`${tab.href}/`)
         return (
           <Link
             key={tab.href}
