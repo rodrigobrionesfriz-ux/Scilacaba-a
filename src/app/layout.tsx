@@ -1,3 +1,4 @@
+import { SerwistProvider } from "@serwist/turbopack/react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "SCI v2",
-  description: "Sistema de Control de Inventario — Scilacaba",
+  title: "SCI · La Cabaña",
+  description: "Sistema de Control de Inventario — La Cabaña",
 }
 
 const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
@@ -24,7 +25,12 @@ const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
     className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
   >
     <body className="min-h-full flex flex-col">
-      {children}
+      <SerwistProvider
+        swUrl="/sw.js"
+        disable={process.env.NODE_ENV === "development"}
+      >
+        {children}
+      </SerwistProvider>
       <Toaster />
     </body>
   </html>
