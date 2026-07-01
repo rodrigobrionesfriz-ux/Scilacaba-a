@@ -1,6 +1,8 @@
-// Constantes de Terreno (Conteos / Inventario de huerto). Regla 7. Hoja: no
-// importa otras capas. Listas verbatim del monolito (index.html) para preservar
-// la funcionalidad (SPEC). Módulos offline (ADR-003).
+// Constantes de Terreno (Conteos / Inventario de huerto / Estimación de
+// cosecha). Regla 7. Hoja: no importa otras capas. Listas verbatim del
+// monolito (index.html) para preservar la funcionalidad (SPEC). Conteos e
+// Inventario de huerto son offline (ADR-003); Estimación es online (consume
+// datos ya sincronizados de ambos).
 
 // ─── Conteos en terreno ───
 
@@ -109,9 +111,36 @@ export const ABREV_VARIEDADES: Record<string, string> = {
   rainier: "RAI",
 }
 
+// ─── Estimación de cosecha ───
+
+export const TERRENO_ESTIMACION_TITLE = "Estimación de Cosecha"
+export const TERRENO_ESTIMACION_SUBTITLE =
+  "Cálculo de kg estimados por paño a partir de conteos e inventario de huerto"
+
+// Defaults verbatim del monolito (index.html:10171-10172): frutos por centro
+// floral y kg por fruto al inicio de una nueva estimación.
+export const FRUTOS_CENTRO_DEFAULT = 2
+export const KG_FRUTO_DEFAULT = 0.011
+
+// Conversiones de kg a unidades de despacho (index.html:10195/14464).
+export const KG_POR_CAJA = 5
+export const KG_POR_TONELADA = 1000
+
+// Pesos de producción por estado de planta, en % (index.html: PROD_ESTADO_DEFAULT,
+// ~12475). Usados para calcular "plantas productivas equivalentes" a partir del
+// desglose de invplantas. Override posible por paño (panos.prodPct).
+export const PESOS_ESTADO_DEFAULT: Readonly<Record<string, number>> = {
+  sano: 100,
+  debil: 60,
+  replante: 30,
+  muerto: 0,
+  falta: 0,
+}
+
 // ─── Sub-navegación de Terreno ───
-// Conteos (7a) + Inventario de huerto (7b). Estimación (7c) se añade luego.
+// Conteos (7a) + Inventario de huerto (7b) + Estimación de cosecha (7c).
 export const TABS_TERRENO = [
   { href: "/terreno/conteos", label: "Conteos" },
   { href: "/terreno/invplantas", label: "Inventario de Huerto" },
+  { href: "/terreno/estimacion", label: "Estimación de Cosecha" },
 ] as const
