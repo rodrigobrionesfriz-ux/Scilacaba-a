@@ -5382,7 +5382,17 @@ function viewProduct(codigo){
     });
     return dd;
   })();
-  const movs=STATE.cache.movements.filter(m=>!m.anulado&&(m.detalles||[]).some(d=>d.codigoInterno===codigo)).slice(-10).reverse();
+  // Todos los movimientos que afectan a este producto (entradas, salidas,
+  // ajustes, traspasos y también las tomas de inventario, ya materializadas
+  // como movimientos TIE/TIS). Se incluyen los anulados, marcados como tales,
+  // para que el historial sea completo. Una fila por línea de detalle.
+  const movRows=[];
+  STATE.cache.movements.forEach(m=>{
+    (m.detalles||[]).filter(d=>d.codigoInterno===codigo).forEach(d=>{
+      movRows.push({m,d});
+    });
+  });
+  movRows.sort((a,b)=>new Date(b.m.fecha)-new Date(a.m.fecha));
   showModal(`Producto · ${p.codigoInterno}`,
     `<div class="form-grid">
       <div class="form-field"><label>Código Interno</label><div class="mono"><strong>${p.codigoInterno}</strong></div></div>
@@ -5402,9 +5412,52 @@ function viewProduct(codigo){
       <table class="detalle-table"><thead><tr><th>Bodega</th><th>Lote</th><th>Vence</th><th class="num">Cantidad</th><th class="num">Costo</th></tr></thead>
       <tbody>${lots.map(l=>{const b=getWarehouse(l.bodegaId);const venc=l.fechaVenc?new Date(l.fechaVenc):null;const venceClass=venc&&venc<new Date(Date.now()+30*86400000)?'badge-amber':'';
         return `<tr><td>${escapeHtml(b?b.nombre:l.bodegaId)}</td><td class="mono">${escapeHtml(l.lote)}</td><td><span class="badge ${venceClass}">${fmtDateOnly(l.fechaVenc)}</span></td><td class="num">${fmtNum(l.cantidad,2)}</td><td class="num">${fmtMon(l.costo)}</td></tr>`}).join('')}</tbody></table>`:''}
+    <h4 style="margin:18px 0 8px;color:var(--gd);font-size:13px">Movimientos del producto (${movRows.length})</h4>
+    ${movRows.length===0?'<div style="color:var(--mu);font-size:13px">Sin movimientos registrados</div>':
+      `<table class="detalle-table"><thead><tr><th>Fecha</th><th>N°</th><th>Tipo</th><th>Bodega</th><th class="num">Cantidad</th><th class="num">Costo</th><th class="num">Total</th><th>Lote</th><th>Estado</th></tr></thead>
+      <tbody>${movRows.map(({m,d})=>{
+        const b=getWarehouse(m.bodegaId);
+        return `<tr${m.anulado?' style="opacity:.6"':''}><td>${fmtDate(m.fecha)}</td><td class="mono">${escapeHtml(m.numero||'')}</td><td>${escapeHtml(tipoMovLabel(m))}</td><td>${escapeHtml(b?b.nombre:m.bodegaId||'')}</td><td class="num">${fmtNum(d.cantidad,2)}</td><td class="num">${fmtMon(d.costo)}</td><td class="num">${fmtMon((d.cantidad||0)*(d.costo||0))}</td><td class="mono">${escapeHtml(d.lote||'-')}</td><td>${m.anulado?'<span class="badge badge-amber">Anulado</span>':'<span class="badge badge-green">Vigente</span>'}</td></tr>`;
+      }).join('')}</tbody></table>`}
     `,
-    `<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>${can('productos.crear')?`<button class="btn btn-primary" onclick="closeModal();openProductForm('${codigo}')">Editar</button>`:''}`,
-    'lg');
+    `<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+     ${movRows.length?`<button class="btn btn-secondary" onclick="exportMovimientosProducto('${codigo}')">📊 Exportar Excel</button>`:''}
+     ${can('productos.crear')?`<button class="btn btn-primary" onclick="closeModal();openProductForm('${codigo}')">Editar</button>`:''}`,
+    'xl');
+}
+
+// Exporta a Excel el historial completo de movimientos de UN producto
+// (entradas, salidas, ajustes, traspasos y tomas de inventario ya
+// materializadas como movimientos). Misma estructura de columnas que
+// `exportMovimientosExcel`, pero acotada al código de producto indicado.
+function exportMovimientosProducto(codigo){
+  const p=getProduct(codigo);
+  const data=[];
+  const movsOrdenados=STATE.cache.movements.slice().sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  movsOrdenados.forEach(m=>{
+    const b=getWarehouse(m.bodegaId);
+    const bDest=m.bodegaDestinoId?getWarehouse(m.bodegaDestinoId):null;
+    (m.detalles||[]).filter(d=>d.codigoInterno===codigo).forEach(d=>{
+      data.push({
+        'N°':m.numero,'Tipo':tipoLabel(m.tipo),'Tipo Movimiento':tipoMovLabel(m),
+        'Fecha':fmtDate(m.fecha),
+        'Fecha Cosecha':m.fechaCosecha?fmtDateOnly(m.fechaCosecha):'',
+        'Bodega':b?.nombre||'',
+        'Bodega Destino':bDest?.nombre||'',
+        'Centro Costo':m.centroCosto||'',
+        'CC Descripción':m.centroCostoNombre||'',
+        'Tipo Doc':m.tipoDoc||'','N° Doc':m.numeroDoc||'',
+        'Proveedor/Cliente':m.proveedorNombre||m.clienteNombre||m.proveedor||m.destino||'',
+        'Código':d.codigoInterno,'Descripción':p?.descripcion||'','UM':p?.unidadMedida||'',
+        'Cantidad':d.cantidad,'Costo':d.costo,'Total':(d.cantidad||0)*(d.costo||0),
+        'Lote':d.lote||'','Vencimiento':d.fechaVenc?fmtDateOnly(d.fechaVenc):'',
+        'Estado':m.anulado?'ANULADO':'VIGENTE','Usuario':m.usuario||''
+      });
+    });
+  });
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Movimientos');
+  XLSX.writeFile(wb,`Movimientos_${codigo}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 async function exportProductosExcel(){
@@ -12763,7 +12816,7 @@ function sciFbWaitForSync(timeoutMs){
 /* ═══════════════ CUADERNO DE CAMPO — JS (transformado, sin window.onload) ═══════════════ */
 
 // ══ STATE ══
-var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, confirmaciones:[], equipos:[], comprasUrgentes:[],
+var S = { panos:[], registros:[], productos:[], ordenes:[], oCounter:1, cCounter:1, confirmaciones:[], equipos:[], comprasUrgentes:[],
   fertirriego: { sectores:[], ordenes:[], oCounter:1, cfg:{ equipos:[], formas:['POR GOTEO','MANUAL'], unidades:['GRS.','C.C','L','kg','mL'], horarios:['08:00 A 17:00','08:00 A 18:00','18:00 A 21:00'] } },
   // % de producción asignado a cada estado de planta (usado en estimaciones de cosecha)
   prodPorEstado: { sano:100, debil:60, replante:30, muerto:0, falta:0 }
@@ -13173,6 +13226,7 @@ function fbApplyRemote(data){
       S.equipos = S.equipos.map(function(e){ return (typeof e==='string')?{nombre:e,capacidad:0}:{nombre:(e&&e.nombre)||'',capacidad:(e&&parseFloat(e.capacidad))||0}; }).filter(function(e){ return e.nombre; });
       if(remote.prodPorEstado !== undefined) S.prodPorEstado = remote.prodPorEstado;
       if(remote.oCounter !== undefined) S.oCounter = remote.oCounter;
+      if(remote.cCounter !== undefined) S.cCounter = remote.cCounter;
       if(remote.comprasUrgentes !== undefined) S.comprasUrgentes = remote.comprasUrgentes;
       if(!Array.isArray(S.comprasUrgentes)) S.comprasUrgentes = [];
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
@@ -13226,7 +13280,7 @@ function fbPush(immediate){
     FB.lastVersion = newVersion;
     var payload = JSON.stringify({
       panos: S.panos, registros: S.registros, productos: S.productos,
-      ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter,
+      ordenes: S.ordenes, confirmaciones: S.confirmaciones, oCounter: S.oCounter, cCounter: S.cCounter,
       equipos: S.equipos, comprasUrgentes: S.comprasUrgentes,
       fertirriego: S.fertirriego, prodPorEstado: S.prodPorEstado
     });
@@ -13322,7 +13376,7 @@ function _migrarPanos(){
 function load(){
   try{
     var d = localStorage.getItem('cc_v2');
-    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego','equipos','comprasUrgentes'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter;
+    if(d){ var p=JSON.parse(d); ['panos','registros','productos','ordenes','confirmaciones','fertirriego','equipos','comprasUrgentes'].forEach(function(k){ if(p[k]) S[k]=p[k]; }); if(p.oCounter) S.oCounter=p.oCounter; if(p.cCounter) S.cCounter=p.cCounter;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
       if(!Array.isArray(S.comprasUrgentes)) S.comprasUrgentes = [];
       if(!Array.isArray(S.equipos)) S.equipos = [];
@@ -16096,6 +16150,34 @@ function ordenarPanosPadreHijo(lista){
   polinizantes.filter(function(pol){ return res.indexOf(pol)<0; }).forEach(function(pol){ res.push(pol); });
   return res;
 }
+// Arma las filas de distribución de una orden a partir de una lista de ids de
+// paños seleccionados. La distribución (agua/producto) se calcula SOLO sobre
+// los paños padre (productivos), usando como superficie la TOTALIDAD del
+// grupo (padre + sus polinizantes hijos seleccionados). Cada polinizante hijo
+// se incluye como fila propia meramente informativa (rol:'polin', has propia,
+// sin agua ni producto: ya está contabilizado dentro de la superficie del
+// padre). Polinizantes sin padre seleccionado se tratan como su propio "padre".
+// `hasFn(p)` permite indicar cómo obtener la superficie de cada paño; por
+// defecto usa `getHas` (que depende del tipo de aplicación EN CURSO, variable
+// global `ordenTipoApp`). Al recalcular una orden YA GUARDADA hay que pasar
+// una función que use el `tipoApp` de esa orden en particular, no el global.
+function _filasDistribucion(ids, hasFn){
+  hasFn = hasFn || getHas;
+  var sel = (ids||[]).map(getPano).filter(Boolean);
+  var padres = sel.filter(function(p){ return (p.tipo||'Productivo')!=='Polinizante'; });
+  var polin  = sel.filter(function(p){ return (p.tipo||'Productivo')==='Polinizante'; });
+  var filas=[];
+  padres.forEach(function(pad){
+    var hijos = polin.filter(function(x){ return String(x.panoPadre)===String(pad.id); });
+    var hasTotal = hasFn(pad) + hijos.reduce(function(s,h){ return s+hasFn(h); },0);
+    filas.push({p:pad, has:hasTotal, rol:'padre'});
+    hijos.forEach(function(h){ filas.push({p:h, has:hasFn(h), rol:'polin'}); });
+  });
+  // Polinizantes huérfanos (su paño padre no está en la selección): nodo propio.
+  polin.filter(function(x){ return !padres.some(function(pad){ return String(x.panoPadre)===String(pad.id); }); })
+       .forEach(function(x){ filas.push({p:x, has:hasFn(x), rol:'padre'}); });
+  return filas;
+}
 function renderOrdenChips(){
   var el=document.getElementById('cc-o-chips'); if(!el) return;
   el.innerHTML=''; selPanosOrden=[];
@@ -16207,27 +16289,33 @@ function calcDist(){
       allProds.push({nombre:p.nombre.trim(), dosis:parseFloat(p.dosis), unidad:p.unidad, unitS:unitBase(p.unidad)});
     }
   });
+  // La distribución (agua/producto) se calcula SOLO sobre los paños padre,
+  // usando como superficie la TOTALIDAD del grupo (padre + polinizantes). Los
+  // polinizantes hijos aparecen como filas propias informativas (sin agua ni
+  // producto: ya están contabilizados dentro de la superficie del padre).
   var tHas=0,tAgua=0,tProd=0;
-  draftDist=selPanosOrden.map(function(id){
-    var p=getPano(id); var has=getHas(p);
-    var agua=mojT*has;
-    var prod=_calcProdQty(dosis, unidad, has, mojT);
-    tHas+=has; tAgua+=agua; tProd+=prod;
+  draftDist=_filasDistribucion(selPanosOrden).map(function(f){
+    var p=f.p, has=f.has, esPolin=(f.rol==='polin');
+    var agua=esPolin?0:(mojT*has);
+    var prod=esPolin?0:_calcProdQty(dosis, unidad, has, mojT);
+    if(!esPolin){ tHas+=has; tAgua+=agua; tProd+=prod; }
     // Cantidades de productos adicionales para este paño
     var extras = {};
     allProds.slice(1).forEach(function(ap, i){
-      extras['p'+i] = _calcProdQty(ap.dosis, ap.unidad, has, mojT);
+      extras['p'+i] = esPolin?0:_calcProdQty(ap.dosis, ap.unidad, has, mojT);
     });
-    return {p:p,has:has,agua:agua,prod:prod, extras:extras};
+    return {p:p,has:has,agua:agua,prod:prod, extras:extras, rol:f.rol};
   });
   document.getElementById('cc-dist-tbody').innerHTML=draftDist.map(function(r){
-    var pct=tProd>0?((r.prod/tProd)*100).toFixed(1)+'%':'0%';
-    return '<tr><td><span class="cc-pano-tag"><span class="cc-pano-dot" style="background:'+(r.p&&r.p.color||'#888')+'"></span>'+(r.p&&r.p.nombre||'—')+'</span></td>'+
+    var esPolin=(r.rol==='polin');
+    var pct=(!esPolin&&tProd>0)?((r.prod/tProd)*100).toFixed(1)+'%':'—';
+    var polinNote=esPolin?' <span style="font-size:9px;color:#92600a;background:#fef3c7;padding:1px 5px;border-radius:8px;margin-left:4px">🐝 incluido en el padre</span>':'';
+    return '<tr'+(esPolin?' style="opacity:.65"':'')+'><td><span class="cc-pano-tag"><span class="cc-pano-dot" style="background:'+(r.p&&r.p.color||'#888')+'"></span>'+(r.p&&r.p.nombre||'—')+polinNote+'</span></td>'+
       '<td style="font-style:italic;color:#888">'+(r.p&&r.p.variedad||'—')+'</td>'+
       '<td style="text-align:center">'+(r.p&&r.p.anio||'—')+'</td>'+
       '<td style="text-align:right;font-weight:700">'+fmtN(r.has,2)+' há</td>'+
-      '<td style="text-align:right">'+(r.agua>0?fmtN(r.agua,0)+' L':'—')+'</td>'+
-      '<td style="text-align:right;font-weight:700;color:#354a5f">'+fmtN(r.prod,3)+'</td>'+
+      '<td style="text-align:right">'+(!esPolin&&r.agua>0?fmtN(r.agua,0)+' L':'—')+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#354a5f">'+(esPolin?'—':fmtN(r.prod,3))+'</td>'+
       '<td style="text-align:center;color:#888">'+pct+'</td></tr>';
   }).join('');
   document.getElementById('cc-dt-has').textContent=fmtN(tHas,2)+' há';
@@ -16450,7 +16538,10 @@ function _calcProdQty(dosis, unidad, has, mojT){
    PROPORCIONAL A LAS HECTÁREAS ACTUALES de cada paño, usando la dosis y el
    mojamiento guardados en la orden. Esto corrige las órdenes antiguas cuyo
    reparto quedó "congelado" con valores previos: el informe siempre refleja el
-   reparto por hectárea. Devuelve un objeto {filas, tHas, tAgua, tProd}. */
+   reparto por hectárea. El cálculo de agua/producto se hace SOLO sobre los
+   paños padre (con la superficie total padre+polinizantes); los polinizantes
+   hijos aparecen como filas informativas (rol:'polin', sin agua ni producto).
+   Devuelve un objeto {filas, tHas, tAgua, tProd}. */
 function _recalcDistribucionOrden(o){
   if(!o) return { filas:[], tHas:0, tAgua:0, tProd:0 };
   var mojT = parseFloat(o.mojT)||0;
@@ -16461,33 +16552,40 @@ function _recalcDistribucionOrden(o){
   var ids = (o.panoIds && o.panoIds.length) ? o.panoIds
             : (o.distribucion||[]).map(function(r){ return r.panoId; });
   var esFerti = (o.tipoApp==='Fertirriego');
+  function hasDeOrden(p){ return esFerti ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0); }
+  // Agrupar padre/polinizante usando los paños que aún existen en el catálogo;
+  // los que ya no existen se agregan aparte con los datos que quedaron
+  // guardados en o.distribucion (nombre, rol, superficie).
+  var idsVigentes = ids.filter(function(pid){ return !!getPano(pid); });
+  var idsFaltantes = ids.filter(function(pid){ return !getPano(pid); });
+  var nodos = _filasDistribucion(idsVigentes, hasDeOrden).map(function(f){
+    return { p:f.p, pid:f.p.id, has:f.has, rol:f.rol, datosP:null };
+  });
+  idsFaltantes.forEach(function(pid){
+    var datosP = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); }) || {};
+    nodos.push({ p:null, pid:pid, has:parseFloat(datosP.has)||0, rol:datosP.rol||'padre', datosP:datosP });
+  });
   var filas = []; var tHas=0,tAgua=0,tProd=0;
-  ids.forEach(function(pid){
-    var p = getPano(pid);
-    // hectáreas actuales (riego o plantadas según el tipo de aplicación)
-    var has = p ? (esFerti ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0)) : 0;
-    // respaldo: si el paño ya no existe, usar las há guardadas en la distribución
-    if((!p || has===0)){
-      var guardado = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); });
-      if(guardado && guardado.has>0) has = parseFloat(guardado.has)||0;
-    }
-    var agua = mojT * has;
+  nodos.forEach(function(nodo){
+    var esPolin = nodo.rol==='polin';
+    var has = nodo.has;
+    var agua = esPolin?0:(mojT*has);
     var prodsByPano = productos.map(function(ap){
       return { nombre:ap.nombre, unidad:ap.unidad, dosis:ap.dosis,
                unitS:(ap.unitS||unitBase(ap.unidad||'')),
-               qty:_calcProdQty(ap.dosis, ap.unidad, has, mojT) };
+               qty: esPolin?0:_calcProdQty(ap.dosis, ap.unidad, has, mojT) };
     });
-    var prodPrincipal = prodsByPano.length ? prodsByPano[0].qty : 0;
-    var datosP = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); }) || {};
+    var prodPrincipal = esPolin?0:(prodsByPano.length ? prodsByPano[0].qty : 0);
+    var datosP = nodo.datosP || {};
     filas.push({
-      panoId:pid,
-      panoNombre: (p&&p.nombre) || datosP.panoNombre || '—',
-      variedad: (p&&p.variedad) || datosP.variedad || '—',
-      anio: (p&&p.anio) || datosP.anio || '—',
-      color: (p&&p.color) || datosP.color || '#888',
-      has:has, agua:agua, prod:prodPrincipal, prods:prodsByPano
+      panoId:nodo.pid,
+      panoNombre: (nodo.p&&nodo.p.nombre) || datosP.panoNombre || '—',
+      variedad: (nodo.p&&nodo.p.variedad) || datosP.variedad || '—',
+      anio: (nodo.p&&nodo.p.anio) || datosP.anio || '—',
+      color: (nodo.p&&nodo.p.color) || datosP.color || '#888',
+      rol: nodo.rol, has:has, agua:agua, prod:prodPrincipal, prods:prodsByPano
     });
-    tHas+=has; tAgua+=agua; tProd+=prodPrincipal;
+    if(!esPolin){ tHas+=has; tAgua+=agua; tProd+=prodPrincipal; }
   });
   return { filas:filas, tHas:tHas, tAgua:tAgua, tProd:tProd };
 }
@@ -16512,7 +16610,10 @@ function emitirOrden(){
   err.style.display='none';
   var unidad=document.getElementById('cc-o-unidad').value;
   var unitS=unitBase(unidad);
-  var tHas=draftDist.reduce(function(s,r){ return s+r.has; },0);
+  // Los totales se calculan SOLO sobre filas padre: su "has" ya incluye la
+  // superficie de sus polinizantes hijos, así que sumar también los hijos
+  // duplicaría la superficie/producto.
+  var tHas=draftDist.reduce(function(s,r){ return s+(r.rol==='polin'?0:r.has); },0);
   var tAgua=draftDist.reduce(function(s,r){ return s+r.agua; },0);
   var tProd=draftDist.reduce(function(s,r){ return s+r.prod; },0);
   // Recolectar productos adicionales en la mezcla
@@ -16522,19 +16623,22 @@ function emitirOrden(){
     var dp = parseFloat(p.dosis)||0;
     if(p.nombre && p.nombre.trim() && dp>0){
       var us = unitBase(p.unidad);
-      var tot = draftDist.reduce(function(s,r){ return s + _calcProdQty(dp, p.unidad, r.has, parseFloat(document.getElementById('cc-o-mojt').value)||0); }, 0);
+      var tot = draftDist.reduce(function(s,r){ return s + (r.rol==='polin'?0:_calcProdQty(dp, p.unidad, r.has, parseFloat(document.getElementById('cc-o-mojt').value)||0)); }, 0);
       productos.push({nombre:p.nombre.trim(), dosis:dp, unidad:p.unidad, unitS:us, tProd:tot, margin:tot});
     }
   });
-  // Para cada paño en draftDist, también guardamos las cantidades de los productos adicionales
+  // Para cada paño en draftDist, también guardamos las cantidades de los productos adicionales.
+  // Las filas de polinizantes (rol:'polin') quedan en 0: son informativas, su
+  // superficie ya está sumada dentro del paño padre.
   var mojT_final = parseFloat(document.getElementById('cc-o-mojt').value)||0;
   var distribucion = draftDist.map(function(r){
+    var esPolin = r.rol==='polin';
     var prodsByPano = productos.map(function(ap){
-      return {nombre:ap.nombre, qty:_calcProdQty(ap.dosis, ap.unidad, r.has, mojT_final), unitS:ap.unitS, unidad:ap.unidad, dosis:ap.dosis};
+      return {nombre:ap.nombre, qty:esPolin?0:_calcProdQty(ap.dosis, ap.unidad, r.has, mojT_final), unitS:ap.unitS, unidad:ap.unidad, dosis:ap.dosis};
     });
     return {
       panoId:r.p&&r.p.id, panoNombre:r.p&&r.p.nombre, variedad:r.p&&r.p.variedad, anio:r.p&&r.p.anio, color:r.p&&r.p.color,
-      has:r.has, agua:r.agua, prod:r.prod, prods:prodsByPano
+      rol:r.rol, has:r.has, agua:r.agua, prod:r.prod, prods:prodsByPano
     };
   });
   var num='OA-'+String(S.oCounter).padStart(5,'0'); S.oCounter++;
@@ -16576,6 +16680,12 @@ function emitirOrden(){
     S.comprasUrgentes.unshift({ ordenId:orden.id, numero:num, fecha:fecha, items:faltantesOrden });
   }
   S.ordenes.unshift(orden); save(); renderHeader();
+  var msg = 'Orden '+num+' emitida.';
+  if(productos.length===1){
+    msg += ' Solicitar '+fmtQtyStr(orden.tProd,unitS,2)+' de '+prod+' a bodega.';
+  } else {
+    msg += ' Mezcla de '+productos.length+' productos. Ver detalle en la lista.';
+  }
   // Navigate immediately to show the emitted order
   showOSub('lista', document.getElementById('cc-ot2'));
   renderOrdenesList();
@@ -16583,12 +16693,8 @@ function emitirOrden(){
     var firstCard = document.querySelector('#cc-ordenes-list .cc-pano-c-body');
     if(firstCard) firstCard.style.display='block';
   }, 100);
-  var msg = 'Orden '+num+' emitida.';
-  if(productos.length===1){
-    msg += ' Solicitar '+fmtQtyStr(orden.tProd,unitS,2)+' de '+prod+' a bodega.';
-  } else {
-    msg += ' Mezcla de '+productos.length+' productos. Ver detalle en la lista.';
-  }
+  // Limpiar el formulario de "nueva orden" para dejarlo listo para la siguiente emisión.
+  limpiarOrden();
   showNotice(msg,'ok');
 }
 function limpiarOrden(){
@@ -16705,17 +16811,21 @@ function renderOrdenesList(){
           prods.map(function(ap){ return '<th>'+escapeHtml(ap.nombre||'Prod')+' ('+(ap.unitS||unitBase(ap.unidad||''))+')</th>'; }).join('')+
         '</tr></thead><tbody>'+
         (function(){ var _r=_recalcDistribucionOrden(o); return (_r.filas.length?_r.filas:(o.distribucion||[])); })().map(function(r){
+          var esPolin = r.rol==='polin';
           var prodCells;
-          if(r.prods && r.prods.length){
+          if(esPolin){
+            prodCells = prods.map(function(){ return '<td style="text-align:right;color:#bbb">—</td>'; }).join('');
+          } else if(r.prods && r.prods.length){
             prodCells = r.prods.map(function(rp){ return '<td style="text-align:right;font-weight:700">'+fmtQtyStr(rp.qty||0,(rp.unitS||unitBase(rp.unidad||'')),2)+'</td>'; }).join('');
           } else {
             prodCells = '<td style="text-align:right;font-weight:700">'+fmtQtyStr(r.prod||0,(prods[0].unitS||unitBase(prods[0].unidad||'')),2)+'</td>';
             for(var k=1;k<prods.length;k++) prodCells += '<td style="text-align:right;color:#bbb">—</td>';
           }
-          return '<tr><td><span class="cc-pano-tag"><span class="cc-pano-dot" style="background:'+(r.color||'#888')+'"></span>'+(r.panoNombre||'—')+'</span></td>'+
+          var polinNote = esPolin ? ' <span style="font-size:9px;color:#92600a">🐝 incl. en el padre</span>' : '';
+          return '<tr'+(esPolin?' style="color:#999"':'')+'><td><span class="cc-pano-tag"><span class="cc-pano-dot" style="background:'+(r.color||'#888')+'"></span>'+(r.panoNombre||'—')+polinNote+'</span></td>'+
             '<td style="font-style:italic;color:#888">'+(r.variedad||'—')+'</td><td>'+( r.anio||'—')+'</td>'+
             '<td style="text-align:right">'+fmtN(r.has||0,2)+' há</td>'+
-            '<td style="text-align:right">'+(r.agua>0?fmtN(r.agua,0)+' L':'—')+'</td>'+
+            '<td style="text-align:right">'+(!esPolin&&r.agua>0?fmtN(r.agua,0)+' L':'—')+'</td>'+
             prodCells +
             '</tr>';
         }).join('')+
@@ -16978,19 +17088,22 @@ function saveEditOrden(id){
   });
 
   var mojT = moj * vha;
-  // Recalcular distribución por paño y producto
-  var dist = selPanos.map(function(pid){
-    var p = (S.panos||[]).find(function(x){ return String(x.id)===String(pid); });
-    if(!p) return null;
-    var has = parseFloat(p.has)||0;
-    var agua = mojT * has;
-    var prodQty = _calcProdQty(prod0dosis, prod0uni, has, mojT);
+  // Recalcular distribución por paño y producto. Igual que en emisión: SOLO
+  // los paños padre reciben agua/producto, con la superficie total del grupo
+  // (padre + polinizantes); los polinizantes hijos quedan como fila
+  // informativa (rol:'polin', sin agua ni producto).
+  var esFertiEdit = (tipo==='Fertirriego');
+  function hasDeOrdenEdit(p){ return esFertiEdit ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0); }
+  var dist = _filasDistribucion(selPanos, hasDeOrdenEdit).map(function(f){
+    var p=f.p, has=f.has, esPolin=(f.rol==='polin');
+    var agua = esPolin?0:(mojT*has);
+    var prodQty = esPolin?0:_calcProdQty(prod0dosis, prod0uni, has, mojT);
     var prodsByPano = productos.map(function(ap){
-      return {nombre:ap.nombre, qty:_calcProdQty(ap.dosis, ap.unidad, has, mojT), unitS:ap.unitS, unidad:ap.unidad, dosis:ap.dosis};
+      return {nombre:ap.nombre, qty:esPolin?0:_calcProdQty(ap.dosis, ap.unidad, has, mojT), unitS:ap.unitS, unidad:ap.unidad, dosis:ap.dosis};
     });
-    return { panoId:p.id, panoNombre:p.nombre, variedad:p.variedad, anio:p.anio, color:p.color, has:has, agua:agua, prod:prodQty, prods:prodsByPano };
-  }).filter(function(x){ return x; });
-  var tHas = dist.reduce(function(s,r){ return s+r.has; }, 0);
+    return { panoId:p.id, panoNombre:p.nombre, variedad:p.variedad, anio:p.anio, color:p.color, rol:f.rol, has:has, agua:agua, prod:prodQty, prods:prodsByPano };
+  });
+  var tHas = dist.reduce(function(s,r){ return s+(r.rol==='polin'?0:r.has); }, 0);
   var tAgua = dist.reduce(function(s,r){ return s+r.agua; }, 0);
   var tProd = dist.reduce(function(s,r){ return s+r.prod; }, 0);
   // Calcular tProd y margin por producto
@@ -17071,6 +17184,30 @@ function cfPanosCubiertos(o){
     (c.panoIds||[]).forEach(function(pid){ s[pid]=true; });
   });
   return s;
+}
+
+// Distribución por paño de una confirmación: agua y producto realmente
+// aplicados en CADA paño (solo paños padre; los polinizantes hijos quedan
+// como fila informativa con 0, ya contabilizados en la superficie del padre).
+// Si la confirmación ya trae `distribucion` guardada (confirmaciones nuevas)
+// se usa tal cual; si no (confirmaciones antiguas) se reconstruye al vuelo
+// prorrateando aguaReal/productosReales según la superficie de cada padre.
+function _cfDistribucion(c){
+  if(c.distribucion && c.distribucion.length) return c.distribucion;
+  var o = (S.ordenes||[]).find(function(x){ return String(x.id)===String(c.ordenId); });
+  var esFerti = o && o.tipoApp==='Fertirriego';
+  function hasFn(p){ return esFerti ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0); }
+  var filas = _filasDistribucion(c.panoIds||[], hasFn);
+  var hasTotalPadres = filas.filter(function(f){ return f.rol==='padre'; }).reduce(function(s,f){ return s+f.has; },0);
+  return filas.map(function(f){
+    var esPolin = f.rol==='polin';
+    var frac = (!esPolin && hasTotalPadres>0) ? (f.has/hasTotalPadres) : 0;
+    var agua = esPolin?0:((parseFloat(c.aguaReal)||0)*frac);
+    var prods = (c.productosReales||[]).map(function(pr){
+      return {nombre:pr.nombre, unitS:pr.unitS||'', qty:esPolin?0:((parseFloat(pr.qtyAplicada)||0)*frac)};
+    });
+    return {panoId:f.p.id, panoNombre:f.p.nombre, variedad:f.p.variedad, anio:f.p.anio, color:f.p.color, rol:f.rol, has:f.has, agua:agua, prods:prods};
+  });
 }
 
 // Estado del formulario de confirmación
@@ -17383,9 +17520,14 @@ function cfGuardar(){
   });
   err.style.display='none';
 
+  // Folio propio de la confirmación (independiente del N° de orden), correlativo CA-#####.
+  if(!S.cCounter) S.cCounter = 1;
+  var folio = 'CA-'+String(S.cCounter).padStart(5,'0'); S.cCounter++;
+
   var now = new Date();
   var confirmacion = {
     id: Date.now(),
+    folio: folio,
     ordenId: o.id,
     ordenNumero: o.numero,
     fechaApp: fecha,
@@ -17405,21 +17547,34 @@ function cfGuardar(){
     creada: now.toISOString().slice(0,16).replace('T',' '),
     creadaPor: (typeof STATE!=='undefined' && STATE.user && STATE.user.usuario) ? STATE.user.usuario : ''
   };
+  // Detalle de la distribución real por paño (agua + producto aplicado en
+  // cada paño padre), para poder mostrarla e imprimirla con el detalle completo.
+  confirmacion.distribucion = _cfDistribucion(confirmacion);
   S.confirmaciones = S.confirmaciones || [];
   S.confirmaciones.unshift(confirmacion);
   save();
-  if(typeof showNotice==='function') showNotice('Confirmación registrada para '+o.numero+'.','ok');
+  if(typeof showNotice==='function') showNotice('Confirmación '+folio+' registrada para '+o.numero+'.','ok');
 
   // Recargar la vista (estado puede haber cambiado de Pendiente→Parcial→Completa)
   cfCargarDetalle(o.id);
 }
 
 function cfLimpiar(){
-  ['cc-cf-fecha','cc-cf-hini','cc-cf-hfin','cc-cf-op','cc-cf-eq','cc-cf-temp','cc-cf-hum','cc-cf-viento','cc-cf-clima','cc-cf-notas','cc-cf-agua'].forEach(function(id){
-    var el = document.getElementById(id);
-    if(el){ if(el.tagName==='SELECT') el.selectedIndex=0; else el.value=''; }
-  });
-  document.getElementById('cc-cf-err').style.display='none';
+  // Antes solo vaciaba los inputs de texto/número, dejando los chips de paño
+  // seleccionados y los montos "Aplicado (calculado)" con valores obsoletos
+  // (parecía que el botón "no hacía nada"). Ahora se reconstruye el formulario
+  // completo desde cero, igual que al cargar la orden por primera vez: reset
+  // de chips de paño, campos, agua planificada y recálculo de productos.
+  if(_cfOrdenActual){
+    cfCargarDetalle(_cfOrdenActual.id);
+  } else {
+    ['cc-cf-fecha','cc-cf-hini','cc-cf-hfin','cc-cf-op','cc-cf-eq','cc-cf-temp','cc-cf-hum','cc-cf-viento','cc-cf-clima','cc-cf-notas','cc-cf-agua'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){ if(el.tagName==='SELECT') el.selectedIndex=0; else el.value=''; }
+    });
+    var err = document.getElementById('cc-cf-err');
+    if(err) err.style.display='none';
+  }
 }
 
 function cfRefrescarLista(){
@@ -17446,14 +17601,39 @@ function cfRefrescarLista(){
     var prodsTxt = (c.productosReales||[]).map(function(pr){
       return '<div style="font-size:12px"><strong>'+escapeHtml(pr.nombre||'—')+':</strong> '+fmtN(pr.qtyAplicada||0,3)+' '+(pr.unitS||'')+' <span style="color:#888;font-size:11px">(plan: '+fmtN(pr.planeado||0,3)+' '+(pr.planeadoUS||'')+')</span></div>';
     }).join('');
+    // Detalle de distribución por paño (agua + producto aplicado en cada uno)
+    var dist = _cfDistribucion(c);
+    var distRows = dist.map(function(r){
+      var esPolin = r.rol==='polin';
+      var prodsCell = esPolin ? '—' : (r.prods||[]).map(function(p){ return escapeHtml(p.nombre||'—')+': '+fmtN(p.qty||0,3)+' '+(p.unitS||''); }).join(' · ');
+      return '<tr'+(esPolin?' style="color:#999"':'')+'>'+
+        '<td style="padding:4px 8px">'+escapeHtml(r.panoNombre||'—')+(esPolin?' <span style="font-size:9px;color:#92600a">🐝</span>':'')+'</td>'+
+        '<td style="padding:4px 8px;font-style:italic;color:#888">'+escapeHtml(r.variedad||'—')+'</td>'+
+        '<td style="padding:4px 8px;text-align:center">'+(r.anio||'—')+'</td>'+
+        '<td style="padding:4px 8px;text-align:right">'+fmtN(r.has||0,2)+'</td>'+
+        '<td style="padding:4px 8px;text-align:right">'+(!esPolin&&r.agua>0?fmtN(r.agua,0):'—')+'</td>'+
+        '<td style="padding:4px 8px">'+prodsCell+'</td>'+
+      '</tr>';
+    }).join('');
+    var distTable = dist.length ? (
+      '<div style="overflow-x:auto;margin-bottom:8px">'+
+      '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+        '<thead><tr style="background:#f0f4f8;color:#354a5f">'+
+          '<th style="padding:4px 8px;text-align:left">Paño</th><th style="padding:4px 8px;text-align:left">Variedad</th>'+
+          '<th style="padding:4px 8px">Año</th><th style="padding:4px 8px;text-align:right">Há</th>'+
+          '<th style="padding:4px 8px;text-align:right">Agua (L)</th><th style="padding:4px 8px;text-align:left">Producto aplicado</th>'+
+        '</tr></thead><tbody>'+distRows+'</tbody></table></div>'
+    ) : '';
     var revertBtn = canRevert ? '<button class="cc-btn cc-btn-r cc-btn-sm" onclick="cfEliminar(\''+c.id+'\')" title="Revertir confirmación">↩ Revertir</button>' : '';
+    var printBtn = '<button class="cc-btn cc-btn-sm" style="background:#fff;border:1px solid #0a6ed1;color:#0a6ed1" onclick="cfImprimirConfirmacion(\''+c.id+'\')" title="Imprimir confirmación">🖨 Imprimir</button>';
     return '<div style="background:#fff;border-left:3px solid #0a6ed1;border:1px solid #e5e5e5;border-radius:6px;padding:11px 14px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
         '<div>'+
           '<strong style="color:#354a5f;font-size:14px">✅ '+c.ordenNumero+'</strong>'+
+          (c.folio?' <span class="cc-badge" style="background:#eef3f8;color:#354a5f;font-size:10px;font-weight:700">'+c.folio+'</span>':'')+
           '<span class="cc-badge" style="background:#d1e8ff;color:#0a6ed1;font-size:10px;margin-left:8px">'+c.fechaApp+' · '+(c.turno||'')+'</span>'+
         '</div>'+
-        '<div style="display:flex;gap:6px">'+revertBtn+'</div>'+
+        '<div style="display:flex;gap:6px">'+printBtn+revertBtn+'</div>'+
       '</div>'+
       '<div style="font-size:12px;color:#555;margin-bottom:8px">'+
         '<strong>Operador:</strong> '+escapeHtml(c.operador||'—')+
@@ -17468,6 +17648,8 @@ function cfRefrescarLista(){
         prodsTxt +
         '<div style="font-size:12px;margin-top:3px"><strong>Agua aplicada:</strong> '+fmtN(c.aguaReal||0,0)+' L</div>'+
       '</div>'+
+      '<div style="font-weight:700;font-size:10px;text-transform:uppercase;color:#354a5f;margin-bottom:4px">Distribución por paño</div>'+
+      distTable +
       ((c.tempAmb!==null && c.tempAmb!==undefined)||c.humedad!==null||c.viento!==null||c.condClima ?
         '<div style="font-size:11px;color:#666;margin-bottom:6px"><strong>Clima:</strong> '+
           (c.tempAmb!==null&&c.tempAmb!==undefined?c.tempAmb+'°C':'') +
@@ -17479,6 +17661,73 @@ function cfRefrescarLista(){
       '<div style="font-size:10px;color:#888;text-align:right">Registrado '+(c.creada||'')+(c.creadaPor?' por '+c.creadaPor:'')+'</div>'+
     '</div>';
   }).join('');
+}
+
+// Genera el documento imprimible de una confirmación de aplicación (folio,
+// detalle por paño con agua y producto, condiciones ambientales, firma) y lo
+// muestra en el mismo modal de impresión que usan las órdenes (#cc-pm),
+// reutilizando su botón "🖨️ Imprimir / Guardar PDF" (ccPrintOrden).
+function cfImprimirConfirmacion(cid){
+  var c = (S.confirmaciones||[]).find(function(x){ return String(x.id)===String(cid); });
+  if(!c){ alert('Confirmación no encontrada.'); return; }
+  var o = (S.ordenes||[]).find(function(x){ return String(x.id)===String(c.ordenId); }) || {};
+  var dist = _cfDistribucion(c);
+  var empCfg = (STATE && STATE.cache && STATE.cache.config && STATE.cache.config.empresa) || {};
+  var empHeaderHtml = '';
+  if(empCfg.nombre || empCfg.logo){
+    empHeaderHtml = '<div style="display:flex;align-items:center;gap:14px;padding-bottom:10px;border-bottom:1px solid #ccc;margin-bottom:10px">'+
+      (empCfg.logo ? '<img src="'+empCfg.logo+'" alt="Logo" style="max-width:80px;max-height:60px;object-fit:contain">' : '')+
+      '<div style="flex:1">'+
+        (empCfg.nombre?'<div style="font-size:14px;font-weight:700;color:#354a5f">'+escapeHtml(empCfg.nombre)+'</div>':'')+
+        (empCfg.rut?'<div style="font-size:10px;color:#666">RUT: '+escapeHtml(empCfg.rut)+'</div>':'')+
+      '</div></div>';
+  }
+  var filas = dist.map(function(r){
+    var esPolin = r.rol==='polin';
+    var prodsCell = esPolin ? '-' : (r.prods||[]).map(function(p){ return escapeHtml(p.nombre||'-')+': <b>'+fmtN(p.qty||0,3)+' '+(p.unitS||'')+'</b>'; }).join('<br>');
+    return '<tr><td>'+escapeHtml(r.panoNombre||'-')+(esPolin?' <span style="font-size:9px;color:#92600a">(incluido en el padre)</span>':'')+'</td>'+
+      '<td style="font-style:italic;color:#555">'+escapeHtml(r.variedad||'-')+'</td>'+
+      '<td style="text-align:center">'+(r.anio||'-')+'</td>'+
+      '<td style="text-align:right">'+fmtN(r.has||0,2)+'</td>'+
+      '<td style="text-align:right">'+(!esPolin&&r.agua>0?fmtN(r.agua,0):'-')+'</td>'+
+      '<td>'+prodsCell+'</td></tr>';
+  }).join('');
+  var climaTxt = [
+    (c.tempAmb!==null&&c.tempAmb!==undefined?c.tempAmb+'°C':''),
+    (c.humedad!==null&&c.humedad!==undefined?c.humedad+'% HR':''),
+    (c.viento!==null&&c.viento!==undefined?c.viento+' km/h':''),
+    (c.condClima||'')
+  ].filter(Boolean).join(' · ');
+  var html = empHeaderHtml +
+    '<div class="cc-pm-hdr"><h1>CONFIRMACIÓN DE APLICACIÓN</h1>'+
+      '<div class="cc-sub">'+(c.folio||'-')+' · Orden '+(c.ordenNumero||'-')+' · '+(c.fechaApp||'-')+'</div></div>'+
+    '<div class="cc-pm-grid">'+
+      '<div class="cc-pm-fld"><div class="cc-l">Folio</div><div class="cc-v">'+(c.folio||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Orden</div><div class="cc-v">'+(c.ordenNumero||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Fecha</div><div class="cc-v">'+(c.fechaApp||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Turno</div><div class="cc-v">'+(c.turno||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Hora inicio / fin</div><div class="cc-v">'+(c.horaInicio||'-')+(c.horaFin?' → '+c.horaFin:'')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Operador</div><div class="cc-v">'+escapeHtml(c.operador||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Equipo</div><div class="cc-v">'+escapeHtml(c.equipo||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Tipo de aplicación</div><div class="cc-v">'+(o.tipoApp||'-')+'</div></div>'+
+      '<div class="cc-pm-fld"><div class="cc-l">Condiciones ambientales</div><div class="cc-v" style="font-size:11px">'+(climaTxt||'-')+'</div></div>'+
+    '</div>'+
+    '<h3 style="font-size:13px;color:#23303d;margin:14px 0 6px;border-left:3px solid #0854a0;padding-left:8px">Distribución por paño</h3>'+
+    '<table><thead><tr><th>Paño</th><th>Variedad</th><th>Año</th>'+
+      '<th style="text-align:right">Há</th><th style="text-align:right">Agua aplicada (L)</th><th>Producto aplicado</th>'+
+    '</tr></thead><tbody>'+filas+'</tbody>'+
+    '<tfoot><tr><td colspan="4"><strong>TOTAL</strong></td>'+
+      '<td style="text-align:right"><strong>'+fmtN(c.aguaReal||0,0)+'</strong></td><td></td></tr></tfoot></table>'+
+    (c.notas?'<div style="background:#fffefb;border:1px solid #ddd;border-left:3px solid #e9730c;border-radius:4px;padding:8px 11px;margin:10px 0;font-size:11px"><strong>Observaciones:</strong> '+escapeHtml(c.notas)+'</div>':'')+
+    '<div class="cc-pm-firma">'+
+      '<div class="cc-pm-fbox">Firma Operador<br><br><br>'+escapeHtml(c.operador||'_________________________')+'</div>'+
+      '<div class="cc-pm-fbox">Firma Responsable Técnico<br><br><br>'+(o.responsable?escapeHtml(o.responsable):'_________________________')+'</div>'+
+    '</div>'+
+    '<div style="font-size:10px;color:#888;margin-top:10px;text-align:right">Registrado '+(c.creada||'')+(c.creadaPor?' por '+escapeHtml(c.creadaPor):'')+'</div>';
+  document.getElementById('cc-pm-ttl').textContent = (c.folio||'Confirmación')+' - '+(c.ordenNumero||'')+' - '+(c.fechaApp||'');
+  document.getElementById('cc-pm-doc').innerHTML = html;
+  document.getElementById('cc-pm').classList.add('cc-act');
+  document.getElementById('cc-pm').scrollTop = 0;
 }
 
 function cfDesdeListado(ordenId){
@@ -17756,74 +18005,60 @@ function rpGenerarExcel(){
     XLSX.utils.book_append_sheet(wb, wsProd, 'Consumo por producto');
 
     // ─── HOJA 4: Consumo por paño ───
-    var panosData = {}; // pid -> {pano, aplicaciones, productos:{nombre->qty unitS}, agua}
+    // El agua y el producto de cada confirmación se reparten SOLO entre los
+    // paños padre (con la superficie total padre+polinizantes) mediante
+    // _cfDistribucion; los polinizantes hijos quedan fuera de este reporte de
+    // consumo porque su reparto ya está contabilizado dentro de su padre.
+    var panosData = {}; // pid -> {nombre, variedad, anio, hectareas, plantas, densidad, aplicaciones, agua, productos:{key->{nombre,unitS,qty}}}
     confs.forEach(function(c){
-      // Reparto PROPORCIONAL A LAS HECTÁREAS de cada paño (no en partes iguales).
-      // Se calcula la superficie de cada paño y el total, para prorratear el agua
-      // y el producto según el peso en hectáreas de cada uno.
-      var ids = c.panoIds || [];
-      var hasPorPano = {};
-      var haTotalConf = 0;
-      ids.forEach(function(pid){
-        var p = getPano(pid);
-        var ha = p ? (parseFloat(p.hectareas)||0) : 0;
-        hasPorPano[pid] = ha;
-        haTotalConf += ha;
-      });
-      var aguaRealConf = parseFloat(c.aguaReal||0)||0;
-      ids.forEach(function(pid){
-        var p = getPano(pid);
-        var ha = hasPorPano[pid] || 0;
-        // Fracción de este paño según sus hectáreas (si no hay há, repartir igual).
-        var frac = (haTotalConf>0) ? (ha/haTotalConf) : (ids.length ? 1/ids.length : 0);
-        if(!panosData[pid]){
-          panosData[pid] = {
-            pano: p,
-            nombre: p ? p.nombre : ('Paño '+pid),
-            variedad: p ? (p.variedad||'') : '',
-            anio: p ? (p.anio||'') : '',
-            hectareas: p ? (p.hectareas||0) : 0,
-            tipo: p ? (p.tipo||'Productivo') : 'Productivo',
+      var dist = _cfDistribucion(c);
+      dist.forEach(function(r){
+        if(r.rol==='polin') return;
+        var p = getPano(r.panoId);
+        if(!panosData[r.panoId]){
+          panosData[r.panoId] = {
+            nombre: r.panoNombre || (p&&p.nombre) || ('Paño '+r.panoId),
+            variedad: (p&&p.variedad) || r.variedad || '',
+            anio: (p&&p.anio) || r.anio || '',
+            hectareas: p ? (parseFloat(p.hectareas)||0) : (parseFloat(r.has)||0),
             plantas: p ? (p.plantas||0) : 0,
             densidad: p ? (p.densidad||0) : 0,
-            panoPadre: p ? (p.panoPadre||'') : '',
             aplicaciones: 0,
             agua: 0,
             productos: {}
           };
         }
-        panosData[pid].aplicaciones++;
-        // Agua proporcional a las hectáreas del paño
-        panosData[pid].agua += aguaRealConf * frac;
-        // Productos: cada paño recibe una porción proporcional a sus hectáreas
-        (c.productosReales||[]).forEach(function(pr){
+        panosData[r.panoId].aplicaciones++;
+        panosData[r.panoId].agua += parseFloat(r.agua)||0;
+        (r.prods||[]).forEach(function(pr){
           if(!pr.nombre) return;
           var key = pr.nombre + ' [' + (pr.unitS||'') + ']';
-          if(!panosData[pid].productos[key]){
-            panosData[pid].productos[key] = {nombre:pr.nombre, unitS:pr.unitS||'', qty:0};
+          if(!panosData[r.panoId].productos[key]){
+            panosData[r.panoId].productos[key] = {nombre:pr.nombre, unitS:pr.unitS||'', qty:0};
           }
-          panosData[pid].productos[key].qty += (parseFloat(pr.qtyAplicada||0)||0) * frac;
+          panosData[r.panoId].productos[key].qty += parseFloat(pr.qty)||0;
         });
       });
     });
     var panoRows = [[
-      'Pa\u00f1o','Tipo','Pa\u00f1o principal','Variedad','A\u00f1o plantaci\u00f3n','Hect\u00e1reas',
-      'N\u00b0 plantas','Densidad (pl/ha)','N\u00b0 aplicaciones','Agua aplicada (L)','Productos aplicados (resumen)'
+      'Pa\u00f1o','Variedad','A\u00f1o plantaci\u00f3n','Hect\u00e1reas','N\u00b0 plantas','Densidad (pl/ha)',
+      'N\u00b0 aplicaciones','Agua aplicada (L)',
+      'Producto 1','Cant 1','Producto 2','Cant 2','Producto 3','Cant 3','Producto 4','Cant 4'
     ]];
     Object.values(panosData).sort(function(a,b){ return b.aplicaciones-a.aplicaciones; }).forEach(function(pd){
-      var prodResumen = Object.values(pd.productos).map(function(p){
-        return p.nombre+': '+fmtN(p.qty,3)+' '+p.unitS;
-      }).join(' | ');
-      // Nombre del paño principal (si es polinizante)
-      var padreNombre = '';
-      if(pd.panoPadre){ var pad = getPano(pd.panoPadre); padreNombre = pad ? pad.nombre : ''; }
-      panoRows.push([
-        pd.nombre, pd.tipo, padreNombre, pd.variedad, pd.anio, parseFloat((pd.hectareas||0).toFixed(2)),
-        pd.plantas, pd.densidad, pd.aplicaciones, Math.round(pd.agua), prodResumen
-      ]);
+      var prods = Object.values(pd.productos);
+      if(prods.length>4){
+        console.warn('Consumo por pa\u00f1o: el pa\u00f1o "'+pd.nombre+'" tiene '+prods.length+' productos distintos aplicados; el Excel solo muestra los 4 primeros (Producto 1..4).');
+      }
+      var row = [pd.nombre, pd.variedad, pd.anio, parseFloat((pd.hectareas||0).toFixed(2)), pd.plantas, pd.densidad, pd.aplicaciones, Math.round(pd.agua)];
+      for(var i=0;i<4;i++){
+        if(prods[i]){ row.push(prods[i].nombre); row.push(fmtN(prods[i].qty,3)+' '+prods[i].unitS); }
+        else { row.push(''); row.push(''); }
+      }
+      panoRows.push(row);
     });
     var wsPano = XLSX.utils.aoa_to_sheet(panoRows);
-    wsPano['!cols'] = [{wch:18},{wch:12},{wch:18},{wch:16},{wch:13},{wch:11},{wch:11},{wch:14},{wch:14},{wch:16},{wch:55}];
+    wsPano['!cols'] = [{wch:18},{wch:16},{wch:13},{wch:11},{wch:11},{wch:14},{wch:14},{wch:16},{wch:20},{wch:14},{wch:20},{wch:14},{wch:20},{wch:14},{wch:20},{wch:14}];
     XLSX.utils.book_append_sheet(wb, wsPano, 'Consumo por pa\u00f1o');
 
     // Descargar
@@ -17868,8 +18103,11 @@ function openPM(id){
     var _distrib = _rec.filas.length ? _rec.filas : (o.distribucion||[]);
     // Filas de la tabla: una fila por paño con una columna por producto
     var filas=_distrib.map(function(r){
+      var esPolin = r.rol==='polin';
       var prodCells;
-      if(r.prods && r.prods.length){
+      if(esPolin){
+        prodCells = prods.map(function(){ return '<td style="text-align:right;color:#bbb">-</td>'; }).join('');
+      } else if(r.prods && r.prods.length){
         prodCells = r.prods.map(function(rp, idxP){
           // Convertir a la misma unidad que el header del total del producto
           var apUS = (prods[idxP] && (prods[idxP].unitS||unitBase(prods[idxP].unidad||''))) || rp.unitS || '';
@@ -17883,10 +18121,11 @@ function openPM(id){
         prodCells = '<td style="text-align:right;font-weight:700">'+fmtN(r.prod||0,3)+'</td>';
         for(var k=1;k<prods.length;k++) prodCells += '<td style="text-align:right;color:#bbb">-</td>';
       }
-      return '<tr><td>'+(r.panoNombre||'-')+'</td><td style="font-style:italic;color:#555">'+(r.variedad||'-')+'</td>'+
+      var polinNote = esPolin ? ' <span style="font-size:9px;color:#92600a">🐝 incluido en el padre</span>' : '';
+      return '<tr'+(esPolin?' style="color:#999"':'')+'><td>'+(r.panoNombre||'-')+polinNote+'</td><td style="font-style:italic;color:#555">'+(r.variedad||'-')+'</td>'+
         '<td style="text-align:center">'+(r.anio||'-')+'</td>'+
         '<td style="text-align:right">'+fmtN(r.has||0,2)+'</td>'+
-        '<td style="text-align:right">'+(r.agua>0?fmtN(r.agua,0):'-')+'</td>'+
+        '<td style="text-align:right">'+(!esPolin&&r.agua>0?fmtN(r.agua,0):'-')+'</td>'+
         prodCells + '</tr>';
     }).join('');
     var notasHtml = o.notas
@@ -18938,7 +19177,7 @@ function changeBackupFolder(){
 // ── Guardar en carpeta (si hay handle) o descargar normal ──
 function ccExportBackup(){
   var data = {version:2, app:'CuadernoCampo-Cerezos', fecha:new Date().toISOString(),
-    panos:S.panos, registros:S.registros, productos:S.productos, ordenes:S.ordenes, oCounter:S.oCounter};
+    panos:S.panos, registros:S.registros, productos:S.productos, ordenes:S.ordenes, oCounter:S.oCounter, cCounter:S.cCounter};
   var json = JSON.stringify(data, null, 2);
   var fname = 'CC_backup_'+today()+'.json';
 
@@ -19009,7 +19248,7 @@ function ccImportBackup(file){
       }
       S.panos=d.panos||[]; S.registros=d.registros||[];
       S.productos=d.productos||[]; S.ordenes=d.ordenes||[];
-      S.confirmaciones=d.confirmaciones||[]; S.oCounter=d.oCounter||1;
+      S.confirmaciones=d.confirmaciones||[]; S.oCounter=d.oCounter||1; S.cCounter=d.cCounter||1;
       if(!Array.isArray(S.confirmaciones)) S.confirmaciones = [];
       // Guardar local + subir a la nube
       try{ localStorage.setItem('cc_v2', JSON.stringify(S)); }catch(e){}
@@ -19121,6 +19360,7 @@ function startFromBackup(file){
       S.productos = d.productos || [];
       S.ordenes   = d.ordenes   || [];
       S.oCounter  = d.oCounter  || 1;
+      S.cCounter  = d.cCounter  || 1;
       save();
       localStorage.setItem(BK_KEY, d.fecha || new Date().toISOString());
       closeStartupModal();
