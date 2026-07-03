@@ -11516,6 +11516,81 @@ function ipImprimirMapaGeneral(){
 }
 try{ window.ipDetallePoliniz = ipDetallePoliniz; window.ipImprimirDetallePoliniz = ipImprimirDetallePoliniz; window.ipImprimirMapaGeneral = ipImprimirMapaGeneral; }catch(e){}
 
+/* Edición masiva del polinizante asociado a cada hilera (mapa general). */
+function ipEditarPolinizMasivo(){
+  var regs = _ipMapaGenRegs || [];
+  if(!regs.length){ toast('Sin datos','No hay hileras en el mapa','error'); return; }
+  var vars = ipVariedadesLista();
+  var opts = function(sel){
+    return '<option value="">— Sin polinizante —</option>'+vars.map(function(v){
+      return '<option value="'+escapeHtml(v)+'"'+(v===sel?' selected':'')+'>'+escapeHtml(v)+'</option>';
+    }).join('');
+  };
+  var rows='';
+  regs.slice().sort(function(a,b){
+    var c=(a.cuartel||'').localeCompare(b.cuartel||''); if(c) return c;
+    return (parseInt(String(a.hilera).replace(/[^0-9]/g,''))||0)-(parseInt(String(b.hilera).replace(/[^0-9]/g,''))||0);
+  }).forEach(function(r){
+    var hil = String(r.codigoBase||('H'+r.hilera));
+    var m = hil.match(/H\d+$/i); var hilCorto = m?m[0].toUpperCase():hil;
+    var nPol = (r.plantas||[]).filter(function(p){return p&&p.tipo==='poliniz';}).length;
+    rows += '<tr>'+
+      '<td style="padding:6px 8px;font-size:13px">'+escapeHtml(r.cuartel||'—')+'</td>'+
+      '<td style="padding:6px 8px;font-size:13px;font-weight:700;color:#1a5288">'+escapeHtml(hilCorto)+'</td>'+
+      '<td style="padding:6px 8px;font-size:12px;color:#7a8794">'+nPol+'</td>'+
+      '<td style="padding:6px 8px"><select class="ip-pol-sel" data-id="'+escapeHtml(r.id)+'" style="width:100%;padding:8px;border:1px solid #ccd;border-radius:7px;font-size:13px">'+opts(r.polinizante||'')+'</select></td>'+
+    '</tr>';
+  });
+  var prev=document.getElementById('ip-polmasivo-modal'); if(prev) prev.remove();
+  var modal=document.createElement('div');
+  modal.id='ip-polmasivo-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10003;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:12px;max-width:620px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="background:#e9730c;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-size:17px;font-weight:800">🐝 Cambiar polinizante por hilera</div>'+
+          '<div style="font-size:12px;opacity:.9">'+regs.length+' hilera(s) · el cambio aplica a todas las plantas polinizantes de la hilera</div></div>'+
+        '<button onclick="document.getElementById(\'ip-polmasivo-modal\').remove()" style="background:rgba(255,255,255,.25);border:none;color:#fff;font-size:24px;cursor:pointer;width:40px;height:40px;border-radius:8px">×</button>'+
+      '</div>'+
+      '<div style="padding:12px 18px;overflow:auto;flex:1">'+
+        '<table style="width:100%;border-collapse:collapse">'+
+          '<thead><tr style="border-bottom:2px solid #e3e8ee;text-align:left"><th style="padding:6px 8px;font-size:12px;color:#7a8794">Cuartel</th><th style="padding:6px 8px;font-size:12px;color:#7a8794">Hilera</th><th style="padding:6px 8px;font-size:12px;color:#7a8794">N° poliniz.</th><th style="padding:6px 8px;font-size:12px;color:#7a8794">Variedad polinizante</th></tr></thead>'+
+          '<tbody>'+rows+'</tbody>'+
+        '</table>'+
+      '</div>'+
+      '<div style="padding:12px 18px;border-top:1px solid #e3e8ee;display:flex;gap:10px;justify-content:flex-end">'+
+        '<button onclick="document.getElementById(\'ip-polmasivo-modal\').remove()" style="padding:11px 16px;border:none;border-radius:9px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:700">Cancelar</button>'+
+        '<button onclick="ipGuardarPolinizMasivo()" style="padding:11px 18px;border:none;border-radius:9px;background:#1a7e3e;color:#fff;cursor:pointer;font-size:14px;font-weight:700">💾 Guardar cambios</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+async function ipGuardarPolinizMasivo(){
+  var sels=document.querySelectorAll('#ip-polmasivo-modal .ip-pol-sel');
+  var cambios=0;
+  for(var i=0;i<sels.length;i++){
+    var id=sels[i].getAttribute('data-id');
+    var val=sels[i].value;
+    var r=(STATE.cache.invplantas||[]).find(function(x){return String(x.id)===String(id);});
+    if(!r || (r.polinizante||'')===val) continue;
+    r.polinizante=val;
+    r.sincronizado=false;
+    try{ await dbPut('invplantas',r); cambios++; }catch(e){}
+  }
+  document.getElementById('ip-polmasivo-modal').remove();
+  if(cambios){
+    STATE.cache.invplantas=await dbAll('invplantas');
+    toast('Guardado',cambios+' hilera(s) actualizada(s)','success');
+    // Refrescar el mapa con los nuevos colores
+    var mg=document.getElementById('ip-mapagen-modal');
+    if(mg){ mg.remove(); ipMostrarMapaGeneral(); }
+  } else {
+    toast('Sin cambios','No se modificó ninguna hilera','info');
+  }
+}
+try{ window.ipEditarPolinizMasivo = ipEditarPolinizMasivo; window.ipGuardarPolinizMasivo = ipGuardarPolinizMasivo; }catch(e){}
+
 function ipMostrarMapaGeneral(){
   _ipMapZoom = 100; // reiniciar zoom al abrir
   var seleccionados = [];
@@ -11537,6 +11612,7 @@ function ipMostrarMapaGeneral(){
     '<div><div style="font-size:18px;font-weight:800">🗺️ Mapa general del huerto</div>'+
       '<div style="font-size:12px;opacity:.85">'+seleccionados.length+' cuartel(es) · '+regs.length+' hilera(s)</div></div>'+
     '<div style="display:flex;align-items:center;gap:8px">'+
+      '<button onclick="ipEditarPolinizMasivo()" title="Cambiar polinizante por hilera" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;height:44px;padding:0 14px;border-radius:8px">🐝 Polinizantes</button>'+
       '<button onclick="ipImprimirMapaGeneral()" title="Imprimir en carta" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;height:44px;padding:0 14px;border-radius:8px">🖨️ Imprimir</button>'+
       '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.12);border-radius:10px;padding:3px">'+
         '<button onclick="ipMapZoom(-1)" title="Reducir" style="background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;cursor:pointer;width:38px;height:38px;border-radius:8px;line-height:1">−</button>'+
