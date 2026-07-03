@@ -209,7 +209,7 @@ export const NAV: readonly NavSection[] = [
         icon: BarChart3,
         href: "/presupuesto",
         perm: "presupuesto.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },
