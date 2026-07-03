@@ -11403,7 +11403,7 @@ function ipDetallePoliniz(){
   var porVariedad = {}; var total = 0;
   regs.forEach(function(r){
     (r.plantas||[]).forEach(function(p){
-      if(!p || (p.tipo!=='poliniz' && !p.polinizante)) return;
+      if(!p || p.tipo!=='poliniz') return;
       var vp = p.polinizante || r.polinizante || 'Sin variedad';
       var cuartel = r.cuartel || '—';
       var hilera = r.codigoBase || ('H'+r.hilera);
@@ -11642,7 +11642,7 @@ function ipMostrarMapaGeneral(){
       if(conteoEstados[est]===undefined) conteoEstados[est] = 0;
       conteoEstados[est]++;
       totalPlantas++;
-      if(p && (p.tipo==='poliniz' || p.polinizante)){
+      if(p && p.tipo==='poliniz'){
         var vp = p.polinizante || r.polinizante || 'Sin variedad';
         conteoPoliniz[vp] = (conteoPoliniz[vp]||0)+1;
         totalPoliniz++;
@@ -11771,7 +11771,7 @@ function ipRenderCuartelSVG(cuartel, hileras){
       // a la izquierda; las siguientes hacia la derecha. (Eje vertical: H1 arriba.)
       var cx = xIzq + (pi*anchoPlanta + anchoPlanta/2);
       var e = IP_ESTADOS[p.estado]||IP_ESTADOS.sano;
-      var esPoliniz = (p.tipo==='poliniz' || !!p.polinizante);
+      var esPoliniz = (p.tipo==='poliniz');
       var varPol = esPoliniz ? (p.polinizante || h.polinizante) : '';
       var fill = esPoliniz ? ipColorPoliniz(varPol) : e.color;
       var esInicio = (pi===0 && gpsIni);
@@ -11913,7 +11913,11 @@ function ipEditCampoPlanta(idx, campo, val){
   if(campo==='tipo'){ p._nuevoTipo = val; }
   else if(campo==='estado'){ p._nuevoEstado = val; }
   else if(campo==='portainjerto'){ p._nuevoPorta = val; }
-  else if(campo==='polinizante'){ p._nuevoPoliniz = val; }
+  else if(campo==='polinizante'){
+    p._nuevoPoliniz = val;
+    // Asignar una variedad polinizante convierte la planta en polinizante
+    if(val){ p._nuevoTipo = 'poliniz'; }
+  }
 }
 
 function ipEditEliminarPlanta(idx){
