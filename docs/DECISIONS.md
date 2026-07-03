@@ -87,3 +87,9 @@ Registro de decisiones de arquitectura (Architecture Decision Records). Una entr
 **Contexto**: shadcn/ui no es una librería instalable sino componentes copiados al repo, construidos sobre Tailwind CSS + Radix UI.
 **Decisión**: Usar shadcn/ui como base de componentes; implica Tailwind por debajo (van juntos). Los componentes viven en `src/shared/ui/` bajo control del repo.
 **Consecuencias**: Sin dependencia de una librería de estilos externa monolítica; máximo control y personalización de los ~236 estilos del monolito original.
+
+## ADR-014 — recharts + shadcn `chart` como capa de gráficos
+**Fecha**: 2026-07-02 · **Estado**: aceptada (Fase 9)
+**Contexto**: El monolito usa Chart.js. La Fase 9 (Presupuesto) es el primer módulo con gráficos (evolución mensual, por tipo/sub-grupo/descripción, desviación). El SPEC ya listaba **recharts** como la librería de gráficos.
+**Decisión**: Usar **recharts** (3.8.0) vía el componente vendored `src/components/ui/chart.tsx` de shadcn (`ChartContainer`/`ChartTooltip`/`ChartTooltipContent`), instalado con `pnpm dlx shadcn add chart`. Los datos de cada serie se computan en `src/utils/presupuesto.utils.ts` (puro, testeado); los componentes de gráfico solo pintan. `chart.tsx`/`tabs.tsx` son vendored → pueden usar `function` (excepción de la regla 1).
+**Consecuencias**: +recharts en `dependencies`. El bundle del cliente crece (SW precache ~2557 KiB). Los futuros dashboards reutilizan `ChartContainer`. Verificado con React 19.2 / Next 16.2.9 (build verde).
