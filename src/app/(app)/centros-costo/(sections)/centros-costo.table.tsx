@@ -2,7 +2,9 @@
 
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import { ExportarExcel } from "@/components/ui/exportar-excel"
 import type { CentroCosto } from "@/schemas/centros-costo.schema"
+import { exportarCentrosCostoExcel } from "@/server/centros-costo/centros-costo.actions"
 import { buildCentrosCostoColumns } from "./centros-costo.columns"
 import { CentroCostoForm } from "./centros-costo.form"
 
@@ -27,6 +29,7 @@ export const CentrosCostoTable = ({
         <DataTableToolbar
           table={table}
           placeholder="Buscar código, descripción o área…"
+          acciones={<ExportarExcel action={exportarCentrosCostoExcel} />}
           nuevo={puedeCrear && <CentroCostoForm areas={areas} />}
         />
       )}

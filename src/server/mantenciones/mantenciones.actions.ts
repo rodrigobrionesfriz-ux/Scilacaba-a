@@ -1,7 +1,6 @@
 "use server"
 
 import { asc, eq } from "drizzle-orm"
-import ExcelJS from "exceljs"
 import { revalidatePath } from "next/cache"
 import {
   ESTADO_ABIERTA,
@@ -32,7 +31,9 @@ import {
   siguienteNumeroOT,
 } from "@/server/mantenciones/mantenciones.core"
 import { getMantenciones } from "@/server/mantenciones/mantenciones.queries"
+import { construirExcel } from "@/lib/xlsx"
 import type { ActionResult } from "@/types/action.types"
+import type { ExportResult } from "@/types/export.types"
 import {
   calcularTotalOT,
   construirObservacionFactura,
@@ -41,10 +42,6 @@ import {
 } from "@/utils/mantenciones.utils"
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-type ExportResult =
-  | { ok: true; base64: string; filename: string }
-  | { ok: false; error: string }
 
 const RUTA = "/mantenciones"
 
@@ -381,46 +378,45 @@ export const exportarMantencionesExcel = async (): Promise<ExportResult> => {
     )
     .orderBy(asc(maintenanceOrders.numero), asc(maintenanceOrderLines.id))
 
-  const libro = new ExcelJS.Workbook()
-  const hojaOT = libro.addWorksheet("Órdenes de Trabajo")
-  hojaOT.columns = [
-    { header: "N° OT", key: "numero", width: 14 },
-    { header: "Fecha", key: "fecha", width: 12 },
-    { header: "Categoría", key: "categoria", width: 22 },
-    { header: "Activo", key: "activo", width: 24 },
-    { header: "Descripción", key: "descripcion", width: 30 },
-    { header: "Proveedor", key: "proveedorNombre", width: 24 },
-    { header: "Total", key: "total", width: 14 },
-    { header: "Estado", key: "estado", width: 12 },
-    { header: "N° Factura", key: "numeroDoc", width: 14 },
-  ]
-  hojaOT.addRows(rows)
-
-  const hojaDet = libro.addWorksheet("Detalle líneas")
-  hojaDet.columns = [
-    { header: "N° OT", key: "numeroOT", width: 14 },
-    { header: "Tipo", key: "tipo", width: 18 },
-    { header: "Detalle", key: "detalle", width: 32 },
-    { header: "Cantidad", key: "cantidad", width: 12 },
-    { header: "Valor Unit", key: "valorUnit", width: 14 },
-    { header: "Subtotal", key: "subtotal", width: 14 },
-  ]
-  hojaDet.addRows(
-    lineasRaw.map((l) => {
-      const cantidad = Number(l.cantidad)
-      const valorUnit = Number(l.valorUnit)
-      return {
-        numeroOT: l.numeroOT,
-        tipo: l.tipo ?? "",
-        detalle: l.detalle || l.productoNombre || "",
-        cantidad,
-        valorUnit,
-        subtotal: cantidad * valorUnit,
-      }
-    }),
-  )
-
-  const buffer = await libro.xlsx.writeBuffer()
-  const base64 = Buffer.from(buffer).toString("base64")
+  const base64 = await construirExcel([
+    {
+      nombre: "Órdenes de Trabajo",
+      columnas: [
+        { header: "N° OT", key: "numero", width: 14 },
+        { header: "Fecha", key: "fecha", width: 12 },
+        { header: "Categoría", key: "categoria", width: 22 },
+        { header: "Activo", key: "activo", width: 24 },
+        { header: "Descripción", key: "descripcion", width: 30 },
+        { header: "Proveedor", key: "proveedorNombre", width: 24 },
+        { header: "Total", key: "total", width: 14 },
+        { header: "Estado", key: "estado", width: 12 },
+        { header: "N° Factura", key: "numeroDoc", width: 14 },
+      ],
+      filas: rows,
+    },
+    {
+      nombre: "Detalle líneas",
+      columnas: [
+        { header: "N° OT", key: "numeroOT", width: 14 },
+        { header: "Tipo", key: "tipo", width: 18 },
+        { header: "Detalle", key: "detalle", width: 32 },
+        { header: "Cantidad", key: "cantidad", width: 12 },
+        { header: "Valor Unit", key: "valorUnit", width: 14 },
+        { header: "Subtotal", key: "subtotal", width: 14 },
+      ],
+      filas: lineasRaw.map((l) => {
+        const cantidad = Number(l.cantidad)
+        const valorUnit = Number(l.valorUnit)
+        return {
+          numeroOT: l.numeroOT,
+          tipo: l.tipo ?? "",
+          detalle: l.detalle || l.productoNombre || "",
+          cantidad,
+          valorUnit,
+          subtotal: cantidad * valorUnit,
+        }
+      }),
+    },
+  ])
   return { ok: true, base64, filename: "mantenciones.xlsx" }
 }

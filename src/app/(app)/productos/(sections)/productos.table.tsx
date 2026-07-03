@@ -2,6 +2,8 @@
 
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import { ExportarExcel } from "@/components/ui/exportar-excel"
+import { exportarProductosExcel } from "@/server/productos/productos.actions"
 import type { Group, ProductType } from "@/types/catalogos.types"
 import type { ProductoRow } from "@/types/productos.types"
 import type { StockResumenProducto } from "@/types/stock.types"
@@ -41,6 +43,7 @@ export const ProductosTable = ({
         <DataTableToolbar
           table={table}
           placeholder="Buscar código, EAN o descripción…"
+          acciones={<ExportarExcel action={exportarProductosExcel} />}
           nuevo={puedeCrear && <ProductoForm tipos={tipos} grupos={grupos} />}
         />
       )}

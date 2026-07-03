@@ -5,9 +5,12 @@ import { revalidatePath } from "next/cache"
 import { COUNTER_PRODUCTO } from "@/constants/productos.constants"
 import { db } from "@/db/client"
 import { counters, movementLines, products } from "@/db/schema"
+import { construirExcel } from "@/lib/xlsx"
 import { type Producto, productoSchema } from "@/schemas/productos.schema"
 import { requirePermiso } from "@/server/auth/auth.queries"
+import { getProductos } from "@/server/productos/productos.queries"
 import type { ActionResult } from "@/types/action.types"
+import type { ExportResult } from "@/types/export.types"
 import { formatCodigoProducto } from "@/utils/productos.utils"
 
 // Correlativo de código interno: incremento atómico del counter "PRODUCTO".
@@ -119,4 +122,33 @@ export const eliminarProducto = async (
   await db.delete(products).where(eq(products.codigoInterno, codigoInterno))
   revalidatePath("/productos")
   return { ok: true }
+}
+
+// Exporta el catálogo de productos a Excel (generado en el servidor, SPEC).
+export const exportarProductosExcel = async (): Promise<ExportResult> => {
+  await requirePermiso("productos.ver")
+  const productos = await getProductos()
+  const base64 = await construirExcel([
+    {
+      nombre: "Productos",
+      columnas: [
+        { header: "Código", key: "codigoInterno", width: 14 },
+        { header: "Descripción", key: "descripcion", width: 36 },
+        { header: "U.M.", key: "unidadMedida", width: 10 },
+        { header: "Tipo", key: "tipoProducto", width: 18 },
+        { header: "Grupo", key: "grupo", width: 18 },
+        { header: "Sub-grupo", key: "subGrupo", width: 18 },
+        { header: "EAN", key: "codigoEan", width: 16 },
+        { header: "Inventariable", key: "inventariable", width: 14 },
+        { header: "Stock mínimo", key: "stockMinimo", width: 14 },
+        { header: "Activo", key: "activo", width: 10 },
+      ],
+      filas: productos.map((p) => ({
+        ...p,
+        inventariable: p.inventariable ? "Sí" : "No",
+        activo: p.activo ? "Sí" : "No",
+      })),
+    },
+  ])
+  return { ok: true, base64, filename: "productos.xlsx" }
 }
