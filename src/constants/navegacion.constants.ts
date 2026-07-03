@@ -167,7 +167,7 @@ export const NAV: readonly NavSection[] = [
         icon: Wrench,
         href: "/mantenciones",
         perm: "mantenciones.ver",
-        disponible: false,
+        disponible: true,
       },
     ],
   },

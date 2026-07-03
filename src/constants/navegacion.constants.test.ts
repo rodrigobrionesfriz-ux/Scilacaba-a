@@ -24,7 +24,7 @@ describe("NAV", () => {
     // Fase 2: dashboard. Fase 3: maestros. Fase 4: stock + movimientos.
     // Fase 5: tomas de inventario. Fase 6a: cuaderno de campo.
     // Fase 7a: conteos en terreno. Fase 7b: inventario de huerto.
-    // Fase 7c: estimación de cosecha.
+    // Fase 7c: estimación de cosecha. Fase 8: servicio y mantención.
     expect([...disponibles].sort()).toEqual(
       [
         "dashboard",
@@ -42,6 +42,7 @@ describe("NAV", () => {
         "conteos",
         "invplantas",
         "estimacion",
+        "mantenciones",
       ].sort(),
     )
   })

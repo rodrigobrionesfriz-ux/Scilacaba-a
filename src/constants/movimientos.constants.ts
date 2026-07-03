@@ -7,6 +7,8 @@ export const TRASPASO_BODEGA = "TRASPASO BODEGA"
 export const DEVOLUCION_PROVEEDOR = "DEVOLUCION PROVEEDOR"
 export const CONSUMO_CC = "CONSUMO CC"
 export const DEVOLUCION_CC = "DEVOLUCION CC"
+// Generado por la facturación de Mantenciones (no se crea manualmente en el form).
+export const SERVICIO_MANTENCION = "SERVICIO/MANTENCION"
 
 export const TIPOS_MOV_ENT = [
   COMPRA,
@@ -14,6 +16,7 @@ export const TIPOS_MOV_ENT = [
   DEVOLUCION_CC,
   "TOMA INVENTARIO ENT",
   "MUESTRA GRATIS",
+  SERVICIO_MANTENCION,
 ]
 
 export const TIPOS_MOV_SAL = [
@@ -37,6 +40,7 @@ export const PREFIJO_MOV: Record<string, string> = {
   MERMA: "MER",
   [DEVOLUCION_PROVEEDOR]: "DEV",
   "TOMA INVENTARIO SAL": "TIS",
+  [SERVICIO_MANTENCION]: "SERV",
 }
 
 // Tipos que exigen proveedor / cliente / centro de costo (validación condicional).
