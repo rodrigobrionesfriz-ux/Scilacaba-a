@@ -11404,7 +11404,7 @@ function ipDetallePoliniz(){
   regs.forEach(function(r){
     (r.plantas||[]).forEach(function(p){
       if(!p || p.tipo!=='poliniz') return;
-      var vp = r.polinizante || 'Sin variedad';
+      var vp = p.polinizante || r.polinizante || 'Sin variedad';
       var cuartel = r.cuartel || '—';
       var hilera = r.codigoBase || ('H'+r.hilera);
       var mHil = String(hilera).match(/H\d+$/i);
@@ -11518,6 +11518,7 @@ try{ window.ipDetallePoliniz = ipDetallePoliniz; window.ipImprimirDetallePoliniz
 
 /* Edición masiva del polinizante asociado a cada hilera (mapa general). */
 function ipEditarPolinizMasivo(){
+  if(!STATE.user || STATE.user.role!=='admin'){ toast('Sin permiso','Solo el administrador puede editar polinizantes','error'); return; }
   var regs = _ipMapaGenRegs || [];
   if(!regs.length){ toast('Sin datos','No hay hileras en el mapa','error'); return; }
   var vars = ipVariedadesLista();
@@ -11575,6 +11576,8 @@ async function ipGuardarPolinizMasivo(){
     var r=(STATE.cache.invplantas||[]).find(function(x){return String(x.id)===String(id);});
     if(!r || (r.polinizante||'')===val) continue;
     r.polinizante=val;
+    // Propagar a las plantas polinizantes (el mapa prioriza el valor por planta)
+    (r.plantas||[]).forEach(function(p){ if(p && p.tipo==='poliniz') p.polinizante=val; });
     r.sincronizado=false;
     try{ await dbPut('invplantas',r); cambios++; }catch(e){}
   }
@@ -11612,7 +11615,7 @@ function ipMostrarMapaGeneral(){
     '<div><div style="font-size:18px;font-weight:800">🗺️ Mapa general del huerto</div>'+
       '<div style="font-size:12px;opacity:.85">'+seleccionados.length+' cuartel(es) · '+regs.length+' hilera(s)</div></div>'+
     '<div style="display:flex;align-items:center;gap:8px">'+
-      '<button onclick="ipEditarPolinizMasivo()" title="Cambiar polinizante por hilera" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;height:44px;padding:0 14px;border-radius:8px">🐝 Polinizantes</button>'+
+      (STATE.user && STATE.user.role==='admin' ? '<button onclick="ipEditarPolinizMasivo()" title="Cambiar polinizante por hilera" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;height:44px;padding:0 14px;border-radius:8px">🐝 Polinizantes</button>' : '')+
       '<button onclick="ipImprimirMapaGeneral()" title="Imprimir en carta" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;height:44px;padding:0 14px;border-radius:8px">🖨️ Imprimir</button>'+
       '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.12);border-radius:10px;padding:3px">'+
         '<button onclick="ipMapZoom(-1)" title="Reducir" style="background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;cursor:pointer;width:38px;height:38px;border-radius:8px;line-height:1">−</button>'+
@@ -11640,7 +11643,7 @@ function ipMostrarMapaGeneral(){
       conteoEstados[est]++;
       totalPlantas++;
       if(p && p.tipo==='poliniz'){
-        var vp = r.polinizante || 'Sin variedad';
+        var vp = p.polinizante || r.polinizante || 'Sin variedad';
         conteoPoliniz[vp] = (conteoPoliniz[vp]||0)+1;
         totalPoliniz++;
       }
@@ -11769,7 +11772,8 @@ function ipRenderCuartelSVG(cuartel, hileras){
       var cx = xIzq + (pi*anchoPlanta + anchoPlanta/2);
       var e = IP_ESTADOS[p.estado]||IP_ESTADOS.sano;
       var esPoliniz = (p.tipo==='poliniz');
-      var fill = esPoliniz ? ipColorPoliniz(h.polinizante) : e.color;
+      var varPol = esPoliniz ? (p.polinizante || h.polinizante) : '';
+      var fill = esPoliniz ? ipColorPoliniz(varPol) : e.color;
       var esInicio = (pi===0 && gpsIni);
       var esFin = (pi===ultIdx && gpsFin && ultIdx>0);
       var stroke = esPoliniz ? '#000' : 'rgba(0,0,0,.45)';
@@ -11778,7 +11782,7 @@ function ipRenderCuartelSVG(cuartel, hileras){
       if(esInicio){ link='onclick="ipAbrirMapaPunto('+gpsIni.lat+','+gpsIni.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🟢 INICIO (toque para Google Maps)'; }
       else if(esFin){ link='onclick="ipAbrirMapaPunto('+gpsFin.lat+','+gpsFin.lng+')"'; cursor='cursor:pointer'; stroke='#1565c0'; sw=3; extraTitle=' · 🔴 FIN (toque para Google Maps)'; }
       var r = (esInicio||esFin) ? 8.5 : 7.5;
-      svg += '<circle cx="'+cx+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'" '+link+' style="'+cursor+'"><title>'+escapeHtml(p.codigo)+(esPoliniz?' · 🐝 '+escapeHtml(h.polinizante||'Polinizante'):'')+' · '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:'')+extraTitle+'</title></circle>';
+      svg += '<circle cx="'+cx+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'" '+link+' style="'+cursor+'"><title>'+escapeHtml(p.codigo)+(esPoliniz?' · 🐝 '+escapeHtml(varPol||'Polinizante'):'')+' · '+(IP_ESTADOS[p.estado]?IP_ESTADOS[p.estado].label:'')+extraTitle+'</title></circle>';
       if(esInicio){ svg += '<text x="'+cx+'" y="'+(y-11)+'" fill="#1565c0" font-size="8" font-weight="700" text-anchor="middle">▶</text>'; }
       else if(esFin){ svg += '<text x="'+cx+'" y="'+(y-11)+'" fill="#1565c0" font-size="8" font-weight="700" text-anchor="middle">■</text>'; }
     });
