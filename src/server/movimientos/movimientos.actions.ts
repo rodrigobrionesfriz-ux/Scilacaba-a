@@ -4,11 +4,14 @@ import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
 import { movementLines, movements } from "@/db/schema"
+import { construirExcel } from "@/lib/xlsx"
 import { movimientoSchema } from "@/schemas/movimientos.schema"
 import { getUsuarioActual, requirePermiso } from "@/server/auth/auth.queries"
 import { insertarMovimiento } from "@/server/inventario/inventario.core"
 import { recalcularStockScoped } from "@/server/inventario/inventario.recalc"
+import { getMovimientos } from "@/server/movimientos/movimientos.queries"
 import type { ActionResult } from "@/types/action.types"
+import type { ExportResult } from "@/types/export.types"
 
 // Revalida las rutas que dependen de stock/movimientos (incluye las columnas de
 // stock diferidas en los maestros Productos y Bodegas).
@@ -101,4 +104,33 @@ export const anularMovimiento = async (
 
   revalidar()
   return { ok: true }
+}
+
+// Exporta el libro de movimientos a Excel (generado en el servidor, SPEC).
+export const exportarMovimientosExcel = async (): Promise<ExportResult> => {
+  await requirePermiso("movimientos.ver")
+  const movimientos = await getMovimientos()
+  const base64 = await construirExcel([
+    {
+      nombre: "Movimientos",
+      columnas: [
+        { header: "N°", key: "numero", width: 16 },
+        { header: "Fecha", key: "fecha", width: 20 },
+        { header: "Dirección", key: "direccion", width: 12 },
+        { header: "Tipo", key: "tipoMovimiento", width: 24 },
+        { header: "Bodega", key: "bodega", width: 22 },
+        { header: "Bodega destino", key: "bodegaDestino", width: 22 },
+        { header: "Contraparte", key: "contraparte", width: 26 },
+        { header: "Líneas", key: "totalLineas", width: 10 },
+        { header: "Valor", key: "valor", width: 16 },
+        { header: "Usuario", key: "usuario", width: 18 },
+        { header: "Anulado", key: "anulado", width: 10 },
+      ],
+      filas: movimientos.map((m) => ({
+        ...m,
+        anulado: m.anulado ? "Sí" : "No",
+      })),
+    },
+  ])
+  return { ok: true, base64, filename: "movimientos.xlsx" }
 }

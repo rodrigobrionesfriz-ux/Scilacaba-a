@@ -1,15 +1,16 @@
+import { ExportarExcel } from "@/components/ui/exportar-excel"
 import {
   MANTENCIONES_SUBTITLE,
   MANTENCIONES_TITLE,
 } from "@/constants/mantenciones.constants"
 import { getUsuarioActual } from "@/server/auth/auth.queries"
+import { exportarMantencionesExcel } from "@/server/mantenciones/mantenciones.actions"
 import {
   getMantenciones,
   getProductosServicio,
 } from "@/server/mantenciones/mantenciones.queries"
 import { getProveedores } from "@/server/proveedores/proveedores.queries"
 import { can } from "@/utils/permisos.utils"
-import { MantencionesExport } from "./mantenciones.export"
 import { MantencionesKpis } from "./mantenciones.kpis"
 import { MantencionesTable } from "./mantenciones.table"
 
@@ -28,7 +29,7 @@ export const MantencionesView = async () => {
           <h1 className="text-2xl font-bold">{MANTENCIONES_TITLE}</h1>
           <p className="text-muted-foreground">{MANTENCIONES_SUBTITLE}</p>
         </div>
-        <MantencionesExport />
+        <ExportarExcel action={exportarMantencionesExcel} />
       </header>
       <MantencionesKpis kpis={kpis} />
       <MantencionesTable

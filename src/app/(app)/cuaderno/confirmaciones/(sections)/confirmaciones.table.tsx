@@ -2,6 +2,8 @@
 
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import { ExportarPdf } from "@/components/ui/exportar-pdf"
+import { exportarAplicacionesConfirmadasPdf } from "@/server/reportes/reportes.actions"
 import type { ConfirmacionRow } from "@/types/ordenes.types"
 import { buildConfirmacionesColumns } from "./confirmaciones.columns"
 
@@ -26,6 +28,7 @@ export const ConfirmacionesTable = ({
           table={table}
           placeholder="Buscar por orden u operador…"
           mostrarEstado={false}
+          acciones={<ExportarPdf action={exportarAplicacionesConfirmadasPdf} />}
         />
       )}
     />

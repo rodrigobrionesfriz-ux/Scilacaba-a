@@ -1,6 +1,8 @@
+import { ExportarPdf } from "@/components/ui/exportar-pdf"
 import { getUsuarioActual, requirePermiso } from "@/server/auth/auth.queries"
 import { getInvplantas } from "@/server/invplantas/invplantas.queries"
 import { getPanos } from "@/server/panos/panos.queries"
+import { exportarResumenInvplantasPdf } from "@/server/reportes/reportes.actions"
 import type { CuartelOpcion } from "@/types/invplantas.types"
 import { can } from "@/utils/permisos.utils"
 import { InvplantasCapture } from "./invplantas.capture"
@@ -36,7 +38,10 @@ export const InvplantasView = async () => {
       {puedeRevisar && (
         <>
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">Resumen por cuartel</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Resumen por cuartel</h2>
+              <ExportarPdf action={exportarResumenInvplantasPdf} />
+            </div>
             <InvplantasResumen
               filas={filas}
               cuarteles={cuarteles}

@@ -26,6 +26,7 @@ import { PresupuestoChartMensual } from "./presupuesto.chart-mensual"
 import { PresupuestoChartSubgrupo } from "./presupuesto.chart-subgrupo"
 import { PresupuestoChartTipo } from "./presupuesto.chart-tipo"
 import { PresupuestoDetalleModal } from "./presupuesto.detalle-modal"
+import { PresupuestoExportarPdf } from "./presupuesto.exportar-pdf"
 import { PresupuestoFiltros } from "./presupuesto.filtros"
 import { PresupuestoKpis } from "./presupuesto.kpis"
 import { PresupuestoTopDesviaciones } from "./presupuesto.top-desviaciones"
@@ -99,6 +100,10 @@ export const PresupuestoDashboard = ({
 
   return (
     <div className="flex flex-col gap-6 pt-4">
+      <div className="flex justify-end">
+        <PresupuestoExportarPdf moneda={moneda} filtros={filtros} />
+      </div>
+
       <PresupuestoFiltros
         opciones={opciones}
         filtros={filtros}

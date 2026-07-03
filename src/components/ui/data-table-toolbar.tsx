@@ -13,13 +13,15 @@ import {
 import { FILTRO_ESTADO } from "@/constants/maestros.constants"
 
 // Toolbar estándar de las tablas de maestros: buscador global + filtro por estado
-// (activo) + slot para el botón "Nuevo". Reutilizable por las 5 entidades.
+// (activo) + slot para el botón "Nuevo" y para acciones extra (p. ej. exportar).
+// Reutilizable por las 5 entidades.
 type DataTableToolbarProps<TData> = {
   table: Table<TData>
   placeholder?: string
   estadoColumnId?: string
   mostrarEstado?: boolean
   nuevo?: ReactNode
+  acciones?: ReactNode
 }
 
 export const DataTableToolbar = <TData,>({
@@ -28,6 +30,7 @@ export const DataTableToolbar = <TData,>({
   estadoColumnId = "activo",
   mostrarEstado = true,
   nuevo,
+  acciones,
 }: DataTableToolbarProps<TData>) => {
   const [busqueda, setBusqueda] = useState("")
   const [estado, setEstado] = useState("todos")
@@ -69,7 +72,10 @@ export const DataTableToolbar = <TData,>({
           </Select>
         )}
       </div>
-      {nuevo}
+      <div className="flex items-center gap-2">
+        {acciones}
+        {nuevo}
+      </div>
     </div>
   )
 }

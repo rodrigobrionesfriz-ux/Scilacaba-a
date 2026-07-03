@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
 import { counters, inventoryCountLines, inventoryCounts } from "@/db/schema"
+import { construirExcel } from "@/lib/xlsx"
 import {
   ESTADO_APLICADA,
   ESTADO_DEVUELTA,
@@ -26,8 +27,10 @@ import {
   getStockParaToma,
   getToma,
   getTomaEnCursoDeUsuario,
+  getTomas,
 } from "@/server/tomas/tomas.queries"
 import type { ActionResult } from "@/types/action.types"
+import type { ExportResult } from "@/types/export.types"
 import { formatNumeroMovimiento } from "@/utils/movimientos.utils"
 import { calcularAjustes } from "@/utils/tomas.utils"
 
@@ -370,4 +373,28 @@ export const rechazarToma = async (input: unknown): Promise<ActionResult> => {
 
   revalidar(parsed.data.countId)
   return { ok: true }
+}
+
+// Exporta el listado de tomas de inventario a Excel (generado en el servidor).
+export const exportarTomasExcel = async (): Promise<ExportResult> => {
+  await requirePermiso("tomas.ver")
+  const tomas = await getTomas()
+  const base64 = await construirExcel([
+    {
+      nombre: "Tomas de inventario",
+      columnas: [
+        { header: "N°", key: "numero", width: 16 },
+        { header: "Bodega", key: "bodega", width: 24 },
+        { header: "Estado", key: "estado", width: 22 },
+        { header: "Alcance", key: "alcance", width: 14 },
+        { header: "Usuario", key: "usuario", width: 18 },
+        { header: "Líneas", key: "totalLineas", width: 10 },
+        { header: "Conteadas", key: "conteadas", width: 12 },
+        { header: "Con diferencia", key: "conDiferencia", width: 14 },
+        { header: "Creada", key: "creadoAt", width: 20 },
+      ],
+      filas: tomas,
+    },
+  ])
+  return { ok: true, base64, filename: "tomas.xlsx" }
 }

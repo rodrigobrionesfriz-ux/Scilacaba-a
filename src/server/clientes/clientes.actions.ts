@@ -4,9 +4,12 @@ import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/db/client"
 import { customers } from "@/db/schema"
+import { construirExcel } from "@/lib/xlsx"
 import { type Cliente, clienteSchema } from "@/schemas/clientes.schema"
 import { requirePermiso } from "@/server/auth/auth.queries"
+import { getClientes } from "@/server/clientes/clientes.queries"
 import type { ActionResult } from "@/types/action.types"
+import type { ExportResult } from "@/types/export.types"
 import { rutValido } from "@/utils/rut.utils"
 
 const aColumnas = (data: Cliente) => ({
@@ -56,4 +59,30 @@ export const editarCliente = async (
     .where(eq(customers.codigo, codigo))
   revalidatePath("/clientes")
   return { ok: true }
+}
+
+// Exporta los clientes a Excel (generado en el servidor, SPEC).
+export const exportarClientesExcel = async (): Promise<ExportResult> => {
+  await requirePermiso("clientes.ver")
+  const clientes = await getClientes()
+  const base64 = await construirExcel([
+    {
+      nombre: "Clientes",
+      columnas: [
+        { header: "Código", key: "codigo", width: 14 },
+        { header: "Razón social", key: "razonSocial", width: 32 },
+        { header: "RUT", key: "rut", width: 14 },
+        { header: "Giro", key: "giro", width: 24 },
+        { header: "Dirección", key: "direccion", width: 30 },
+        { header: "Comuna", key: "comuna", width: 18 },
+        { header: "Ciudad", key: "ciudad", width: 18 },
+        { header: "Teléfono", key: "telefono", width: 16 },
+        { header: "Email", key: "email", width: 26 },
+        { header: "Contacto", key: "contacto", width: 22 },
+        { header: "Activo", key: "activo", width: 10 },
+      ],
+      filas: clientes.map((c) => ({ ...c, activo: c.activo ? "Sí" : "No" })),
+    },
+  ])
+  return { ok: true, base64, filename: "clientes.xlsx" }
 }
