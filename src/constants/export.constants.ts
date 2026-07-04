@@ -4,5 +4,7 @@ export const XLSX_MIME =
 
 export const PDF_MIME = "application/pdf"
 
+export const JSON_MIME = "application/json"
+
 // Razón social usada en la cabecera de los reportes PDF (verbatim del monolito).
 export const EMPRESA_NOMBRE = "Sociedad Agrícola y Forestal La Cabaña"

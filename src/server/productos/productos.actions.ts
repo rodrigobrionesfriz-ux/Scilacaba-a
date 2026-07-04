@@ -7,6 +7,7 @@ import { db } from "@/db/client"
 import { counters, movementLines, products } from "@/db/schema"
 import { construirExcel } from "@/lib/xlsx"
 import { type Producto, productoSchema } from "@/schemas/productos.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getProductos } from "@/server/productos/productos.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -51,7 +52,7 @@ const aColumnas = (data: Producto) => ({
 })
 
 export const crearProducto = async (input: unknown): Promise<ActionResult> => {
-  await requirePermiso("productos.crear")
+  const usuario = await requirePermiso("productos.crear")
   const parsed = productoSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -64,6 +65,12 @@ export const crearProducto = async (input: unknown): Promise<ActionResult> => {
   }
   const codigoInterno = await generarCodigo()
   await db.insert(products).values({ codigoInterno, ...aColumnas(data) })
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "producto.crear",
+    detalle: data.descripcion,
+    referencia: codigoInterno,
+  })
   revalidatePath("/productos")
   return { ok: true }
 }
@@ -72,7 +79,7 @@ export const editarProducto = async (
   codigoInterno: string,
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("productos.crear")
+  const usuario = await requirePermiso("productos.crear")
   const parsed = productoSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -102,6 +109,12 @@ export const editarProducto = async (
     .update(products)
     .set({ ...aColumnas(data), modificadoAt: new Date() })
     .where(eq(products.codigoInterno, codigoInterno))
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "producto.editar",
+    detalle: data.descripcion,
+    referencia: codigoInterno,
+  })
   revalidatePath("/productos")
   return { ok: true }
 }

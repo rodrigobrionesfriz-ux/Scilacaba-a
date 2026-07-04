@@ -20,6 +20,7 @@ import {
   iniciarTomaSchema,
   motivoTomaSchema,
 } from "@/schemas/tomas.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { getUsuarioActual, requirePermiso } from "@/server/auth/auth.queries"
 import { insertarMovimiento } from "@/server/inventario/inventario.core"
 import { recalcularStockScoped } from "@/server/inventario/inventario.recalc"
@@ -79,6 +80,7 @@ export const iniciarToma = async (input: unknown): Promise<IniciarResult> => {
     return { ok: false, error: "No hay productos para inventariar con ese filtro" }
 
   const id = `toma_${crypto.randomUUID()}`
+  let numeroToma = ""
 
   try {
     await db.transaction(async (tx) => {
@@ -91,6 +93,7 @@ export const iniciarToma = async (input: unknown): Promise<IniciarResult> => {
         })
         .returning({ valor: counters.valor })
       const numero = formatNumeroMovimiento(PREFIJO_TOMA, counter.valor)
+      numeroToma = numero
 
       await tx.insert(inventoryCounts).values({
         id,
@@ -126,6 +129,12 @@ export const iniciarToma = async (input: unknown): Promise<IniciarResult> => {
     }
   }
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "toma.iniciar",
+    detalle: `Toma iniciada en bodega ${data.bodegaId}`,
+    referencia: numeroToma,
+  })
   revalidar(id)
   return { ok: true, id }
 }
@@ -222,6 +231,12 @@ export const cerrarToma = async (input: unknown): Promise<ActionResult> => {
       .where(eq(inventoryCounts.id, countId))
   })
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "toma.cerrar",
+    detalle: `Toma ${ctx.toma.numero} cerrada para autorización`,
+    referencia: ctx.toma.numero,
+  })
   revalidar(countId)
   return { ok: true }
 }
@@ -302,6 +317,12 @@ export const autorizarToma = async (countId: string): Promise<ActionResult> => {
     }
   }
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "toma.autorizar",
+    detalle: `Toma ${toma.numero} autorizada y aplicada`,
+    referencia: toma.numero,
+  })
   revalidar(countId)
   revalidarStock()
   return { ok: true }
@@ -343,6 +364,12 @@ export const devolverToma = async (input: unknown): Promise<ActionResult> => {
       .where(eq(inventoryCounts.id, parsed.data.countId))
   })
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "toma.devolver",
+    detalle: `Devuelta al operador. Motivo: ${parsed.data.motivo}`,
+    referencia: toma.numero,
+  })
   revalidar(parsed.data.countId)
   return { ok: true }
 }
@@ -371,6 +398,12 @@ export const rechazarToma = async (input: unknown): Promise<ActionResult> => {
     })
     .where(eq(inventoryCounts.id, parsed.data.countId))
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "toma.rechazar",
+    detalle: `Rechazada sin aplicar. Motivo: ${parsed.data.motivo}`,
+    referencia: toma.numero,
+  })
   revalidar(parsed.data.countId)
   return { ok: true }
 }

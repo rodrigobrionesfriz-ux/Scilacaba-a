@@ -45,3 +45,11 @@ export const requirePermiso = async (
   if (!can(usuario, permiso)) redirect("/dashboard")
   return usuario
 }
+
+// Guard: exige rol admin (para módulos adminOnly como Auditoría y el respaldo,
+// que no tienen permiso granular en el catálogo). Sin rol admin → dashboard.
+export const requireAdmin = async (): Promise<UsuarioActual> => {
+  const usuario = await requireAuth()
+  if (usuario.role !== "admin") redirect("/dashboard")
+  return usuario
+}

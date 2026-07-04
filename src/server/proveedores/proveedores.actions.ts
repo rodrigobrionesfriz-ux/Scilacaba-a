@@ -6,6 +6,7 @@ import { db } from "@/db/client"
 import { providers } from "@/db/schema"
 import { construirExcel } from "@/lib/xlsx"
 import { type Proveedor, proveedorSchema } from "@/schemas/proveedores.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getProveedores } from "@/server/proveedores/proveedores.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -26,7 +27,7 @@ const aColumnas = (data: Proveedor) => ({
 })
 
 export const crearProveedor = async (input: unknown): Promise<ActionResult> => {
-  await requirePermiso("proveedores.crear")
+  const usuario = await requirePermiso("proveedores.crear")
   const parsed = proveedorSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -38,6 +39,12 @@ export const crearProveedor = async (input: unknown): Promise<ActionResult> => {
   })
   if (existe) return { ok: false, error: "Ya existe un proveedor con ese código" }
   await db.insert(providers).values({ codigo: data.codigo, ...aColumnas(data) })
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "proveedor.crear",
+    detalle: data.razonSocial,
+    referencia: data.codigo,
+  })
   revalidatePath("/proveedores")
   return { ok: true }
 }
@@ -46,7 +53,7 @@ export const editarProveedor = async (
   codigo: string,
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("proveedores.crear")
+  const usuario = await requirePermiso("proveedores.crear")
   const parsed = proveedorSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -57,6 +64,12 @@ export const editarProveedor = async (
     .update(providers)
     .set({ ...aColumnas(data), modificadoAt: new Date() })
     .where(eq(providers.codigo, codigo))
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "proveedor.editar",
+    detalle: data.razonSocial,
+    referencia: codigo,
+  })
   revalidatePath("/proveedores")
   return { ok: true }
 }

@@ -222,7 +222,7 @@ export const NAV: readonly NavSection[] = [
         icon: UsersRound,
         href: "/usuarios",
         perm: "usuarios.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "config",
@@ -230,7 +230,7 @@ export const NAV: readonly NavSection[] = [
         icon: Settings,
         href: "/config",
         perm: "config.ver",
-        disponible: false,
+        disponible: true,
       },
       {
         id: "auditoria",
@@ -239,7 +239,7 @@ export const NAV: readonly NavSection[] = [
         href: "/auditoria",
         perm: null,
         adminOnly: true,
-        disponible: false,
+        disponible: true,
       },
     ],
   },
