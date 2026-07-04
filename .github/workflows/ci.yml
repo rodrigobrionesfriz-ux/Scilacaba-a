@@ -21,6 +21,11 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sci
+      # Placeholders para que la validación de entorno (src/lib/env.ts) no falle
+      # en `pnpm build` (Fase 12). CI no ejecuta la app; solo compila. El secret
+      # debe tener ≥32 chars y la URL ser válida para pasar el schema zod.
+      BETTER_AUTH_SECRET: ci-build-placeholder-secret-0123456789abcdef
+      BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
