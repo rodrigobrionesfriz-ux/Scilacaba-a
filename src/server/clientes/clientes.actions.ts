@@ -6,6 +6,7 @@ import { db } from "@/db/client"
 import { customers } from "@/db/schema"
 import { construirExcel } from "@/lib/xlsx"
 import { type Cliente, clienteSchema } from "@/schemas/clientes.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getClientes } from "@/server/clientes/clientes.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -26,7 +27,7 @@ const aColumnas = (data: Cliente) => ({
 })
 
 export const crearCliente = async (input: unknown): Promise<ActionResult> => {
-  await requirePermiso("clientes.crear")
+  const usuario = await requirePermiso("clientes.crear")
   const parsed = clienteSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -38,6 +39,12 @@ export const crearCliente = async (input: unknown): Promise<ActionResult> => {
   })
   if (existe) return { ok: false, error: "Ya existe un cliente con ese código" }
   await db.insert(customers).values({ codigo: data.codigo, ...aColumnas(data) })
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "cliente.crear",
+    detalle: data.razonSocial,
+    referencia: data.codigo,
+  })
   revalidatePath("/clientes")
   return { ok: true }
 }
@@ -46,7 +53,7 @@ export const editarCliente = async (
   codigo: string,
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("clientes.crear")
+  const usuario = await requirePermiso("clientes.crear")
   const parsed = clienteSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -57,6 +64,12 @@ export const editarCliente = async (
     .update(customers)
     .set({ ...aColumnas(data), modificadoAt: new Date() })
     .where(eq(customers.codigo, codigo))
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "cliente.editar",
+    detalle: data.razonSocial,
+    referencia: codigo,
+  })
   revalidatePath("/clientes")
   return { ok: true }
 }

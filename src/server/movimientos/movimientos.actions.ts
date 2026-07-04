@@ -6,6 +6,7 @@ import { db } from "@/db/client"
 import { movementLines, movements } from "@/db/schema"
 import { construirExcel } from "@/lib/xlsx"
 import { movimientoSchema } from "@/schemas/movimientos.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { getUsuarioActual, requirePermiso } from "@/server/auth/auth.queries"
 import { insertarMovimiento } from "@/server/inventario/inventario.core"
 import { recalcularStockScoped } from "@/server/inventario/inventario.recalc"
@@ -39,9 +40,10 @@ export const crearMovimiento = async (
 
   const codigos = [...new Set(data.lineas.map((l) => l.codigoInterno))]
 
+  let numero = ""
   try {
     await db.transaction(async (tx) => {
-      await insertarMovimiento(tx, {
+      numero = await insertarMovimiento(tx, {
         tipoMovimiento: data.tipoMovimiento,
         fecha: new Date(data.fecha),
         bodegaId: data.bodegaId,
@@ -70,6 +72,12 @@ export const crearMovimiento = async (
     }
   }
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "movimiento.crear",
+    detalle: data.tipoMovimiento,
+    referencia: numero,
+  })
   revalidar()
   return { ok: true }
 }
@@ -77,7 +85,7 @@ export const crearMovimiento = async (
 export const anularMovimiento = async (
   numero: string,
 ): Promise<ActionResult> => {
-  await requirePermiso("movimientos.anular")
+  const usuario = await requirePermiso("movimientos.anular")
 
   const mov = await db.query.movements.findFirst({
     where: eq(movements.numero, numero),
@@ -102,6 +110,12 @@ export const anularMovimiento = async (
     await recalcularStockScoped(tx, codigos)
   })
 
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "movimiento.anular",
+    detalle: "Movimiento anulado",
+    referencia: numero,
+  })
   revalidar()
   return { ok: true }
 }

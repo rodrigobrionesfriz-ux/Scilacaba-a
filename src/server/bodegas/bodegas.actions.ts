@@ -6,6 +6,7 @@ import { db } from "@/db/client"
 import { warehouses } from "@/db/schema"
 import { construirExcel } from "@/lib/xlsx"
 import { type Bodega, bodegaSchema } from "@/schemas/bodegas.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getBodegas } from "@/server/bodegas/bodegas.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -19,7 +20,7 @@ const aColumnas = (data: Bodega) => ({
 })
 
 export const crearBodega = async (input: unknown): Promise<ActionResult> => {
-  await requirePermiso("bodegas.crear")
+  const usuario = await requirePermiso("bodegas.crear")
   const parsed = bodegaSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -29,6 +30,12 @@ export const crearBodega = async (input: unknown): Promise<ActionResult> => {
   })
   if (existe) return { ok: false, error: "Ya existe una bodega con ese ID" }
   await db.insert(warehouses).values({ id: data.id, ...aColumnas(data) })
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "bodega.crear",
+    detalle: data.nombre,
+    referencia: data.id,
+  })
   revalidatePath("/bodegas")
   return { ok: true }
 }
@@ -37,11 +44,17 @@ export const editarBodega = async (
   id: string,
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("bodegas.crear")
+  const usuario = await requirePermiso("bodegas.crear")
   const parsed = bodegaSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
   await db.update(warehouses).set(aColumnas(parsed.data)).where(eq(warehouses.id, id))
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "bodega.editar",
+    detalle: parsed.data.nombre,
+    referencia: id,
+  })
   revalidatePath("/bodegas")
   return { ok: true }
 }

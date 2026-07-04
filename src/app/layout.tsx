@@ -1,6 +1,7 @@
 import { SerwistProvider } from "@serwist/turbopack/react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import { ThemeProvider } from "@/components/ui/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
@@ -22,16 +23,24 @@ export const metadata: Metadata = {
 const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
   <html
     lang="es"
+    suppressHydrationWarning
     className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
   >
     <body className="min-h-full flex flex-col">
-      <SerwistProvider
-        swUrl="/sw.js"
-        disable={process.env.NODE_ENV === "development"}
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
       >
-        {children}
-      </SerwistProvider>
-      <Toaster />
+        <SerwistProvider
+          swUrl="/sw.js"
+          disable={process.env.NODE_ENV === "development"}
+        >
+          {children}
+        </SerwistProvider>
+        <Toaster />
+      </ThemeProvider>
     </body>
   </html>
 )

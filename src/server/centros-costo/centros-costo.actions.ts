@@ -9,6 +9,7 @@ import {
   type CentroCosto,
   centroCostoSchema,
 } from "@/schemas/centros-costo.schema"
+import { registrarAuditoria } from "@/server/audit/audit.core"
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getCentrosCosto } from "@/server/centros-costo/centros-costo.queries"
 import type { ActionResult } from "@/types/action.types"
@@ -25,7 +26,7 @@ const aColumnas = (data: CentroCosto) => ({
 export const crearCentroCosto = async (
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("centrosCosto.crear")
+  const usuario = await requirePermiso("centrosCosto.crear")
   const parsed = centroCostoSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -36,6 +37,12 @@ export const crearCentroCosto = async (
   if (existe)
     return { ok: false, error: "Ya existe un centro de costo con ese código" }
   await db.insert(costCenters).values({ codigo: data.codigo, ...aColumnas(data) })
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "centroCosto.crear",
+    detalle: data.descripcion,
+    referencia: data.codigo,
+  })
   revalidatePath("/centros-costo")
   return { ok: true }
 }
@@ -44,7 +51,7 @@ export const editarCentroCosto = async (
   codigo: string,
   input: unknown,
 ): Promise<ActionResult> => {
-  await requirePermiso("centrosCosto.crear")
+  const usuario = await requirePermiso("centrosCosto.crear")
   const parsed = centroCostoSchema.safeParse(input)
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" }
@@ -52,6 +59,12 @@ export const editarCentroCosto = async (
     .update(costCenters)
     .set({ ...aColumnas(parsed.data), modificadoAt: new Date() })
     .where(eq(costCenters.codigo, codigo))
+  await registrarAuditoria({
+    usuario: usuario.id,
+    accion: "centroCosto.editar",
+    detalle: parsed.data.descripcion,
+    referencia: codigo,
+  })
   revalidatePath("/centros-costo")
   return { ok: true }
 }
