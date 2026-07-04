@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   numeric,
   pgTable,
   serial,
@@ -46,27 +47,34 @@ export const inventoryCounts = pgTable("inventory_counts", {
 // Líneas de toma (¡el origen las llama `lineas`, no `detalles`!). Origen: inventoryCounts.lineas[]
 // Hijas de inventory_counts → delete+reinsert por padre (cascade), idempotente.
 // fisico es nullable (el origen permite '' = sin ingresar); fisicoIngresado marca si se ingresó.
-export const inventoryCountLines = pgTable("inventory_count_lines", {
-  id: serial("id").primaryKey(),
-  countId: text("count_id")
-    .notNull()
-    .references(() => inventoryCounts.id, { onDelete: "cascade" }),
-  codigoInterno: text("codigo_interno")
-    .notNull()
-    .references(() => products.codigoInterno),
-  descripcion: text("descripcion"),
-  unidadMedida: text("unidad_medida"),
-  manejaAtributos: boolean("maneja_atributos").notNull().default(false),
-  loteId: text("lote_id"),
-  lote: text("lote"),
-  fechaVenc: date("fecha_venc"),
-  teorico: numeric("teorico", { precision: 18, scale: 4 })
-    .notNull()
-    .default("0"),
-  costoTeorico: numeric("costo_teorico", { precision: 18, scale: 6 })
-    .notNull()
-    .default("0"),
-  fisico: numeric("fisico", { precision: 18, scale: 4 }),
-  fisicoIngresado: boolean("fisico_ingresado").notNull().default(false),
-  asumidoCero: boolean("asumido_cero").notNull().default(false),
-})
+export const inventoryCountLines = pgTable(
+  "inventory_count_lines",
+  {
+    id: serial("id").primaryKey(),
+    countId: text("count_id")
+      .notNull()
+      .references(() => inventoryCounts.id, { onDelete: "cascade" }),
+    codigoInterno: text("codigo_interno")
+      .notNull()
+      .references(() => products.codigoInterno),
+    descripcion: text("descripcion"),
+    unidadMedida: text("unidad_medida"),
+    manejaAtributos: boolean("maneja_atributos").notNull().default(false),
+    loteId: text("lote_id"),
+    lote: text("lote"),
+    fechaVenc: date("fecha_venc"),
+    teorico: numeric("teorico", { precision: 18, scale: 4 })
+      .notNull()
+      .default("0"),
+    costoTeorico: numeric("costo_teorico", { precision: 18, scale: 6 })
+      .notNull()
+      .default("0"),
+    fisico: numeric("fisico", { precision: 18, scale: 4 }),
+    fisicoIngresado: boolean("fisico_ingresado").notNull().default(false),
+    asumidoCero: boolean("asumido_cero").notNull().default(false),
+  },
+  (t) => [
+    // GROUP BY / WHERE / cascade por toma (getTomas, detalle). FK sin índice.
+    index("inventory_count_lines_count_id_idx").on(t.countId),
+  ],
+)

@@ -1,6 +1,10 @@
 import { asc, desc, eq } from "drizzle-orm"
 import { db } from "@/db/client"
-import { fertirriegoOrdenes, fertirriegoSectores, fieldProducts } from "@/db/schema"
+import {
+  fertirriegoOrdenes,
+  fertirriegoSectores,
+  fieldProducts,
+} from "@/db/schema"
 import { TIPOS_FR } from "@/constants/fertirriego.constants"
 import type { OafRow, ProductoFertRow } from "@/types/fertirriego.types"
 import { aAportes, aLineas } from "@/utils/fertirriego.utils"
@@ -41,14 +45,20 @@ const getSectoresMin = async (): Promise<Map<string, SectorMin>> => {
     })
     .from(fertirriegoSectores)
   return new Map(
-    rows.map((r) => [r.id, { nombre: r.nombre, ha: r.ha === null ? 0 : Number(r.ha) }]),
+    rows.map((r) => [
+      r.id,
+      { nombre: r.nombre, ha: r.ha === null ? 0 : Number(r.ha) },
+    ]),
   )
 }
 
 // Listado de OAF (más recientes primero) con nombres de sectores y há total.
 export const getOrdenesFert = async (): Promise<OafRow[]> => {
   const [rows, sectores] = await Promise.all([
-    db.select().from(fertirriegoOrdenes).orderBy(desc(fertirriegoOrdenes.creadoAt)),
+    db
+      .select()
+      .from(fertirriegoOrdenes)
+      .orderBy(desc(fertirriegoOrdenes.creadoAt)),
     getSectoresMin(),
   ])
   return rows.map((r) => mapearOaf(r, sectores))
@@ -56,11 +66,15 @@ export const getOrdenesFert = async (): Promise<OafRow[]> => {
 
 // Una OAF por id (para editar/ver detalle). null si no existe.
 export const getOrdenFert = async (id: string): Promise<OafRow | null> => {
-  const row = await db.query.fertirriegoOrdenes.findFirst({
-    where: eq(fertirriegoOrdenes.id, id),
-  })
+  // Los sectores no dependen del row → en paralelo (evita el waterfall).
+  const [row, sectores] = await Promise.all([
+    db.query.fertirriegoOrdenes.findFirst({
+      where: eq(fertirriegoOrdenes.id, id),
+    }),
+    getSectoresMin(),
+  ])
   if (!row) return null
-  return mapearOaf(row, await getSectoresMin())
+  return mapearOaf(row, sectores)
 }
 
 // Productos del catálogo aplicables a fertirriego (fertilizantes de suelo/enmiendas),
