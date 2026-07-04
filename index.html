@@ -1391,7 +1391,7 @@ label.cc-lbl{display:block;font-size:11px;font-weight:700;text-transform:upperca
             <div id="cc-o-obj-box"></div>
           </div>
           <div class="cc-g3" style="margin-top:10px">
-            <div class="cc-field"><label class="cc-lbl">Especie</label><input type="text" id="cc-o-esp" value="Cerezo (Prunus avium)"></div>
+            <div class="cc-field"><label class="cc-lbl">Especie</label><input type="text" id="cc-o-esp" value="Cerezo"></div>
             <div class="cc-field"><label class="cc-lbl">Responsable</label><input type="text" id="cc-o-resp" placeholder="Nombre del técnico"></div>
             <div class="cc-field"><label class="cc-lbl">Método</label>
               <select id="cc-o-met"><option value="">—</option><option>Aspersión foliar</option><option>Drench</option><option>Inyección al suelo</option><option>Aspersión al suelo</option><option>Pulverización</option></select>
@@ -16900,7 +16900,7 @@ function limpiarOrden(){
     var el=document.getElementById(id); if(!el) return;
     if(el.tagName==='SELECT') el.selectedIndex=0; else el.value='';
   });
-  document.getElementById('cc-o-esp').value='Cerezo (Prunus avium)';
+  document.getElementById('cc-o-esp').value='Cerezo';
   document.getElementById('cc-o-vha').value='1';
   document.getElementById('cc-o-mojt').value='';
   document.getElementById('cc-o-fecha').value=today();
