@@ -16876,6 +16876,8 @@ function emitirOrden(){
     S.comprasUrgentes.unshift({ ordenId:orden.id, numero:num, fecha:fecha, items:faltantesOrden });
   }
   S.ordenes.unshift(orden); save(); renderHeader();
+  // Limpiar el formulario para la próxima orden
+  limpiarOrden();
   // Navigate immediately to show the emitted order
   showOSub('lista', document.getElementById('cc-ot2'));
   renderOrdenesList();
@@ -17699,8 +17701,12 @@ function cfGuardar(){
   err.style.display='none';
 
   var now = new Date();
+  // Folio único correlativo (CF-0001, CF-0002, ...) con referencia a la orden
+  S.cfFolioSeq = (parseInt(S.cfFolioSeq)||0) + 1;
+  var folio = 'CF-' + String(S.cfFolioSeq).padStart(4,'0');
   var confirmacion = {
     id: Date.now(),
+    folio: folio,
     ordenId: o.id,
     ordenNumero: o.numero,
     fechaApp: fecha,
@@ -17737,6 +17743,66 @@ function cfLimpiar(){
   document.getElementById('cc-cf-err').style.display='none';
 }
 
+/* Formato de impresión de una confirmación de aplicación (carta). */
+function cfImprimir(id){
+  var c = (S.confirmaciones||[]).find(function(x){ return String(x.id)===String(id); });
+  if(!c){ showNotice('Confirmación no encontrada','err'); return; }
+  var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
+  var panosRows=(c.panoIds||[]).map(function(pid){
+    var p=getPano(pid); if(!p) return '';
+    return '<tr><td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(p.nombre||pid)+'</td>'+
+      '<td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(p.variedad||'—')+'</td>'+
+      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN(parseFloat(p.hectareas)||parseFloat(p.has_riego)||0,2)+'</td></tr>';
+  }).join('');
+  var prodsRows=(c.productosReales||[]).map(function(pr){
+    return '<tr><td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(pr.nombre||'—')+'</td>'+
+      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN(pr.planeado||0,3)+' '+escapeHtml(pr.planeadoUS||'')+'</td>'+
+      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right;font-weight:700">'+fmtN(pr.qtyAplicada||0,3)+' '+escapeHtml(pr.unitS||'')+'</td></tr>';
+  }).join('');
+  var clima=[];
+  if(c.tempAmb!=null) clima.push(c.tempAmb+' °C');
+  if(c.humedad!=null) clima.push(c.humedad+' % HR');
+  if(c.viento!=null) clima.push(c.viento+' km/h viento');
+  if(c.condClima) clima.push(escapeHtml(c.condClima));
+  var win=window.open('','_blank');
+  if(!win){ showNotice('Permita las ventanas emergentes para imprimir','err'); return; }
+  win.document.write(
+    '<html><head><title>'+escapeHtml(c.folio||('Confirmación '+c.id))+'</title><meta charset="utf-8"><style>'+
+    '@page{size:letter;margin:14mm}'+
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;padding:20px;max-width:760px;margin:0 auto;font-size:13px}'+
+    'h1{font-size:19px;margin:0} .sub{color:#6b7280;font-size:12px;margin-bottom:14px}'+
+    'table{border-collapse:collapse;width:100%;margin-bottom:12px} th{background:#f3f4f6;padding:5px 8px;border:1px solid #ccc;text-align:left;font-size:12px}'+
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:14px} .fld b{color:#354a5f}'+
+    '.firmas{display:flex;gap:40px;margin-top:50px} .firmas div{flex:1;border-top:1px solid #333;text-align:center;padding-top:6px;font-size:12px}'+
+    '@media print{button{display:none}}'+
+    '</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;align-items:start">'+
+      '<div><h1>✅ Confirmación de Aplicación</h1>'+
+      '<div class="sub">Sociedad Agrícola y Forestal La Cabaña · Cuaderno de Campo</div></div>'+
+      '<div style="text-align:right"><div style="font-size:17px;font-weight:800;color:#0a6ed1">'+escapeHtml(c.folio||('#'+c.id))+'</div>'+
+      '<div style="font-size:12px;color:#6b7280">Orden de aplicación: <strong>'+escapeHtml(String(c.ordenNumero||'—'))+'</strong></div></div>'+
+    '</div>'+
+    '<div class="grid">'+
+      '<div class="fld"><b>Fecha aplicación:</b> '+escapeHtml(c.fechaApp||'—')+(c.turno?' · '+escapeHtml(c.turno):'')+'</div>'+
+      '<div class="fld"><b>Horario:</b> '+escapeHtml(c.horaInicio||'—')+' a '+escapeHtml(c.horaFin||'—')+'</div>'+
+      '<div class="fld"><b>Operador:</b> '+escapeHtml(c.operador||'—')+'</div>'+
+      '<div class="fld"><b>Equipo:</b> '+escapeHtml(c.equipo||'—')+'</div>'+
+      '<div class="fld"><b>Condiciones:</b> '+(clima.length?clima.join(' · '):'—')+'</div>'+
+      '<div class="fld"><b>Agua aplicada:</b> '+fmtN(c.aguaReal||0,0)+' L</div>'+
+      (orden&&orden.metodo?'<div class="fld"><b>Método:</b> '+escapeHtml(orden.metodo)+'</div>':'')+
+      (orden&&orden.fenol?'<div class="fld"><b>Estado fenológico:</b> '+escapeHtml(orden.fenol)+'</div>':'')+
+    '</div>'+
+    '<h3 style="font-size:14px;margin:0 0 6px">Paños aplicados</h3>'+
+    '<table><thead><tr><th>Paño</th><th>Variedad</th><th style="text-align:right">Há</th></tr></thead><tbody>'+(panosRows||'<tr><td colspan="3" style="padding:5px 8px;border:1px solid #ccc;color:#888">—</td></tr>')+'</tbody></table>'+
+    '<h3 style="font-size:14px;margin:0 0 6px">Productos</h3>'+
+    '<table><thead><tr><th>Producto</th><th style="text-align:right">Planificado</th><th style="text-align:right">Aplicado</th></tr></thead><tbody>'+(prodsRows||'<tr><td colspan="3" style="padding:5px 8px;border:1px solid #ccc;color:#888">—</td></tr>')+'</tbody></table>'+
+    (c.observaciones?'<div style="font-size:12px"><b>Observaciones:</b> '+escapeHtml(c.observaciones)+'</div>':'')+
+    '<div class="firmas"><div>Operador</div><div>Responsable técnico</div></div>'+
+    '<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt>'+
+    '</body></html>'
+  );
+  win.document.close();
+}
 function cfRefrescarLista(){
   var listEl = document.getElementById('cc-cf-list');
   var sec = document.getElementById('cc-cf-list-section');
@@ -17762,13 +17828,14 @@ function cfRefrescarLista(){
       return '<div style="font-size:12px"><strong>'+escapeHtml(pr.nombre||'—')+':</strong> '+fmtN(pr.qtyAplicada||0,3)+' '+(pr.unitS||'')+' <span style="color:#888;font-size:11px">(plan: '+fmtN(pr.planeado||0,3)+' '+(pr.planeadoUS||'')+')</span></div>';
     }).join('');
     var revertBtn = canRevert ? '<button class="cc-btn cc-btn-r cc-btn-sm" onclick="cfEliminar(\''+c.id+'\')" title="Revertir confirmación">↩ Revertir</button>' : '';
+    var printBtn = '<button class="cc-btn cc-btn-sm" onclick="cfImprimir(\''+c.id+'\')" title="Imprimir confirmación">🖨️</button>';
     return '<div style="background:#fff;border-left:3px solid #0a6ed1;border:1px solid #e5e5e5;border-radius:6px;padding:11px 14px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
         '<div>'+
-          '<strong style="color:#354a5f;font-size:14px">✅ '+c.ordenNumero+'</strong>'+
+          '<strong style="color:#354a5f;font-size:14px">✅ '+escapeHtml(c.folio||('#'+c.id))+' · '+c.ordenNumero+'</strong>'+
           '<span class="cc-badge" style="background:#d1e8ff;color:#0a6ed1;font-size:10px;margin-left:8px">'+c.fechaApp+' · '+(c.turno||'')+'</span>'+
         '</div>'+
-        '<div style="display:flex;gap:6px">'+revertBtn+'</div>'+
+        '<div style="display:flex;gap:6px">'+printBtn+revertBtn+'</div>'+
       '</div>'+
       '<div style="font-size:12px;color:#555;margin-bottom:8px">'+
         '<strong>Operador:</strong> '+escapeHtml(c.operador||'—')+
@@ -18300,26 +18367,27 @@ function openPM(id){
         '<div class="cc-pm-fld"><div class="cc-l">Responsable</div><div class="cc-v">'+(o.responsable||'-')+'</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">H\u00e1 base ('+(isRiego?'riego':'plantadas')+')</div><div class="cc-v">'+fmtN(o.tHas||0,2)+' h\u00e1</div></div>'+
         '<div class="cc-pm-fld"><div class="cc-l">\ud83d\ude9c Equipo de aplicaci\u00f3n</div><div class="cc-v">'+(o.equipo?escapeHtml(o.equipo):'-')+(o.equipoCap>0?' ('+fmtN(o.equipoCap,0)+' L)':'')+'</div></div>'+
-        '<div class="cc-pm-fld"><div class="cc-l">N\u00b0 Estanques / Pipas</div><div class="cc-v">'+(function(){ var n=o.nEstanques||0; if((!n||n<=0)&&o.equipoCap>0&&o.tAgua>0){ n=Math.ceil(o.tAgua/o.equipoCap); } return (n>0)?n+' estanque(s)':'-'; })()+'</div></div>'+
+        '<div class="cc-pm-fld"><div class="cc-l">N\u00b0 Estanques</div><div class="cc-v">'+(function(){ var n=o.nEstanques||0; if((!n||n<=0)&&o.equipoCap>0&&o.tAgua>0){ n=Math.ceil(o.tAgua/o.equipoCap); } return (n>0)?n+' estanque(s)':'-'; })()+'</div></div>'+
       '</div>'+
       (function(){
-        // Cantidad de producto por pipa/estanque: total de cada producto ÷ N° estanques.
+        // Cantidad de producto por estanque: total de cada producto ÷ N° estanques.
+        // El N° de estanques se calcula con la capacidad del estanque del equipo.
         var cap = o.equipoCap||0;
         var aguaT = (_rec && _rec.tAgua) ? _rec.tAgua : (o.tAgua||0);
-        var nEst = o.nEstanques||0;
-        if((!nEst||nEst<=0) && cap>0 && aguaT>0){ nEst=Math.ceil(aguaT/cap); }
+        var nEst = 0;
+        if(cap>0 && aguaT>0){ nEst=Math.ceil(aguaT/cap); }
         if(!nEst || nEst<=0) return '';
-        var aguaPipa = nEst>0 ? aguaT/nEst : 0;
+        var aguaEst = aguaT/nEst;
         var filasP = prods.map(function(ap){
           var us = ap.unitS||unitBase(ap.unidad||'');
           var conv = fmtQtyAuto((ap.tProd||0)/nEst, us);
           return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #ddd;font-size:11px">'+
             '<div><strong>'+escapeHtml(ap.nombre||'-')+'</strong></div>'+
-            '<div style="font-weight:700;color:#354a5f">'+fmtN(conv.qty,3)+' '+conv.unit+' / pipa</div>'+
+            '<div style="font-weight:700;color:#354a5f">'+fmtN(conv.qty,3)+' '+conv.unit+' / estanque</div>'+
           '</div>';
         }).join('');
         return '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-left:3px solid #16a34a;border-radius:5px;padding:9px 12px;margin-bottom:12px">'+
-          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#15803d;margin-bottom:5px">\ud83d\ude9c Dosificaci\u00f3n por pipa ('+nEst+' pipa(s) de '+fmtN(cap,0)+' L · '+fmtN(aguaPipa,0)+' L agua/pipa)</div>'+
+          '<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#15803d;margin-bottom:5px">\ud83d\ude9c Dosificaci\u00f3n por estanque ('+nEst+' estanque(s) de '+fmtN(cap,0)+' L · '+fmtN(aguaEst,0)+' L agua/estanque)</div>'+
           filasP+
         '</div>';
       })()+
