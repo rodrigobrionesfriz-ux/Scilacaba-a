@@ -1,0 +1,10 @@
+# Nixpacks build (Fase 12, deploy Railway). Nixpacks instala corepack@0.24.1, que
+# crashea al arrancar pnpm sobre Node 24 (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING,
+# bug de corepack corregido en versiones nuevas). Sobrescribimos la fase de install
+# para actualizar corepack antes de instalar; el resto del plan lo maneja Nixpacks.
+[phases.install]
+cmds = [
+  "npm install -g corepack@latest",
+  "corepack enable",
+  "pnpm install --frozen-lockfile",
+]
