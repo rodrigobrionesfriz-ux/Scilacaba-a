@@ -4664,7 +4664,16 @@ function renderDashboard(c){
   const totalProd=STATE.cache.products.length;
   const totalBod=STATE.cache.warehouses.filter(w=>w.activo).length;
   const totalMov=STATE.cache.movements.filter(m=>!m.anulado).length;
-  const valorInv=STATE.cache.stock.reduce((s,x)=>s+(x.cantidad*x.costoPromedio||0),0);
+  const valorInv=STATE.cache.stock.reduce((s,x)=>{
+    const p=getProduct(x.codigoInterno);
+    if(p && p.inventariable===false) return s;
+    return s+(x.cantidad*x.costoPromedio||0);
+  },0);
+  const valorServ=STATE.cache.stock.reduce((s,x)=>{
+    const p=getProduct(x.codigoInterno);
+    if(!p || p.inventariable!==false) return s;
+    return s+(x.cantidad*x.costoPromedio||0);
+  },0);
   // Stock bajo: recorrer PRODUCTOS con stock mínimo definido y comparar su existencia total.
   // Incluye productos en 0 o sin registro en cache.stock (que antes quedaban fuera).
   const lowStock=(()=>{
@@ -4738,7 +4747,11 @@ function renderDashboard(c){
       <div class="stat-card gold">
         <div class="stat-label">Valor inventario</div>
         <div class="stat-value">${fmtMon(valorInv)}</div>
-        <div class="stat-sub">a costo PPP</div>
+        <div class="stat-sub">inventariables · a costo PPP</div>
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.08)">
+          <div class="stat-label">Servicios</div>
+          <div style="font-size:16px;font-weight:800">${fmtMon(valorServ)}</div>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Movimientos</div>
@@ -15501,29 +15514,36 @@ function verAplicacionesPano(panoId){
   function fmtN(n,d){ n=parseFloat(n)||0; return n.toLocaleString('es-CL',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
 
   // Construir el cuerpo del reporte (una sección por aplicación)
+  // Solo lo aplicado EN ESTE PAÑO: se prorratea producto y agua por hectáreas
+  // del grupo (paño + polinizantes hijos) sobre el total de paños cubiertos.
+  var hasDe=function(pid){ var px=getPano(pid); if(!px) return 0; return (parseFloat(px.hectareas)||parseFloat(px.has_riego)||0); };
   var cuerpo='';
   confs.forEach(function(c){
     var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
     var tipoApp=orden?(orden.tipo||orden.tipoApp||''):'';
-    var nroOrden=orden?(orden.numero||orden.id||''):(c.ordenId||'');
+    var nroConf=c.id||'—';
+    var nroOrden=c.ordenNumero||(orden?(orden.numero||orden.id||''):(c.ordenId||''));
+    var haTotal=(c.panoIds||[]).reduce(function(s,pid){ return s+hasDe(pid); },0);
+    var haGrupo=(c.panoIds||[]).filter(function(pid){ return idsGrupo.indexOf(String(pid))>=0; })
+      .reduce(function(s,pid){ return s+hasDe(pid); },0);
+    var factor=(haTotal>0 && haGrupo>0) ? (haGrupo/haTotal) : 1;
     var prods=(c.productosReales||[]).map(function(pr){
       return '<tr><td style="padding:4px 8px;border:1px solid #ddd">'+escapeHtml(pr.nombre||'')+'</td>'+
-        '<td style="padding:4px 8px;border:1px solid #ddd;text-align:right">'+fmtN(pr.qtyAplicada,3)+' '+escapeHtml(pr.unitS||'')+'</td></tr>';
+        '<td style="padding:4px 8px;border:1px solid #ddd;text-align:right">'+fmtN((parseFloat(pr.qtyAplicada)||0)*factor,3)+' '+escapeHtml(pr.unitS||'')+'</td></tr>';
     }).join('');
-    var panosCubiertos=(c.panoIds||[]).map(function(pid){ var px=getPano(pid); return px?px.nombre+(px.variedad?' ('+px.variedad+')':''):pid; }).join(', ');
     cuerpo+='<div class="aplic-bloque" style="margin-bottom:18px;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">'+
       '<div style="background:#f0f7ff;padding:10px 14px;border-bottom:1px solid #e0e0e0">'+
         '<div style="font-weight:800;font-size:14px;color:#1565c0">📅 '+escapeHtml(c.fechaApp||'Sin fecha')+(c.turno?' · '+escapeHtml(c.turno):'')+'</div>'+
-        '<div style="font-size:12px;color:#555;margin-top:2px">Orden '+escapeHtml(String(nroOrden))+(tipoApp?' · '+escapeHtml(tipoApp):'')+' · Operador: '+escapeHtml(c.operador||'—')+'</div>'+
+        '<div style="font-size:12px;color:#555;margin-top:2px">Confirmación N° '+escapeHtml(String(nroConf))+' · Orden '+escapeHtml(String(nroOrden))+(tipoApp?' · '+escapeHtml(tipoApp):'')+'</div>'+
+        '<div style="font-size:12px;color:#555;margin-top:2px">Operador: '+escapeHtml(c.operador||'—')+' · Equipo: '+escapeHtml(c.equipo||'—')+'</div>'+
       '</div>'+
       '<div style="padding:10px 14px">'+
         '<table style="border-collapse:collapse;font-size:12px;width:100%;margin-bottom:8px">'+
-          '<thead><tr style="background:#fafafa"><th style="padding:4px 8px;border:1px solid #ddd;text-align:left">Producto</th><th style="padding:4px 8px;border:1px solid #ddd;text-align:right">Cantidad aplicada</th></tr></thead>'+
+          '<thead><tr style="background:#fafafa"><th style="padding:4px 8px;border:1px solid #ddd;text-align:left">Producto</th><th style="padding:4px 8px;border:1px solid #ddd;text-align:right">Cantidad en este paño</th></tr></thead>'+
           '<tbody>'+(prods||'<tr><td colspan="2" style="padding:4px 8px;border:1px solid #ddd;color:#888">Sin productos</td></tr>')+'</tbody>'+
         '</table>'+
-        '<div style="font-size:12px;color:#333"><strong>💧 Agua aplicada:</strong> '+fmtN(c.aguaReal,0)+' L</div>'+
-        (c.mojamiento?'<div style="font-size:12px;color:#333"><strong>Mojamiento:</strong> '+escapeHtml(String(c.mojamiento))+' L/ha</div>':'')+
-        '<div style="font-size:11px;color:#777;margin-top:4px">Paños: '+escapeHtml(panosCubiertos)+'</div>'+
+        '<div style="font-size:12px;color:#333"><strong>💧 Agua aplicada en este paño:</strong> '+fmtN((parseFloat(c.aguaReal)||0)*factor,0)+' L</div>'+
+        (factor<1?'<div style="font-size:11px;color:#777;margin-top:4px">Prorrateado por superficie: '+fmtN(haGrupo,2)+' ha de '+fmtN(haTotal,2)+' ha cubiertas por la aplicación.</div>':'')+
         (c.observaciones?'<div style="font-size:11px;color:#777;margin-top:2px"><strong>Obs:</strong> '+escapeHtml(c.observaciones)+'</div>':'')+
       '</div>'+
     '</div>';
@@ -16699,11 +16719,24 @@ function _recalcDistribucionOrden(o){
   var ids = (o.panoIds && o.panoIds.length) ? o.panoIds
             : (o.distribucion||[]).map(function(r){ return r.panoId; });
   var esFerti = (o.tipoApp==='Fertirriego');
+  var _hasP=function(px){ return px ? (esFerti ? (parseFloat(px.has_riego)||0) : (parseFloat(px.hectareas)||0)) : 0; };
+  var _hasGrupo=function(px){
+    var t=_hasP(px);
+    (S.panos||[]).forEach(function(h){
+      if((h.tipo||'Productivo')==='Polinizante' && String(h.panoPadre)===String(px.id)) t+=_hasP(h);
+    });
+    return t;
+  };
+  // Distribuir solo en paños padres; los polinizantes hijos suman sus há al padre
+  ids = ids.filter(function(pid){
+    var px=getPano(pid);
+    return !px || (px.tipo||'Productivo')!=='Polinizante';
+  });
   var filas = []; var tHas=0,tAgua=0,tProd=0;
   ids.forEach(function(pid){
     var p = getPano(pid);
-    // hectáreas actuales (riego o plantadas según el tipo de aplicación)
-    var has = p ? (esFerti ? (parseFloat(p.has_riego)||0) : (parseFloat(p.hectareas)||0)) : 0;
+    // hectáreas del grupo (padre + polinizantes hijos)
+    var has = p ? _hasGrupo(p) : 0;
     // respaldo: si el paño ya no existe, usar las há guardadas en la distribución
     if((!p || has===0)){
       var guardado = (o.distribucion||[]).find(function(r){ return String(r.panoId)===String(pid); });
@@ -17216,11 +17249,26 @@ function saveEditOrden(id){
   });
 
   var mojT = moj * vha;
+  // Hectáreas del grupo: paño padre + sus polinizantes hijos
+  var esFertiE = (tipo==='Fertirriego');
+  function _hasPanoE(px){ return px ? (esFertiE ? (parseFloat(px.has_riego)||0) : (parseFloat(px.hectareas)||0)) : 0; }
+  function _hasGrupoE(px){
+    var t=_hasPanoE(px);
+    (S.panos||[]).forEach(function(h){
+      if((h.tipo||'Productivo')==='Polinizante' && String(h.panoPadre)===String(px.id)) t+=_hasPanoE(h);
+    });
+    return t;
+  }
+  // Distribuir SOLO en paños padres (no polinizantes), con las há del grupo
+  var padresSel = selPanos.filter(function(pid){
+    var px=(S.panos||[]).find(function(x){ return String(x.id)===String(pid); });
+    return px && (px.tipo||'Productivo')!=='Polinizante';
+  });
   // Recalcular distribución por paño y producto
-  var dist = selPanos.map(function(pid){
+  var dist = padresSel.map(function(pid){
     var p = (S.panos||[]).find(function(x){ return String(x.id)===String(pid); });
     if(!p) return null;
-    var has = parseFloat(p.has)||0;
+    var has = _hasGrupoE(p);
     var agua = mojT * has;
     var prodQty = _calcProdQty(prod0dosis, prod0uni, has, mojT);
     var prodsByPano = productos.map(function(ap){
