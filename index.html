@@ -4778,18 +4778,25 @@ function renderDashboard(c){
         </div>
         <div class="table-wrap">
           <table class="data">
-            <thead><tr><th>N°</th><th>Tipo</th><th>Fecha</th><th>Bodega</th><th class="num">Items</th><th class="num">Valor</th></tr></thead>
+            <thead><tr><th>N°</th><th>Tipo</th><th>Fecha</th><th>Bodega</th><th>Producto</th><th class="num">Items</th><th class="num">Valor</th></tr></thead>
             <tbody>
-              ${recents.length===0?'<tr><td colspan="6" class="center" style="color:var(--mu);padding:30px">Sin movimientos</td></tr>':
+              ${recents.length===0?'<tr><td colspan="7" class="center" style="color:var(--mu);padding:30px">Sin movimientos</td></tr>':
                 recents.map(m=>{
                   const bod=getWarehouse(m.bodegaId);
                   const valor=(m.detalles||[]).reduce((s,d)=>s+(d.cantidad*d.costo||0),0);
+                  const dets=(m.detalles||[]);
+                  const prodDesc=dets.length===0?'—':(()=>{
+                    const p0=getProduct(dets[0].codigoInterno);
+                    const n0=escapeHtml(p0?p0.descripcion:(dets[0].descripcion||dets[0].codigoInterno||'—'));
+                    return dets.length>1?(n0+' <span style="color:var(--mu)">+'+(dets.length-1)+'</span>'):n0;
+                  })();
                   return `<tr class="row-link" onclick="viewMovimiento('${m.numero}')">
                     <td class="mono"><strong>${m.numero}</strong></td>
                     <td><span class="badge ${m.tipo==='ENT'?'badge-green':(m.tipo==='SAL'?'badge-amber':'badge-blue')}">${tipoLabel(m.tipo)}</span></td>
                     <td>${fmtDate(m.fecha)}</td>
                     <td>${escapeHtml(bod?bod.nombre:m.bodegaId)}</td>
-                    <td class="num">${(m.detalles||[]).length}</td>
+                    <td>${prodDesc}</td>
+                    <td class="num">${dets.length}</td>
                     <td class="num">${fmtMon(valor)}</td>
                   </tr>`;
                 }).join('')}
@@ -5395,7 +5402,17 @@ function viewProduct(codigo){
     });
     return dd;
   })();
-  const movs=STATE.cache.movements.filter(m=>!m.anulado&&(m.detalles||[]).some(d=>d.codigoInterno===codigo)).slice(-10).reverse();
+  // Historial con saldo acumulado (todos los vigentes, cronológico)
+  const movsAll=STATE.cache.movements.filter(m=>!m.anulado&&(m.detalles||[]).some(d=>d.codigoInterno===codigo))
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||String(a.numero).localeCompare(String(b.numero)));
+  let saldoAcum=0;
+  const movRows=movsAll.map(m=>{
+    const cant=(m.detalles||[]).filter(d=>d.codigoInterno===codigo).reduce((s,d)=>s+(Number(d.cantidad)||0),0);
+    const delta=m.tipo==='ENT'?cant:(m.tipo==='SAL'?-cant:0);
+    saldoAcum+=delta;
+    return {m, delta, saldo:saldoAcum};
+  }).slice(-15);
+  const saldoFinal=getStockTotal(codigo);
   showModal(`Producto · ${p.codigoInterno}`,
     `<div class="form-grid">
       <div class="form-field"><label>Código Interno</label><div class="mono"><strong>${p.codigoInterno}</strong></div></div>
@@ -5415,6 +5432,18 @@ function viewProduct(codigo){
       <table class="detalle-table"><thead><tr><th>Bodega</th><th>Lote</th><th>Vence</th><th class="num">Cantidad</th><th class="num">Costo</th></tr></thead>
       <tbody>${lots.map(l=>{const b=getWarehouse(l.bodegaId);const venc=l.fechaVenc?new Date(l.fechaVenc):null;const venceClass=venc&&venc<new Date(Date.now()+30*86400000)?'badge-amber':'';
         return `<tr><td>${escapeHtml(b?b.nombre:l.bodegaId)}</td><td class="mono">${escapeHtml(l.lote)}</td><td><span class="badge ${venceClass}">${fmtDateOnly(l.fechaVenc)}</span></td><td class="num">${fmtNum(l.cantidad,2)}</td><td class="num">${fmtMon(l.costo)}</td></tr>`}).join('')}</tbody></table>`:''}
+    <h4 style="margin:18px 0 8px;color:var(--gd);font-size:13px">Movimientos (últimos ${movRows.length})</h4>
+    ${movRows.length===0?'<div style="color:var(--mu);font-size:13px">Sin movimientos</div>':
+      `<table class="detalle-table"><thead><tr><th>N°</th><th>Tipo</th><th>Fecha</th><th class="num">Cantidad</th><th class="num">Saldo</th></tr></thead>
+      <tbody>${movRows.map(r=>`<tr class="row-link" onclick="closeModal();viewMovimiento('${r.m.numero}')">
+        <td class="mono">${r.m.numero}</td>
+        <td><span class="badge ${r.m.tipo==='ENT'?'badge-green':(r.m.tipo==='SAL'?'badge-amber':'badge-blue')}">${tipoMovLabel(r.m)}</span></td>
+        <td>${fmtDate(r.m.fecha)}</td>
+        <td class="num">${r.delta>0?'+':''}${fmtNum(r.delta,2)}</td>
+        <td class="num"><strong>${fmtNum(r.saldo,2)}</strong></td>
+      </tr>`).join('')}
+      <tr style="background:var(--bg2,#f4f6f8)"><td colspan="4" style="font-weight:700;text-align:right">Saldo actual</td><td class="num"><strong>${fmtNum(saldoFinal,2)} ${escapeHtml(p.unidadMedida||'')}</strong></td></tr>
+      </tbody></table>`}
     `,
     `<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>${can('productos.crear')?`<button class="btn btn-primary" onclick="closeModal();openProductForm('${codigo}')">Editar</button>`:''}`,
     'lg');
@@ -7925,7 +7954,7 @@ function renderMovimientosTable(){
     '</div>';
     return;
   }
-  let rows=[...STATE.cache.movements];
+  let rows=[...STATE.cache.movements].filter(r=>!r.anulado);
   if(movFilter.tipo){
     if(movFilter.tipo.includes(':')){
       const [base,sub]=movFilter.tipo.split(':');
@@ -21512,6 +21541,40 @@ window.PZ = {
   _fbState: function(){ return PZFB; }
 };
 })(); }
+</script>
+<script>
+/* ── Normalización global a MAYÚSCULAS en la entrada de datos ──
+   Aplica a inputs de texto y textareas de todo el sistema.
+   Exclusiones: login (usuario/clave), password, email, url y
+   campos marcados con data-nouppercase. */
+(function(){
+  var EXCL_IDS = { loginUser:1, loginPass:1 };
+  function aplica(el){
+    if(!el || el.dataset && el.dataset.nouppercase!==undefined) return false;
+    if(EXCL_IDS[el.id]) return false;
+    var tag=(el.tagName||'').toLowerCase();
+    if(tag==='textarea') return true;
+    if(tag!=='input') return false;
+    var t=(el.type||'text').toLowerCase();
+    return (t==='text'||t==='search');
+  }
+  // Visual inmediato mientras se escribe
+  var st=document.createElement('style');
+  st.textContent='input[type="text"]:not(#loginUser):not(#loginPass):not([data-nouppercase]), input[type="search"]:not([data-nouppercase]), textarea:not([data-nouppercase]){text-transform:uppercase}';
+  document.head.appendChild(st);
+  // Normalizar el valor real al confirmar el cambio (lo que se guarda)
+  document.addEventListener('change', function(e){
+    var el=e.target;
+    if(!aplica(el)) return;
+    var v=el.value;
+    if(typeof v==='string' && v && v!==v.toUpperCase()){
+      var pos=null;
+      try{ pos=el.selectionStart; }catch(_){ }
+      el.value=v.toUpperCase();
+      try{ if(pos!=null) el.setSelectionRange(pos,pos); }catch(_){ }
+    }
+  }, true);
+})();
 </script>
 </body>
 </html>
