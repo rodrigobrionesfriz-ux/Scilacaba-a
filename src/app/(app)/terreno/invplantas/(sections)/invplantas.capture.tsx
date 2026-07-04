@@ -1,5 +1,6 @@
 "use client"
 
+import { Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -121,7 +122,8 @@ export const InvplantasCapture = ({
 
   const iniciar = async () => {
     if (meta.cuartelId === null) return toast.error("Selecciona un cuartel")
-    if (!meta.variedad.trim()) return toast.error("Indica la variedad principal")
+    if (!meta.variedad.trim())
+      return toast.error("Indica la variedad principal")
     if (!meta.hilera.trim()) return toast.error("Indica el N° de hilera")
     setOcupado(true)
     const pos = await capturarGps()
@@ -189,7 +191,14 @@ export const InvplantasCapture = ({
         if (!o) reset()
       }}
     >
-      <DialogTrigger render={<Button size="sm">Nueva hilera</Button>} />
+      <DialogTrigger
+        render={
+          <Button size="sm">
+            <Plus />
+            Nueva hilera
+          </Button>
+        }
+      />
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Inventario por hilera</DialogTitle>

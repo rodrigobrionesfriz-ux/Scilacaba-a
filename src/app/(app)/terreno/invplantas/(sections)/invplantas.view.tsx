@@ -29,11 +29,14 @@ export const InvplantasView = async () => {
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <InvplantasCapture
-          cuarteles={cuarteles}
-          usuario={usuario?.nombre ?? ""}
+        <InvplantasLocalList
+          action={
+            <InvplantasCapture
+              cuarteles={cuarteles}
+              usuario={usuario?.nombre ?? ""}
+            />
+          }
         />
-        <InvplantasLocalList />
       </section>
       {puedeRevisar && (
         <>
@@ -49,7 +52,9 @@ export const InvplantasView = async () => {
             />
           </section>
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">Hileras sincronizadas (nube)</h2>
+            <h2 className="text-lg font-semibold">
+              Hileras sincronizadas (nube)
+            </h2>
             <InvplantasTable filas={filas} puedeEditar={puedeEditar} />
           </section>
         </>

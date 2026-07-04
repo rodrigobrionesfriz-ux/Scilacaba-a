@@ -14,7 +14,10 @@ type FilaOrden = typeof applicationOrders.$inferSelect
 // derivar el estado Pendiente/Parcial/Completa).
 type Cobertura = { n: number; panos: string[] }
 
-const mapearOrden = (r: FilaOrden, cobertura: Cobertura | undefined): OrdenRow => {
+const mapearOrden = (
+  r: FilaOrden,
+  cobertura: Cobertura | undefined,
+): OrdenRow => {
   const panoIds = r.panoIds ?? []
   const cob = cobertura ?? { n: 0, panos: [] }
   return {
@@ -66,7 +69,10 @@ const getCobertura = async (): Promise<Map<number, Cobertura>> => {
 // Listado de órdenes (más recientes primero) con estado de cobertura derivado.
 export const getOrdenes = async (): Promise<OrdenRow[]> => {
   const [rows, cobertura] = await Promise.all([
-    db.select().from(applicationOrders).orderBy(desc(applicationOrders.creadoAt)),
+    db
+      .select()
+      .from(applicationOrders)
+      .orderBy(desc(applicationOrders.creadoAt)),
     getCobertura(),
   ])
   return rows.map((r) => mapearOrden(r, cobertura.get(r.id)))
@@ -74,10 +80,13 @@ export const getOrdenes = async (): Promise<OrdenRow[]> => {
 
 // Una orden por id (para editar/ver detalle). null si no existe.
 export const getOrden = async (id: number): Promise<OrdenRow | null> => {
-  const row = await db.query.applicationOrders.findFirst({
-    where: eq(applicationOrders.id, id),
-  })
+  // La cobertura no depende del row → en paralelo (evita el waterfall).
+  const [row, cobertura] = await Promise.all([
+    db.query.applicationOrders.findFirst({
+      where: eq(applicationOrders.id, id),
+    }),
+    getCobertura(),
+  ])
   if (!row) return null
-  const cobertura = await getCobertura()
   return mapearOrden(row, cobertura.get(id))
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import { Plus } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,11 @@ import {
 } from "@/constants/terreno.constants"
 import { cn } from "@/lib/utils"
 import { guardarConteoLocal } from "@/lib/terreno-db"
-import type { ArbolCapturado, PanoOpcion, TipoArbol } from "@/types/conteos.types"
+import type {
+  ArbolCapturado,
+  PanoOpcion,
+  TipoArbol,
+} from "@/types/conteos.types"
 import { formatGps, resumenConteo } from "@/utils/conteos.utils"
 
 type Gps = { lat: number; lng: number; precision: number }
@@ -170,7 +175,14 @@ export const ConteosCapture = ({
         if (!o) reset()
       }}
     >
-      <DialogTrigger render={<Button size="sm">Nuevo conteo</Button>} />
+      <DialogTrigger
+        render={
+          <Button size="sm">
+            <Plus />
+            Nuevo conteo
+          </Button>
+        }
+      />
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Conteo de centros florales</DialogTitle>

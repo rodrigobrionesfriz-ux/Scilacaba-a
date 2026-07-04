@@ -1,7 +1,8 @@
 "use client"
 
 import { useLiveQuery } from "dexie-react-hooks"
-import { useEffect, useState, useTransition } from "react"
+import { CloudUpload } from "lucide-react"
+import { type ReactNode, useEffect, useState, useTransition } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,7 @@ const fechaCorta = (iso: string) =>
     minute: "2-digit",
   })
 
-export const InvplantasLocalList = () => {
+export const InvplantasLocalList = ({ action }: { action?: ReactNode }) => {
   const locales = useLiveQuery(() => listarInvplantasLocales(), [])
   const [online, setOnline] = useState(true)
   const [pending, startTransition] = useTransition()
@@ -58,7 +59,7 @@ export const InvplantasLocalList = () => {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`size-2 rounded-full ${online ? "bg-green-600" : "bg-red-500"}`}
@@ -69,14 +70,24 @@ export const InvplantasLocalList = () => {
             {pendientes > 0 && ` · ${pendientes} por subir`}
           </span>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={subir}
-          disabled={!online || pending || pendientes === 0}
-        >
-          {pending ? "Subiendo…" : "☁️ Subir a la nube"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {action}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={subir}
+            disabled={!online || pending || pendientes === 0}
+          >
+            {pending ? (
+              "Subiendo…"
+            ) : (
+              <>
+                <CloudUpload />
+                Subir a la nube
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {locales === undefined ? (

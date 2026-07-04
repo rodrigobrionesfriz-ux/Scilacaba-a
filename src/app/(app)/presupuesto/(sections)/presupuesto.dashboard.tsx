@@ -1,6 +1,8 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useMemo, useState } from "react"
+import { ChartSkeleton } from "@/components/ui/chart-skeleton"
 import type {
   BudgetMeta,
   BudgetRow,
@@ -20,16 +22,49 @@ import {
   serieMensual,
   topDesviaciones,
 } from "@/utils/presupuesto.utils"
-import { PresupuestoChartDescripcion } from "./presupuesto.chart-descripcion"
-import { PresupuestoChartDesviacion } from "./presupuesto.chart-desviacion"
-import { PresupuestoChartMensual } from "./presupuesto.chart-mensual"
-import { PresupuestoChartSubgrupo } from "./presupuesto.chart-subgrupo"
-import { PresupuestoChartTipo } from "./presupuesto.chart-tipo"
 import { PresupuestoDetalleModal } from "./presupuesto.detalle-modal"
 import { PresupuestoExportarPdf } from "./presupuesto.exportar-pdf"
 import { PresupuestoFiltros } from "./presupuesto.filtros"
 import { PresupuestoKpis } from "./presupuesto.kpis"
 import { PresupuestoTopDesviaciones } from "./presupuesto.top-desviaciones"
+
+// Las gráficas cargan recharts (lib pesada). Se difieren a un chunk lazy
+// (ssr:false) para que KPIs/filtros/export hidraten sin esperar a recharts; el
+// panel muestra un skeleton mientras llega. Solo aplica a los paneles recharts.
+const chartLoading = () => <ChartSkeleton />
+
+const PresupuestoChartMensual = dynamic(
+  () =>
+    import("./presupuesto.chart-mensual").then(
+      (m) => m.PresupuestoChartMensual,
+    ),
+  { ssr: false, loading: chartLoading },
+)
+const PresupuestoChartTipo = dynamic(
+  () => import("./presupuesto.chart-tipo").then((m) => m.PresupuestoChartTipo),
+  { ssr: false, loading: chartLoading },
+)
+const PresupuestoChartSubgrupo = dynamic(
+  () =>
+    import("./presupuesto.chart-subgrupo").then(
+      (m) => m.PresupuestoChartSubgrupo,
+    ),
+  { ssr: false, loading: chartLoading },
+)
+const PresupuestoChartDescripcion = dynamic(
+  () =>
+    import("./presupuesto.chart-descripcion").then(
+      (m) => m.PresupuestoChartDescripcion,
+    ),
+  { ssr: false, loading: chartLoading },
+)
+const PresupuestoChartDesviacion = dynamic(
+  () =>
+    import("./presupuesto.chart-desviacion").then(
+      (m) => m.PresupuestoChartDesviacion,
+    ),
+  { ssr: false, loading: chartLoading },
+)
 
 const FILTROS_VACIOS: FiltrosPresupuesto = {
   temporada: "",

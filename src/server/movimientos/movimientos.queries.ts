@@ -20,34 +20,36 @@ const aDireccion = (v: string) => (v === "ENT" ? "ENT" : "SAL")
 // Orden cronológico inverso. Agregados de líneas en 1 query (sin N+1).
 export const getMovimientos = async (): Promise<MovimientoRow[]> => {
   const bodegaDestino = alias(warehouses, "bodega_destino")
-  const rows = await db
-    .select({
-      numero: movements.numero,
-      fecha: movements.fecha,
-      direccion: movements.direccion,
-      tipoMovimiento: movements.tipoMovimiento,
-      bodega: warehouses.nombre,
-      bodegaDestino: bodegaDestino.nombre,
-      proveedor: providers.razonSocial,
-      cliente: customers.razonSocial,
-      usuario: movements.usuario,
-      anulado: movements.anulado,
-    })
-    .from(movements)
-    .leftJoin(warehouses, eq(movements.bodegaId, warehouses.id))
-    .leftJoin(bodegaDestino, eq(movements.bodegaDestinoId, bodegaDestino.id))
-    .leftJoin(providers, eq(movements.proveedorCodigo, providers.codigo))
-    .leftJoin(customers, eq(movements.clienteCodigo, customers.codigo))
-    .orderBy(desc(movements.fecha), desc(movements.creadoAt))
-
-  const agregados = await db
-    .select({
-      movementNumero: movementLines.movementNumero,
-      totalLineas: sql<number>`count(*)::int`,
-      valor: sql<string>`coalesce(sum(${movementLines.cantidad} * ${movementLines.costo}), 0)`,
-    })
-    .from(movementLines)
-    .groupBy(movementLines.movementNumero)
+  // Las dos queries son independientes → en paralelo (evita el waterfall).
+  const [rows, agregados] = await Promise.all([
+    db
+      .select({
+        numero: movements.numero,
+        fecha: movements.fecha,
+        direccion: movements.direccion,
+        tipoMovimiento: movements.tipoMovimiento,
+        bodega: warehouses.nombre,
+        bodegaDestino: bodegaDestino.nombre,
+        proveedor: providers.razonSocial,
+        cliente: customers.razonSocial,
+        usuario: movements.usuario,
+        anulado: movements.anulado,
+      })
+      .from(movements)
+      .leftJoin(warehouses, eq(movements.bodegaId, warehouses.id))
+      .leftJoin(bodegaDestino, eq(movements.bodegaDestinoId, bodegaDestino.id))
+      .leftJoin(providers, eq(movements.proveedorCodigo, providers.codigo))
+      .leftJoin(customers, eq(movements.clienteCodigo, customers.codigo))
+      .orderBy(desc(movements.fecha), desc(movements.creadoAt)),
+    db
+      .select({
+        movementNumero: movementLines.movementNumero,
+        totalLineas: sql<number>`count(*)::int`,
+        valor: sql<string>`coalesce(sum(${movementLines.cantidad} * ${movementLines.costo}), 0)`,
+      })
+      .from(movementLines)
+      .groupBy(movementLines.movementNumero),
+  ])
   const porMov = new Map(agregados.map((a) => [a.movementNumero, a]))
 
   return rows.map((r) => {
@@ -73,39 +75,41 @@ export const getMovimiento = async (
   numero: string,
 ): Promise<MovimientoDetalle | null> => {
   const bodegaDestino = alias(warehouses, "bodega_destino")
-  const [m] = await db
-    .select({
-      numero: movements.numero,
-      fecha: movements.fecha,
-      direccion: movements.direccion,
-      tipoMovimiento: movements.tipoMovimiento,
-      bodega: warehouses.nombre,
-      bodegaDestino: bodegaDestino.nombre,
-      proveedor: providers.razonSocial,
-      cliente: customers.razonSocial,
-      centroCostoDesc: costCenters.descripcion,
-      centroCostoCodigo: movements.centroCosto,
-      documento: movements.documento,
-      numeroDoc: movements.numeroDoc,
-      observaciones: movements.observaciones,
-      usuario: movements.usuario,
-      autorizadoPor: movements.autorizadoPor,
-      anulado: movements.anulado,
-    })
-    .from(movements)
-    .leftJoin(warehouses, eq(movements.bodegaId, warehouses.id))
-    .leftJoin(bodegaDestino, eq(movements.bodegaDestinoId, bodegaDestino.id))
-    .leftJoin(providers, eq(movements.proveedorCodigo, providers.codigo))
-    .leftJoin(customers, eq(movements.clienteCodigo, customers.codigo))
-    .leftJoin(costCenters, eq(movements.centroCosto, costCenters.codigo))
-    .where(eq(movements.numero, numero))
+  // Header y líneas dependen solo del `numero` de entrada, no entre sí → paralelo.
+  const [[m], lineas] = await Promise.all([
+    db
+      .select({
+        numero: movements.numero,
+        fecha: movements.fecha,
+        direccion: movements.direccion,
+        tipoMovimiento: movements.tipoMovimiento,
+        bodega: warehouses.nombre,
+        bodegaDestino: bodegaDestino.nombre,
+        proveedor: providers.razonSocial,
+        cliente: customers.razonSocial,
+        centroCostoDesc: costCenters.descripcion,
+        centroCostoCodigo: movements.centroCosto,
+        documento: movements.documento,
+        numeroDoc: movements.numeroDoc,
+        observaciones: movements.observaciones,
+        usuario: movements.usuario,
+        autorizadoPor: movements.autorizadoPor,
+        anulado: movements.anulado,
+      })
+      .from(movements)
+      .leftJoin(warehouses, eq(movements.bodegaId, warehouses.id))
+      .leftJoin(bodegaDestino, eq(movements.bodegaDestinoId, bodegaDestino.id))
+      .leftJoin(providers, eq(movements.proveedorCodigo, providers.codigo))
+      .leftJoin(customers, eq(movements.clienteCodigo, customers.codigo))
+      .leftJoin(costCenters, eq(movements.centroCosto, costCenters.codigo))
+      .where(eq(movements.numero, numero)),
+    db
+      .select()
+      .from(movementLines)
+      .where(eq(movementLines.movementNumero, numero))
+      .orderBy(asc(movementLines.id)),
+  ])
   if (!m) return null
-
-  const lineas = await db
-    .select()
-    .from(movementLines)
-    .where(eq(movementLines.movementNumero, numero))
-    .orderBy(asc(movementLines.id))
 
   return {
     numero: m.numero,

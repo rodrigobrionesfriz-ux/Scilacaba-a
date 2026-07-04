@@ -22,12 +22,17 @@ export const ConteosView = async () => {
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <ConteosCapture panos={opciones} usuario={usuario?.nombre ?? ""} />
-        <ConteosLocalList />
+        <ConteosLocalList
+          action={
+            <ConteosCapture panos={opciones} usuario={usuario?.nombre ?? ""} />
+          }
+        />
       </section>
       {can(usuario, "conteos.revisar") && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">Conteos sincronizados (nube)</h2>
+          <h2 className="text-lg font-semibold">
+            Conteos sincronizados (nube)
+          </h2>
           <ConteosTable conteos={conteosCloud} />
         </section>
       )}
