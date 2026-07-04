@@ -17748,11 +17748,28 @@ function cfImprimir(id){
   var c = (S.confirmaciones||[]).find(function(x){ return String(x.id)===String(id); });
   if(!c){ showNotice('Confirmación no encontrada','err'); return; }
   var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
-  var panosRows=(c.panoIds||[]).map(function(pid){
-    var p=getPano(pid); if(!p) return '';
-    return '<tr><td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(p.nombre||pid)+'</td>'+
+  // Distribución por paño: solo padres, há del grupo (padre + polinizantes hijos)
+  var esFertiC = orden && (orden.tipoApp==='Fertirriego');
+  var _hasPC=function(px){ return px ? (esFertiC ? (parseFloat(px.has_riego)||0) : (parseFloat(px.hectareas)||0)) : 0; };
+  var _hasGC=function(px){
+    var t=_hasPC(px);
+    (S.panos||[]).forEach(function(h){ if((h.tipo||'Productivo')==='Polinizante' && String(h.panoPadre)===String(px.id)) t+=_hasPC(h); });
+    return t;
+  };
+  var padres=(c.panoIds||[]).map(function(pid){ return getPano(pid); })
+    .filter(function(p){ return p && (p.tipo||'Productivo')!=='Polinizante'; });
+  var haTotal=padres.reduce(function(s,p){ return s+_hasGC(p); },0);
+  var prodsC=(c.productosReales||[]);
+  var thProds=prodsC.map(function(pr){ return '<th style="text-align:right">'+escapeHtml(pr.nombre||'—')+'</th>'; }).join('');
+  var panosRows=padres.map(function(p){
+    var hg=_hasGC(p); var share=haTotal>0?hg/haTotal:0;
+    var tds=prodsC.map(function(pr){
+      return '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN((pr.qtyAplicada||0)*share,3)+' '+escapeHtml(pr.unitS||'')+'</td>';
+    }).join('');
+    return '<tr><td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(p.nombre)+'</td>'+
       '<td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(p.variedad||'—')+'</td>'+
-      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN(parseFloat(p.hectareas)||parseFloat(p.has_riego)||0,2)+'</td></tr>';
+      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN(hg,2)+'</td>'+
+      '<td style="padding:5px 8px;border:1px solid #ccc;text-align:right">'+fmtN((c.aguaReal||0)*share,0)+'</td>'+tds+'</tr>';
   }).join('');
   var prodsRows=(c.productosReales||[]).map(function(pr){
     return '<tr><td style="padding:5px 8px;border:1px solid #ccc">'+escapeHtml(pr.nombre||'—')+'</td>'+
@@ -17791,10 +17808,15 @@ function cfImprimir(id){
       '<div class="fld"><b>Agua aplicada:</b> '+fmtN(c.aguaReal||0,0)+' L</div>'+
       (orden&&orden.metodo?'<div class="fld"><b>Método:</b> '+escapeHtml(orden.metodo)+'</div>':'')+
       (orden&&orden.fenol?'<div class="fld"><b>Estado fenológico:</b> '+escapeHtml(orden.fenol)+'</div>':'')+
+      (orden?'<div class="fld"><b>Tipo aplicación:</b> '+escapeHtml(orden.tipoApp||orden.tipo||'—')+'</div>':'')+
+      (orden&&(orden.mojT||orden.moj)?'<div class="fld"><b>Mojamiento:</b> '+fmtN(orden.mojT||orden.moj,0)+' L/ha</div>':'')+
+      (orden&&orden.responsable?'<div class="fld"><b>Responsable:</b> '+escapeHtml(orden.responsable)+'</div>':'')+
+      (orden&&orden.especie?'<div class="fld"><b>Especie:</b> '+escapeHtml(orden.especie)+'</div>':'')+
+      (orden&&orden.equipoCap>0?'<div class="fld"><b>Estanque equipo:</b> '+fmtN(orden.equipoCap,0)+' L</div>':'')+
     '</div>'+
-    '<h3 style="font-size:14px;margin:0 0 6px">Paños aplicados</h3>'+
-    '<table><thead><tr><th>Paño</th><th>Variedad</th><th style="text-align:right">Há</th></tr></thead><tbody>'+(panosRows||'<tr><td colspan="3" style="padding:5px 8px;border:1px solid #ccc;color:#888">—</td></tr>')+'</tbody></table>'+
-    '<h3 style="font-size:14px;margin:0 0 6px">Productos</h3>'+
+    '<h3 style="font-size:14px;margin:0 0 6px">Aplicado por paño</h3>'+
+    '<table><thead><tr><th>Paño</th><th>Variedad</th><th style="text-align:right">Há</th><th style="text-align:right">Agua (L)</th>'+thProds+'</tr></thead><tbody>'+(panosRows||'<tr><td colspan="4" style="padding:5px 8px;border:1px solid #ccc;color:#888">—</td></tr>')+'</tbody></table>'+
+    '<h3 style="font-size:14px;margin:0 0 6px">Totales por producto</h3>'+
     '<table><thead><tr><th>Producto</th><th style="text-align:right">Planificado</th><th style="text-align:right">Aplicado</th></tr></thead><tbody>'+(prodsRows||'<tr><td colspan="3" style="padding:5px 8px;border:1px solid #ccc;color:#888">—</td></tr>')+'</tbody></table>'+
     (c.observaciones?'<div style="font-size:12px"><b>Observaciones:</b> '+escapeHtml(c.observaciones)+'</div>':'')+
     '<div class="firmas"><div>Operador</div><div>Responsable técnico</div></div>'+
