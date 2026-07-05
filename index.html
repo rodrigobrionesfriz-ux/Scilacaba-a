@@ -17731,7 +17731,7 @@ function cfGuardar(){
   var now = new Date();
   // Folio único correlativo (CF-0001, CF-0002, ...) con referencia a la orden
   S.cfFolioSeq = (parseInt(S.cfFolioSeq)||0) + 1;
-  var folio = 'CF-' + String(S.cfFolioSeq).padStart(4,'0');
+  var folio = 'CA-' + String(S.cfFolioSeq).padStart(6,'0');
   var confirmacion = {
     id: Date.now(),
     folio: folio,
