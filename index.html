@@ -13,6 +13,26 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" onerror="window._fbFsErr=true"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" onerror="window._fbAuthErr=true"></script>
 <script>
+/* ── Contador de operaciones Firebase (visible solo para admin) ── */
+var FBCOUNT = (function(){
+  var k='SCI_FB_COUNT'; var c;
+  try{ c=JSON.parse(localStorage.getItem(k)||'{}'); }catch(e){ c={}; }
+  c.reads=c.reads||0; c.writes=c.writes||0; c.desde=c.desde||new Date().toISOString().slice(0,10);
+  function persist(){ try{ localStorage.setItem(k,JSON.stringify(c)); }catch(e){} refresh(); }
+  function refresh(){
+    var el=document.getElementById('fb-count-chip'); if(!el) return;
+    el.textContent='🔥 Lecturas: '+c.reads.toLocaleString('es-CL')+' · Escrituras: '+c.writes.toLocaleString('es-CL')+' (desde '+c.desde+')';
+  }
+  return {
+    read:function(n){ c.reads+=(n||1); persist(); },
+    write:function(n){ c.writes+=(n||1); persist(); },
+    get:function(){ return c; },
+    reset:function(){ c.reads=0; c.writes=0; c.desde=new Date().toISOString().slice(0,10); persist(); },
+    refresh:refresh
+  };
+})();
+</script>
+<script>
 // Fallback: si los scripts de gstatic fallaron, cargar desde jsdelivr CDN
 (function(){
   function loadScript(src, cb){
@@ -1981,6 +2001,7 @@ function sciFbStartListener(){
   SCIFB.unsubscribe = ref.onSnapshot(
     {includeMetadataChanges: false},
     function(doc){
+      try{FBCOUNT.read();}catch(e){}
       SCIFB.online = true;
       if(!doc.exists){
         // La nube está vacía. Recién aquí permitimos subir los datos locales.
@@ -2156,7 +2177,7 @@ async function sciFbPush(immediate){
       // clave; el resto se sube tal cual está localmente.
       var remoteObj = null;
       try{
-        var snap = await ref.get();
+        var snap = await ref.get(); try{FBCOUNT.read();}catch(e){}
         if(snap && snap.exists){
           var rdata = snap.data();
           if(rdata && rdata.payload){
@@ -2190,6 +2211,7 @@ async function sciFbPush(immediate){
       var payload = JSON.stringify(payloadObj);
       var userName = '';
       try { if(STATE && STATE.user){ userName = STATE.user.nombre || STATE.user.id || ''; } }catch(e){}
+      try{FBCOUNT.write();}catch(e){}
       await ref.set({
         payload: payload,
         _version: newVersion,
@@ -4728,6 +4750,10 @@ function renderDashboard(c){
       <div>
         <div class="page-title">Bienvenido, ${escapeHtml(STATE.user.nombre||STATE.user.id)}</div>
         <div class="page-subtitle">Resumen del estado actual del inventario</div>
+        ${STATE.user.role==='admin'?`<div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+          <span id="fb-count-chip" style="font-size:11px;background:#fff3e0;color:#b45309;border:1px solid #fcd9a0;border-radius:12px;padding:3px 10px"></span>
+          <button onclick="FBCOUNT.reset()" title="Reiniciar contador" style="font-size:11px;border:none;background:#eee;border-radius:10px;padding:3px 8px;cursor:pointer">↺</button>
+        </div>`:''}
       </div>
     </div>
 
@@ -4799,6 +4825,7 @@ function renderDashboard(c){
                     <td class="num">${dets.length}</td>
                     <td class="num">${fmtMon(valor)}</td>
                   </tr>`;
+  try{FBCOUNT.refresh();}catch(e){}
                 }).join('')}
             </tbody>
           </table>
@@ -13405,6 +13432,7 @@ function fbStartListener(){
   FB.unsubscribe = ref.onSnapshot(
     {includeMetadataChanges: false},
     function(doc){
+      try{FBCOUNT.read();}catch(e){}
       FB.online = true;
       if(!doc.exists){
         // La nube está vacía. Recién aquí permitimos subir los datos locales.
@@ -13512,7 +13540,7 @@ function fbPush(immediate){
     });
     var userName = '';
     try { if(typeof STATE!=='undefined' && STATE.user){ userName = STATE.user.nombre || STATE.user.id || ''; } }catch(e){}
-    ref.set({
+    try{FBCOUNT.write();}catch(e){} ref.set({
       payload: payload,
       _version: newVersion,
       _clientId: FB.clientId,
@@ -21307,7 +21335,7 @@ function pzFbPush(){
     var data = pzSerializeDataset();
     var userName = '';
     try{ if(typeof STATE!=='undefined' && STATE.user){ userName = STATE.user.nombre || STATE.user.id || ''; } }catch(e){}
-    ref.set({
+    try{FBCOUNT.write();}catch(e){} ref.set({
       payload: JSON.stringify(data),
       _version: version,
       _clientId: PZFB.clientId,
@@ -21330,7 +21358,7 @@ function pzFbStartListener(){
   var ref = pzFbDocRef();
   if(!ref) return;
   if(PZFB.unsubscribe){ try{ PZFB.unsubscribe(); }catch(e){} }
-  PZFB.unsubscribe = ref.onSnapshot({includeMetadataChanges:false}, function(doc){
+  PZFB.unsubscribe = ref.onSnapshot({includeMetadataChanges:false}, function(doc){ try{FBCOUNT.read();}catch(e){}
     PZFB.online = true;
     if(!doc.exists){
       // La nube está vacía. Si este usuario puede editar, sembramos la semilla
