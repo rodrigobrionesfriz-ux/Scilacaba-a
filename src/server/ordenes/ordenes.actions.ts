@@ -11,6 +11,7 @@ import type { ActionResult } from "@/types/action.types"
 import type { Orden } from "@/schemas/ordenes.schema"
 import {
   calcularDistribucion,
+  calcularEstanques,
   type PanoDistribInput,
   resolverHas,
 } from "@/utils/ordenes.utils"
@@ -97,6 +98,9 @@ const aColumnas = async (data: Orden) => {
     unitS: principal?.unitS ?? null,
     moj: n2s(data.moj),
     vha: n2s(data.vha),
+    equipo: data.equipo || null,
+    equipoCap: data.equipoCap > 0 ? String(data.equipoCap) : null,
+    nEstanques: data.equipoCap > 0 ? calcularEstanques(calc.tAgua, data.equipoCap) : null,
     mojT: n2s(calc.mojT),
     notas: data.notas || null,
     tHas: n2s(calc.tHas),
