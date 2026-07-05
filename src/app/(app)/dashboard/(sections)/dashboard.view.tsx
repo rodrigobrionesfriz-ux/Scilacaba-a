@@ -18,7 +18,7 @@ export const DashboardView = async () => {
   ])
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-4 p-8">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">{DASHBOARD_TITLE}</h1>
         <p className="mt-2 text-muted-foreground">{DASHBOARD_SUBTITLE}</p>
@@ -49,6 +49,6 @@ export const DashboardView = async () => {
       </div>
 
       <DashboardStockBajo filas={stats.stockBajo} />
-    </main>
+    </div>
   )
 }

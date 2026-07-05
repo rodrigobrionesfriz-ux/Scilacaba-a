@@ -1,6 +1,7 @@
 import { SerwistProvider } from "@serwist/turbopack/react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import { NuqsAdapter } from "nuqs/adapters/next/app"
 import { ThemeProvider } from "@/components/ui/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
@@ -27,20 +28,22 @@ const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
     className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
   >
     <body className="min-h-full flex flex-col">
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <SerwistProvider
-          swUrl="/sw.js"
-          disable={process.env.NODE_ENV === "development"}
+      <NuqsAdapter>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
         >
-          {children}
-        </SerwistProvider>
-        <Toaster />
-      </ThemeProvider>
+          <SerwistProvider
+            swUrl="/sw.js"
+            disable={process.env.NODE_ENV === "development"}
+          >
+            {children}
+          </SerwistProvider>
+          <Toaster />
+        </ThemeProvider>
+      </NuqsAdapter>
     </body>
   </html>
 )

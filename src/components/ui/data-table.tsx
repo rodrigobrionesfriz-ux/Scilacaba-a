@@ -12,8 +12,9 @@ import {
   type Table as TanstackTable,
   useReactTable,
 } from "@tanstack/react-table"
+import { parseAsInteger, useQueryStates } from "nuqs"
 import { type ReactNode, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import {
   Table,
   TableBody,
@@ -22,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TAMANO_PAGINA_DEFAULT } from "@/constants/tabla.constants"
 
 // Tabla genérica reutilizable (TanStack Table). Orden/filtro/paginación en cliente
 // (datasets de maestros son chicos). El `toolbar` recibe la instancia para que cada
@@ -44,16 +46,33 @@ export const DataTable = <TData, TValue>({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState("")
 
+  // Paginación en la URL (page 1-based ↔ pageIndex 0-based). shallow por defecto:
+  // no hay roundtrip al server porque la paginación es en cliente.
+  const [{ page, pageSize }, setPagina] = useQueryStates({
+    page: parseAsInteger.withDefault(1),
+    pageSize: parseAsInteger.withDefault(TAMANO_PAGINA_DEFAULT),
+  })
+
   // TanStack Table no es memoizable por el React Compiler (devuelve funciones); el
   // estado se maneja vía useState controlado, así que el skip es seguro aquí.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, columnFilters, globalFilter },
+    state: {
+      sorting,
+      columnFilters,
+      globalFilter,
+      pagination: { pageIndex: page - 1, pageSize },
+    },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: (updater) => {
+      const prev = { pageIndex: page - 1, pageSize }
+      const next = typeof updater === "function" ? updater(prev) : updater
+      setPagina({ page: next.pageIndex + 1, pageSize: next.pageSize })
+    },
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -108,29 +127,7 @@ export const DataTable = <TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} registro(s)
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Anterior
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Siguiente
-          </Button>
-        </div>
-      </div>
+      <DataTablePagination table={table} />
     </div>
   )
 }
