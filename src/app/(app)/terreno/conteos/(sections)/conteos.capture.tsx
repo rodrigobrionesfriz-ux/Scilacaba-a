@@ -83,7 +83,10 @@ export const ConteosCapture = ({
   const [gps, setGps] = useState<Gps | null>(null)
   const [capturandoGps, setCapturandoGps] = useState(false)
 
-  const panoItems = panos.map((p) => ({ value: String(p.id), label: p.nombre }))
+  const panoItems = panos.map((p) => ({
+    value: String(p.id),
+    label: p.variedad ? `${p.nombre} · ${p.variedad}` : p.nombre,
+  }))
   const etapaItems = ETAPAS_FENOLOGICAS.map((e) => ({ value: e, label: e }))
 
   const reset = () => {
@@ -198,6 +201,7 @@ export const ConteosCapture = ({
             <div className="flex flex-col gap-2">
               <Label>Paño *</Label>
               <Select
+                modal={false}
                 items={panoItems}
                 value={meta.panoId === null ? "" : String(meta.panoId)}
                 onValueChange={(v) => elegirPano(v ?? "")}
@@ -228,6 +232,7 @@ export const ConteosCapture = ({
               <div className="flex flex-col gap-2">
                 <Label>Etapa fenológica</Label>
                 <Select
+                  modal={false}
                   items={etapaItems}
                   value={meta.etapa}
                   onValueChange={(v) =>

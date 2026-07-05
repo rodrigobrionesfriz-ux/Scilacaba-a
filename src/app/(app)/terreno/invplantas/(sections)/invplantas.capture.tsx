@@ -94,7 +94,7 @@ export const InvplantasCapture = ({
 
   const cuartelItems = cuarteles.map((c) => ({
     value: String(c.id),
-    label: c.nombre,
+    label: c.variedad ? `${c.nombre} · ${c.variedad}` : c.nombre,
   }))
   const variedadBloqueada = Boolean(
     cuarteles.find((c) => c.id === meta.cuartelId)?.variedad,
@@ -214,6 +214,7 @@ export const InvplantasCapture = ({
             <div className="flex flex-col gap-2">
               <Label>Cuartel *</Label>
               <Select
+                modal={false}
                 items={cuartelItems}
                 value={meta.cuartelId === null ? "" : String(meta.cuartelId)}
                 onValueChange={(v) => elegirCuartel(v ?? "")}
