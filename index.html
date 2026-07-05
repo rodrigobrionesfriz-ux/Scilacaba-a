@@ -10806,7 +10806,11 @@ function ipRenderInicio(){
   var pend = (STATE.cache.invplantas||[]).filter(function(x){ return !x.sincronizado; }).length;
   // Cuarteles = nombres de paños
   var cuarteles = panos.map(function(p){ return p.nombre; });
-  return '<div class="ip-card">'+
+  return '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+      '<button class="ip-big-btn ip-btn-gray" style="flex:1;margin:0" onclick="ipVerLista()">📋 Hileras registradas'+(pend>0?(' ('+pend+')'):'')+'</button>'+
+      (can('invplantas.revisar')?'<button class="ip-big-btn ip-btn-primary" style="flex:1;margin:0" onclick="ipAbrirMapaGeneral()">🗺️ Mapa general</button>':'')+
+    '</div>'+
+    '<div class="ip-card">'+
       '<div style="font-size:20px;font-weight:800;color:#23303d;margin-bottom:4px">🌳 Inventario de Huerto</div>'+
       '<div style="font-size:13px;color:#777;margin-bottom:16px">Conteo de plantas por hilera. Seleccione los datos y comience a caminar la entrehilera.</div>'+
       '<div class="ip-field"><label>Cuartel</label><select id="ip-cuartel" onchange="ipSetCuartel(this.value)">'+
@@ -10819,7 +10823,6 @@ function ipRenderInicio(){
       '<div class="ip-field"><label>N° de hilera</label><input type="number" id="ip-hilera" inputmode="numeric" min="1" value="'+(_ipPresetHilera!=null?_ipPresetHilera:'')+'" placeholder="Ej: 1"></div>'+
       '<button class="ip-big-btn ip-btn-green" onclick="ipIniciarHilera()">📍 Marcar inicio y comenzar</button>'+
     '</div>'+
-    '<button class="ip-big-btn ip-btn-gray" onclick="ipVerLista()">📋 Hileras registradas'+(pend>0?(' ('+pend+' por subir)'):'')+'</button>'+
     (navigator.onLine?'<button class="ip-big-btn ip-btn-primary" onclick="ipSincronizar()">☁️ Subir registros a la nube</button>':'');
 }
 function ipSetCuartel(idPano){
@@ -11289,6 +11292,15 @@ function ipActualizarPlantasPano(panoId, nuevoTotal){
     },'Actualizar', false);
 }
 
+function ipToggleHilera(idx){
+  var d=document.getElementById('ip-hil-det-'+idx);
+  var ch=document.getElementById('ip-hil-chev-'+idx);
+  if(!d) return;
+  var open = d.style.display!=='none';
+  d.style.display = open?'none':'block';
+  if(ch) ch.textContent = open?'▸':'▾';
+}
+try{ window.ipToggleHilera = ipToggleHilera; }catch(e){}
 function ipRenderLista(){
   var regs = (STATE.cache.invplantas||[]).slice().sort(function(a,b){ return (b.fechaInicio||'').localeCompare(a.fechaInicio||''); });
   var html = '<button class="ip-big-btn ip-btn-gray" onclick="ipVolverInicio()" style="padding:14px;font-size:16px">‹ Volver</button>';
@@ -11303,28 +11315,33 @@ function ipRenderLista(){
   // ── Resumen por paño/variedad con opción de actualizar el N° de plantas del paño ──
   html += ipRenderResumenPanos();
   html += '<div style="font-weight:800;color:#23303d;margin:14px 0 8px">Hileras registradas ('+regs.length+')</div>';
-  html += regs.map(function(s){
+  html += regs.map(function(s,idx){
     var fecha=(s.fechaInicio||'').slice(0,10);
-    var sync = s.sincronizado ? '<span style="color:#0a6e2e;font-weight:700">☁️ Subido</span>' : '<span style="color:#e9730c;font-weight:700">📱 Local</span>';
+    var sync = s.sincronizado ? '☁️' : '📱';
     var tieneGps = s.gpsInicio && s.gpsFin;
-    return '<div class="ip-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:start">'+
-        '<div><div style="font-size:18px;font-weight:800;color:#23303d">'+escapeHtml(s.codigoBase||'')+'</div>'+
-          '<div style="font-size:13px;color:#666">'+escapeHtml(s.cuartel||'')+' · '+escapeHtml(s.variedad||'')+' · Hilera '+escapeHtml(s.hilera||'')+'</div>'+
-          '<div style="font-size:12px;color:#999">'+fecha+(s.portainjerto?(' · '+escapeHtml(s.portainjerto)):'')+'</div></div>'+
-        '<div style="text-align:right;font-size:12px">'+sync+'</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:16px;margin-top:10px;font-size:14px;flex-wrap:wrap">'+
+    var det =
+      '<div style="font-size:12px;color:#999;margin-top:6px">'+fecha+(s.portainjerto?(' · '+escapeHtml(s.portainjerto)):'')+(s.sincronizado?' · <span style="color:#0a6e2e;font-weight:700">Subido</span>':' · <span style="color:#e9730c;font-weight:700">Local</span>')+'</div>'+
+      '<div style="display:flex;gap:16px;margin-top:8px;font-size:14px;flex-wrap:wrap">'+
         '<div><span style="color:#888">🌳 Principal:</span> <strong style="color:#1a7e3e">'+s.countPrincipal+'</strong></div>'+
         '<div><span style="color:#888">🐝 Poliniz.:</span> <strong style="color:#e9730c">'+s.countPoliniz+'</strong></div>'+
         '<div><span style="color:#888">Total:</span> <strong>'+(s.total||(s.countPrincipal+s.countPoliniz))+'</strong></div>'+
       '</div>'+
-      (tieneGps?'<div style="margin-top:8px"><button onclick="ipAbrirMapaPunto('+s.gpsInicio.lat+','+s.gpsInicio.lng+')" style="padding:8px 12px;background:#f0f7ff;color:#0854a0;border:1px solid #bcd9f5;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">📍 Ubicación</button></div>':'<div style="margin-top:8px;font-size:12px;color:#aaa">📍 Sin georreferencia</div>')+
+      (tieneGps?'<div style="margin-top:8px"><button onclick="event.stopPropagation();ipAbrirMapaPunto('+s.gpsInicio.lat+','+s.gpsInicio.lng+')" style="padding:8px 12px;background:#f0f7ff;color:#0854a0;border:1px solid #bcd9f5;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">📍 Ubicación</button></div>':'<div style="margin-top:8px;font-size:12px;color:#aaa">📍 Sin georreferencia</div>')+
       '<div style="display:flex;gap:8px;margin-top:12px">'+
-        (can('invplantas.revisar')||can('invplantas.editar')?'<button onclick="ipVerMapa(\''+s.id+'\')" style="flex:1;padding:11px;background:#0a6ed1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">🗺️ Ver mapa 2D</button>':'')+
-        (can('invplantas.editar')?'<button onclick="ipEditarRegistro(\''+s.id+'\')" style="padding:11px 15px;background:#fff;color:#0854a0;border:2px solid #bcd9f5;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">✏️</button>':'')+
-        (can('invplantas.editar')?'<button onclick="ipEliminar(\''+s.id+'\')" style="padding:11px 15px;background:#fff;color:#c0392b;border:2px solid #f0b8b8;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">🗑️</button>':'')+
+        (can('invplantas.revisar')||can('invplantas.editar')?'<button onclick="event.stopPropagation();ipVerMapa(\''+s.id+'\')" style="flex:1;padding:11px;background:#0a6ed1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">🗺️ Ver mapa 2D</button>':'')+
+        (can('invplantas.editar')?'<button onclick="event.stopPropagation();ipEditarRegistro(\''+s.id+'\')" style="padding:11px 15px;background:#fff;color:#0854a0;border:2px solid #bcd9f5;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">✏️</button>':'')+
+        (can('invplantas.editar')?'<button onclick="event.stopPropagation();ipEliminar(\''+s.id+'\')" style="padding:11px 15px;background:#fff;color:#c0392b;border:2px solid #f0b8b8;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">🗑️</button>':'')+
+      '</div>';
+    return '<div class="ip-card" style="padding:0;overflow:hidden;margin-bottom:8px">'+
+      '<div onclick="ipToggleHilera('+idx+')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;-webkit-tap-highlight-color:rgba(10,110,209,.1)">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          '<span id="ip-hil-chev-'+idx+'" style="color:#7a8794;font-size:13px">▸</span>'+
+          '<div><div style="font-size:15px;font-weight:800;color:#23303d">'+escapeHtml(s.codigoBase||'')+'</div>'+
+          '<div style="font-size:12px;color:#666">'+escapeHtml(s.cuartel||'')+' · '+escapeHtml(s.variedad||'')+' · Hilera '+escapeHtml(s.hilera||'')+'</div></div>'+
+        '</div>'+
+        '<div style="font-size:13px">'+sync+' <strong>'+(s.total||(s.countPrincipal+s.countPoliniz))+'</strong></div>'+
       '</div>'+
+      '<div id="ip-hil-det-'+idx+'" style="display:none;padding:0 14px 14px">'+det+'</div>'+
     '</div>';
   }).join('');
   return html;
@@ -12122,11 +12139,10 @@ function ipRenderMapa(){
     '</div>';
 
   // Mapa visual: plantas como círculos en una grilla que representa la hilera.
-  // Orientación del huerto: la planta 1 (sur) se muestra a la DERECHA, por eso
-  // se usa row-reverse (la secuencia numérica se conserva intacta).
+  // Orientación del huerto: la planta 1 (sur) se muestra a la IZQUIERDA.
   html += '<div class="ip-card" style="overflow-x:auto">';
-  html += '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#7a8794;margin-bottom:6px;padding:0 4px"><span>← NORTE</span><span>SUR (planta 1) →</span></div>';
-  html += '<div style="display:flex;flex-wrap:wrap;flex-direction:row-reverse;gap:8px;justify-content:flex-start;padding:8px">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#7a8794;margin-bottom:6px;padding:0 4px"><span>← SUR (planta 1)</span><span>NORTE →</span></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;flex-direction:row;gap:8px;justify-content:flex-start;padding:8px">';
   plantas.forEach(function(p, idx){
     var e=IP_ESTADOS[p.estado]||IP_ESTADOS.sano;
     var borde = p.tipo==='poliniz' ? '3px solid #e9730c' : '2px solid rgba(0,0,0,.15)';
