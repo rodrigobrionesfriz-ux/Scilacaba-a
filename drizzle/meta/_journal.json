@@ -43,6 +43,13 @@
       "when": 1783127066615,
       "tag": "0005_long_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783213909340,
+      "tag": "0006_nasty_black_bird",
+      "breakpoints": true
     }
   ]
 }
