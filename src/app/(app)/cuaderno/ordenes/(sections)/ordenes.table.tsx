@@ -2,6 +2,7 @@
 
 import { DataTable } from "@/components/ui/data-table"
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar"
+import type { EquipoRow } from "@/types/equipos.types"
 import type { PanoRow } from "@/types/panos.types"
 import type { OrdenRow } from "@/types/ordenes.types"
 import { buildOrdenesColumns } from "./ordenes.columns"
@@ -11,6 +12,7 @@ type OrdenesTableProps = {
   ordenes: OrdenRow[]
   panos: PanoRow[]
   catalogo: string[]
+  equipos: EquipoRow[]
   puedeEditar: boolean
   puedeConfirmar: boolean
 }
@@ -19,12 +21,14 @@ export const OrdenesTable = ({
   ordenes,
   panos,
   catalogo,
+  equipos,
   puedeEditar,
   puedeConfirmar,
 }: OrdenesTableProps) => {
   const columns = buildOrdenesColumns({
     panos,
     catalogo,
+    equipos,
     puedeEditar,
     puedeConfirmar,
   })
@@ -40,7 +44,9 @@ export const OrdenesTable = ({
           placeholder="Buscar por número o tipo…"
           mostrarEstado={false}
           nuevo={
-            puedeEditar && <OrdenForm panos={panos} catalogo={catalogo} />
+            puedeEditar && (
+              <OrdenForm panos={panos} catalogo={catalogo} equipos={equipos} />
+            )
           }
         />
       )}
