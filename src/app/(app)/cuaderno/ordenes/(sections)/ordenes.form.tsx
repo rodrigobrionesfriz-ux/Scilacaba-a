@@ -89,7 +89,7 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
   const [productos, setProductos] = useState<ProductoFila[]>(
     productosIniciales(orden),
   )
-  const [equipoNombre, setEquipoNombre] = useState("")
+  const [equipoNombre, setEquipoNombre] = useState(orden?.equipo ?? "")
 
   const equipoSel = equipos.find((e) => e.nombre === equipoNombre)
   const equipoCap = equipoSel?.capacidad ?? 0

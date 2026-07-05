@@ -44,6 +44,8 @@ const mapearOrden = (
     editada: r.editada,
     estado: estadoOrden(panoIds, cob.panos, cob.n),
     nConfirmaciones: cob.n,
+    equipo: r.equipo ?? "",
+    equipoCap: r.equipoCap === null ? 0 : Number(r.equipoCap),
   }
 }
 
