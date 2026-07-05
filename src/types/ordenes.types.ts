@@ -71,6 +71,8 @@ export type OrdenRow = {
   editada: boolean
   estado: EstadoOrden
   nConfirmaciones: number
+  equipo: string
+  equipoCap: number
 }
 
 // Fila del listado de confirmaciones.

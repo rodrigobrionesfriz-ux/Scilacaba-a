@@ -142,6 +142,10 @@ export const recalcularProductosReales = (
   }))
 }
 
+// N° de estanques de la nebulizadora para el agua total de la orden (monolito: ceil).
+export const calcularEstanques = (tAgua: number, capacidad: number): number =>
+  capacidad > 0 ? Math.ceil(tAgua / capacidad) : 0
+
 // Estado de cobertura de una OA: Pendiente si no hay confirmaciones o no tiene
 // paños; Completa si todos sus paños tienen al menos una confirmación; Parcial
 // en otro caso. Espejo de cfEstadoOrden.

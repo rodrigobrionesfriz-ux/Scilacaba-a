@@ -7,6 +7,7 @@ import {
   ESTADO_ORDEN_COMPLETA,
   ESTADO_ORDEN_PARCIAL,
 } from "@/constants/cuaderno.constants"
+import type { EquipoRow } from "@/types/equipos.types"
 import type { PanoRow } from "@/types/panos.types"
 import type { EstadoOrden, OrdenRow } from "@/types/ordenes.types"
 import { OrdenConfirmar } from "./ordenes.confirmar"
@@ -24,6 +25,7 @@ const variantePorEstado = (estado: EstadoOrden) =>
 type ColumnasProps = {
   panos: PanoRow[]
   catalogo: string[]
+  equipos: EquipoRow[]
   puedeEditar: boolean
   puedeConfirmar: boolean
 }
@@ -31,6 +33,7 @@ type ColumnasProps = {
 export const buildOrdenesColumns = ({
   panos,
   catalogo,
+  equipos,
   puedeEditar,
   puedeConfirmar,
 }: ColumnasProps): ColumnDef<OrdenRow>[] => [
@@ -69,7 +72,12 @@ export const buildOrdenesColumns = ({
         <OrdenDetalle orden={row.original} />
         {puedeConfirmar && <OrdenConfirmar orden={row.original} />}
         {puedeEditar && (
-          <OrdenForm orden={row.original} panos={panos} catalogo={catalogo} />
+          <OrdenForm
+            orden={row.original}
+            panos={panos}
+            catalogo={catalogo}
+            equipos={equipos}
+          />
         )}
         {puedeEditar && <OrdenDelete orden={row.original} />}
       </div>

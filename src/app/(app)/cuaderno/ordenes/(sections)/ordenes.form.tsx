@@ -32,19 +32,23 @@ import {
 } from "@/constants/cuaderno.constants"
 import { ordenSchema } from "@/schemas/ordenes.schema"
 import { crearOrden, editarOrden } from "@/server/ordenes/ordenes.actions"
+import type { EquipoRow } from "@/types/equipos.types"
 import type { PanoRow } from "@/types/panos.types"
 import type { OrdenRow } from "@/types/ordenes.types"
 import {
   calcularDistribucion,
+  calcularEstanques,
   type PanoDistribInput,
   type ProductoInput,
   resolverHas,
 } from "@/utils/ordenes.utils"
+import { EquiposDialog } from "./ordenes.equipos-dialog"
 
 type OrdenFormProps = {
   orden?: OrdenRow
   panos: PanoRow[]
   catalogo: string[]
+  equipos: EquipoRow[]
 }
 
 type ProductoFila = { nombre: string; dosis: string; unidad: string }
@@ -74,7 +78,7 @@ const productosIniciales = (o?: OrdenRow): ProductoFila[] =>
       }))
     : [{ nombre: "", dosis: "", unidad: "L/ha" }]
 
-export const OrdenForm = ({ orden, panos, catalogo }: OrdenFormProps) => {
+export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) => {
   const router = useRouter()
   const esEdicion = Boolean(orden)
   const [open, setOpen] = useState(false)
@@ -85,6 +89,15 @@ export const OrdenForm = ({ orden, panos, catalogo }: OrdenFormProps) => {
   const [productos, setProductos] = useState<ProductoFila[]>(
     productosIniciales(orden),
   )
+  const [equipoNombre, setEquipoNombre] = useState(orden?.equipo ?? "")
+
+  const equipoSel = equipos.find((e) => e.nombre === equipoNombre)
+  const equipoCap = equipoSel?.capacidad ?? 0
+
+  const equipoItems = equipos.map((e) => ({
+    value: e.nombre,
+    label: `${e.nombre} (${e.capacidad} L)`,
+  }))
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -134,6 +147,8 @@ export const OrdenForm = ({ orden, panos, catalogo }: OrdenFormProps) => {
       productos: productos.filter(
         (p) => p.nombre.trim() !== "" || p.dosis.trim() !== "",
       ),
+      equipo: equipoNombre,
+      equipoCap,
     })
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "Datos inválidos")
@@ -279,6 +294,43 @@ export const OrdenForm = ({ orden, panos, catalogo }: OrdenFormProps) => {
             <div className="flex flex-col gap-2">
               <Label>Moj. total efectivo</Label>
               <Input value={preview.mojT > 0 ? fmt(preview.mojT, 0) : ""} readOnly />
+            </div>
+          </div>
+
+          {/* Nebulizadora */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2 flex flex-col gap-2">
+              <Label>Nebulizadora</Label>
+              <div className="flex gap-2">
+                <Select
+                  items={equipoItems}
+                  value={equipoNombre}
+                  onValueChange={(v) => setEquipoNombre(v ?? "")}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {equipos.map((e) => (
+                      <SelectItem key={e.id} value={e.nombre}>
+                        {e.nombre} ({e.capacidad} L)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <EquiposDialog equipos={equipos} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>N° de estanques</Label>
+              <Input
+                value={
+                  equipoCap > 0
+                    ? String(calcularEstanques(preview.tAgua, equipoCap))
+                    : ""
+                }
+                readOnly
+              />
             </div>
           </div>
 

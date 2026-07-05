@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   calcProdQty,
   calcularDistribucion,
+  calcularEstanques,
   estadoOrden,
   type PanoDistribInput,
   type ProductoInput,
@@ -115,6 +116,18 @@ describe("recalcularProductosReales", () => {
   it("usa factor 1 cuando no hay agua planificada", () => {
     const reales = recalcularProductosReales(productos, 0, 850)
     expect(reales[0].qtyAplicada).toBeCloseTo(412.5, 5)
+  })
+})
+
+describe("calcularEstanques", () => {
+  it("redondea hacia arriba", () => {
+    expect(calcularEstanques(2500, 2000)).toBe(2)
+  })
+  it("exacto no sobra estanque", () => {
+    expect(calcularEstanques(4000, 2000)).toBe(2)
+  })
+  it("capacidad 0 devuelve 0", () => {
+    expect(calcularEstanques(2500, 0)).toBe(0)
   })
 })
 

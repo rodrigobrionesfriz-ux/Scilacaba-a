@@ -59,6 +59,17 @@ export const fieldProducts = pgTable("field_products", {
   aportes: jsonb("aportes").$type<Record<string, unknown>>(),
 })
 
+// Catálogo de nebulizadoras (equipos de aplicación). PK epoch-ms (convención cuaderno).
+export const equipos = pgTable("equipos", {
+  id: bigint("id", { mode: "number" }).primaryKey(),
+  nombre: text("nombre").notNull(),
+  capacidad: numeric("capacidad", { precision: 18, scale: 4 }).notNull(),
+  activo: boolean("activo").notNull().default(true),
+  creadoAt: timestamp("creado_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
 // Órdenes de aplicación (PK: id epoch-ms). Origen: cuaderno/main S.ordenes[]
 // pano_ids → text[]; productos/distribucion/objetivos → jsonb (migrator.md).
 // Campos legacy (producto/dosis/unidad/unitS) = primer producto, compat hacia atrás.
@@ -98,6 +109,9 @@ export const applicationOrders = pgTable("application_orders", {
   editada: boolean("editada").notNull().default(false),
   editadaFecha: text("editada_fecha"),
   editadaPor: text("editada_por"),
+  equipo: text("equipo"),
+  equipoCap: numeric("equipo_cap", { precision: 18, scale: 4 }),
+  nEstanques: integer("n_estanques"),
   creadoAt: timestamp("creado_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

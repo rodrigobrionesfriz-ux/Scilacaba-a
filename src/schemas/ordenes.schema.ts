@@ -36,6 +36,8 @@ export const ordenSchema = z.object({
     .number({ message: "Pasadas inválidas" })
     .min(1, "Mínimo 1 pasada")
     .default(1),
+  equipo: z.string().trim().default(""),
+  equipoCap: z.coerce.number({ message: "Capacidad inválida" }).min(0).default(0),
   notas: z.string().trim().default(""),
 })
 
