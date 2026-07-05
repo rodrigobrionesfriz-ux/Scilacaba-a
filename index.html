@@ -15578,7 +15578,7 @@ function verAplicacionesPano(panoId){
   confs.forEach(function(c){
     var orden=(S.ordenes||[]).find(function(o){ return String(o.id)===String(c.ordenId); });
     var tipoApp=orden?(orden.tipo||orden.tipoApp||''):'';
-    var nroConf=c.id||'—';
+    var nroConf=c.folio||c.id||'—';
     var nroOrden=c.ordenNumero||(orden?(orden.numero||orden.id||''):(c.ordenId||''));
     var haTotal=(c.panoIds||[]).reduce(function(s,pid){ return s+hasDe(pid); },0);
     var haGrupo=(c.panoIds||[]).filter(function(pid){ return idsGrupo.indexOf(String(pid))>=0; })
@@ -18102,7 +18102,7 @@ function rpGenerarExcel(){
 
     // ─── HOJA 2: Detalle por confirmación ───
     var detRows = [[
-      'Fecha aplicaci\u00f3n','N\u00b0 Orden','Operador','Equipo','Turno','Hora inicio','Hora fin',
+      'Fecha aplicaci\u00f3n','Folio','N\u00b0 Orden','Operador','Equipo','Turno','Hora inicio','Hora fin',
       'Pa\u00f1os aplicados','Productos aplicados (detalle)','Agua/caldo (L)',
       'Temp (\u00b0C)','HR (%)','Viento (km/h)','Clima',
       'Observaciones','Registrado','Registrado por'
@@ -18114,6 +18114,7 @@ function rpGenerarExcel(){
       }).join(' | ');
       detRows.push([
         c.fechaApp||'',
+        c.folio||'',
         c.ordenNumero||'',
         c.operador||'',
         c.equipo||'',
