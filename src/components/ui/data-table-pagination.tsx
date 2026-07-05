@@ -66,7 +66,7 @@ export const DataTablePagination = <TData,>({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <span className="mr-2 text-sm text-muted-foreground">
           Página {totalPaginas === 0 ? 0 : pageIndex + 1} de {totalPaginas}
         </span>
