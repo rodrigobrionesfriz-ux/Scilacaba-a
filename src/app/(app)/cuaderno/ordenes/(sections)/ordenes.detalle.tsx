@@ -52,7 +52,7 @@ export const OrdenDetalle = ({ orden }: { orden: OrdenRow }) => {
             <ul className="list-inside list-disc">
               {orden.productos.map((p) => (
                 <li key={p.nombre}>
-                  {p.nombre}: {fmt(p.dosis, 3)} {p.unidad} → {fmt(p.tProd, 3)}{" "}
+                  {p.nombre}: {fmt(p.dosis, 3)} {p.unidad} → {fmt(p.tProd)}{" "}
                   {p.unitS}
                 </li>
               ))}
@@ -79,7 +79,7 @@ export const OrdenDetalle = ({ orden }: { orden: OrdenRow }) => {
                     <td className="px-3 py-1 text-right">
                       {d.agua > 0 ? fmt(d.agua, 0) : "—"}
                     </td>
-                    <td className="px-3 py-1 text-right">{fmt(d.prod, 3)}</td>
+                    <td className="px-3 py-1 text-right">{fmt(d.prod)}</td>
                   </tr>
                 ))}
               </tbody>

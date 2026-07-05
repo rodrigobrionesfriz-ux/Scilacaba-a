@@ -459,7 +459,7 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
             <div className="rounded-md border">
               <div className="border-b px-3 py-2 text-sm font-medium">
                 Distribución · {fmt(preview.tHas)} há · {fmt(preview.tAgua, 0)} L
-                agua · {fmt(preview.tProd, 3)} {preview.productos[0]?.unitS ?? ""}{" "}
+                agua · {fmt(preview.tProd)} {preview.productos[0]?.unitS ?? ""}{" "}
                 (producto principal)
               </div>
               <div className="max-h-40 overflow-y-auto">
@@ -480,7 +480,7 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
                         <td className="px-3 py-1 text-right">
                           {d.agua > 0 ? fmt(d.agua, 0) : "—"}
                         </td>
-                        <td className="px-3 py-1 text-right">{fmt(d.prod, 3)}</td>
+                        <td className="px-3 py-1 text-right">{fmt(d.prod)}</td>
                       </tr>
                     ))}
                   </tbody>

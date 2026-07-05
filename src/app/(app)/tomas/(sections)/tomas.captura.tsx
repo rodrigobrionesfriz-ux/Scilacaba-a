@@ -38,6 +38,7 @@ import {
 } from "@/constants/tomas.constants"
 import { cerrarToma, guardarConteo } from "@/server/tomas/tomas.actions"
 import type { TomaDetalle } from "@/types/tomas.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 
 // Construye el payload de conteos para las actions desde el estado local (un
 // string por línea: "" = sin ingresar, si no el número físico contado).
@@ -216,7 +217,9 @@ export const TomaCaptura = ({ toma }: { toma: TomaDetalle }) => {
                   <TableCell>{l.codigoInterno}</TableCell>
                   <TableCell>{l.descripcion}</TableCell>
                   <TableCell>{l.lote ?? ""}</TableCell>
-                  <TableCell className="text-right">{l.teorico}</TableCell>
+                  <TableCell className="text-right">
+                    {fmtCantidad(l.teorico)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Input
                       type="number"
@@ -229,7 +232,7 @@ export const TomaCaptura = ({ toma }: { toma: TomaDetalle }) => {
                     />
                   </TableCell>
                   <TableCell className="text-right">
-                    {dif === null || Number.isNaN(dif) ? "—" : dif}
+                    {fmtCantidad(dif)}
                   </TableCell>
                 </TableRow>
               )

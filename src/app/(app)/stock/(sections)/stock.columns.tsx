@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table"
 import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import type { StockRow } from "@/types/stock.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { formatCLP } from "@/utils/money.utils"
 
 export const buildStockColumns = (): ColumnDef<StockRow>[] => [
@@ -29,7 +30,8 @@ export const buildStockColumns = (): ColumnDef<StockRow>[] => [
     header: ({ column }) => (
       <SortableHeader column={column}>Cantidad</SortableHeader>
     ),
-    cell: ({ row }) => `${row.original.cantidad} ${row.original.unidadMedida}`,
+    cell: ({ row }) =>
+      `${fmtCantidad(row.original.cantidad)} ${row.original.unidadMedida}`,
   },
   {
     accessorKey: "costoPromedio",

@@ -7,6 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { TomaDetalle } from "@/types/tomas.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { formatCLP } from "@/utils/money.utils"
 
 // Tabla de líneas en modo lectura (estados no editables y sin autorización).
@@ -41,9 +42,11 @@ export const TomaLineasReadOnly = ({ toma }: { toma: TomaDetalle }) => (
               <TableCell>{l.codigoInterno}</TableCell>
               <TableCell>{l.descripcion}</TableCell>
               <TableCell>{l.lote ?? ""}</TableCell>
-              <TableCell className="text-right">{l.teorico}</TableCell>
               <TableCell className="text-right">
-                {l.fisicoIngresado ? l.fisico : "—"}
+                {fmtCantidad(l.teorico)}
+              </TableCell>
+              <TableCell className="text-right">
+                {l.fisicoIngresado ? fmtCantidad(l.fisico) : "—"}
                 {l.asumidoCero && (
                   <span className="ml-1 text-xs text-muted-foreground">
                     (asumido)
@@ -51,7 +54,7 @@ export const TomaLineasReadOnly = ({ toma }: { toma: TomaDetalle }) => (
                 )}
               </TableCell>
               <TableCell className="text-right">
-                {dif === null ? "—" : dif}
+                {fmtCantidad(dif)}
               </TableCell>
               <TableCell className="text-right">
                 {formatCLP(l.costoTeorico)}

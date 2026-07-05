@@ -3,10 +3,9 @@
 import type { ColumnDef } from "@tanstack/react-table"
 import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import type { PanoRow } from "@/types/panos.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { PanoDelete } from "./panos.delete"
 import { PanoForm } from "./panos.form"
-
-const numero = (v: number | null) => (v == null ? "—" : v.toLocaleString("es-CL"))
 
 export const buildPanosColumns = ({
   puedeEditar,
@@ -41,22 +40,22 @@ export const buildPanosColumns = ({
   {
     accessorKey: "hectareas",
     header: "Há plant.",
-    cell: ({ row }) => numero(row.original.hectareas),
+    cell: ({ row }) => fmtCantidad(row.original.hectareas),
   },
   {
     accessorKey: "hasRiego",
     header: "Há riego",
-    cell: ({ row }) => numero(row.original.hasRiego),
+    cell: ({ row }) => fmtCantidad(row.original.hasRiego),
   },
   {
     accessorKey: "densidad",
     header: "Densidad",
-    cell: ({ row }) => numero(row.original.densidad),
+    cell: ({ row }) => fmtCantidad(row.original.densidad),
   },
   {
     accessorKey: "plantas",
     header: "N° plantas",
-    cell: ({ row }) => numero(row.original.plantas),
+    cell: ({ row }) => fmtCantidad(row.original.plantas),
   },
   {
     id: "acciones",

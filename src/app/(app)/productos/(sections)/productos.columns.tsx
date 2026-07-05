@@ -6,6 +6,7 @@ import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import type { Group, ProductType } from "@/types/catalogos.types"
 import type { ProductoRow } from "@/types/productos.types"
 import type { StockResumenProducto } from "@/types/stock.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { formatCLP } from "@/utils/money.utils"
 import { ProductoDelete } from "./productos.delete"
 import { ProductoForm } from "./productos.form"
@@ -48,7 +49,7 @@ export const buildProductosColumns = ({
       <SortableHeader column={column}>Stock</SortableHeader>
     ),
     cell: ({ row }) =>
-      `${stockPorProducto.get(row.original.codigoInterno)?.cantidad ?? 0} ${row.original.unidadMedida}`,
+      `${fmtCantidad(stockPorProducto.get(row.original.codigoInterno)?.cantidad ?? 0)} ${row.original.unidadMedida}`,
   },
   {
     id: "valorStock",
