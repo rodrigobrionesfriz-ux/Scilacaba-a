@@ -1,5 +1,6 @@
 import { requirePermiso } from "@/server/auth/auth.queries"
 import { getComprasUrgentes } from "@/server/compras-urgentes/compras-urgentes.queries"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 
 export const CompraUrgenteView = async () => {
   await requirePermiso("cuaderno.ver")
@@ -19,12 +20,12 @@ export const CompraUrgenteView = async () => {
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">{item.producto}</h3>
             <span className="text-sm font-medium text-destructive">
-              Comprar ≈ {item.totalFalta} {item.unidad}
+              Comprar ≈ {fmtCantidad(item.totalFalta)} {item.unidad}
             </span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             {item.enBodega
-              ? `Disponible: ${item.disponible} ${item.unidad}`
+              ? `Disponible: ${fmtCantidad(item.disponible)} ${item.unidad}`
               : "No está en bodega"}
           </p>
           <ul className="mt-2 space-y-1 text-sm">
@@ -34,7 +35,7 @@ export const CompraUrgenteView = async () => {
                   {o.numero} · {o.fecha}
                 </span>
                 <span className="text-muted-foreground">
-                  requiere {o.requerido} · falta {o.falta}
+                  requiere {fmtCantidad(o.requerido)} · falta {fmtCantidad(o.falta)}
                 </span>
               </li>
             ))}

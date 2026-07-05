@@ -3,10 +3,8 @@
 import type { ColumnDef } from "@tanstack/react-table"
 import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import type { ConfirmacionRow } from "@/types/ordenes.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { ConfirmacionDelete } from "./confirmaciones.delete"
-
-const numero = (v: number | null) =>
-  v == null ? "—" : v.toLocaleString("es-CL")
 
 export const buildConfirmacionesColumns = ({
   puedeConfirmar,
@@ -30,7 +28,7 @@ export const buildConfirmacionesColumns = ({
   {
     accessorKey: "aguaReal",
     header: "Agua real (L)",
-    cell: ({ row }) => numero(row.original.aguaReal),
+    cell: ({ row }) => fmtCantidad(row.original.aguaReal),
   },
   {
     id: "panos",

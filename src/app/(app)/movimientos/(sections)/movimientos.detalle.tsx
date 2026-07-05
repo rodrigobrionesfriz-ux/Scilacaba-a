@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table"
 import { DIRECCION_LABEL } from "@/constants/movimientos.constants"
 import type { MovimientoDetalle } from "@/types/movimientos.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { formatCLP } from "@/utils/money.utils"
 
 export const MovimientoDetalleView = ({
@@ -80,7 +81,7 @@ export const MovimientoDetalleView = ({
                 <TableCell>{l.descripcion}</TableCell>
                 <TableCell>{l.lote}</TableCell>
                 <TableCell>
-                  {l.cantidad} {l.unidadMedida}
+                  {fmtCantidad(l.cantidad)} {l.unidadMedida}
                 </TableCell>
                 <TableCell>{formatCLP(l.costo)}</TableCell>
                 <TableCell>{formatCLP(l.cantidad * l.costo)}</TableCell>

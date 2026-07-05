@@ -29,6 +29,7 @@ import {
   rechazarToma,
 } from "@/server/tomas/tomas.actions"
 import type { TomaDetalle } from "@/types/tomas.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { formatCLP } from "@/utils/money.utils"
 import { calcularAjustes } from "@/utils/tomas.utils"
 import { TomaMotivoDialog } from "./tomas.motivo-dialog"
@@ -140,16 +141,20 @@ export const TomaAutorizar = ({ toma }: { toma: TomaDetalle }) => {
                   <TableCell>{l.codigoInterno}</TableCell>
                   <TableCell>{l.descripcion}</TableCell>
                   <TableCell>{l.lote ?? ""}</TableCell>
-                  <TableCell className="text-right">{l.teorico}</TableCell>
                   <TableCell className="text-right">
-                    {fisico ?? "—"}
+                    {fmtCantidad(l.teorico)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmtCantidad(fisico)}
                     {l.asumidoCero && (
                       <span className="ml-1 text-xs text-muted-foreground">
                         (asumido)
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{dif ?? "—"}</TableCell>
+                  <TableCell className="text-right">
+                    {fmtCantidad(dif)}
+                  </TableCell>
                   <TableCell className="text-right">
                     {dif === null ? "—" : formatCLP(dif * l.costoTeorico)}
                   </TableCell>

@@ -4,11 +4,12 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { SortableHeader } from "@/components/ui/data-table-sortable-header"
 import { FR_NUTRIENTES } from "@/constants/fertirriego.constants"
 import type { ProductoFertRow } from "@/types/fertirriego.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { AportesForm } from "./aportes.form"
 
 const resumenAportes = (row: ProductoFertRow): string =>
   FR_NUTRIENTES.filter((nu) => (row.aportes[nu] ?? 0) > 0)
-    .map((nu) => `${nu} ${row.aportes[nu]}`)
+    .map((nu) => `${nu} ${fmtCantidad(row.aportes[nu])}`)
     .join(" · ")
 
 export const buildAportesColumns = ({

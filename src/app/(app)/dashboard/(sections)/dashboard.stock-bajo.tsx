@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { StockBajoRow } from "@/types/dashboard.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 
 export const DashboardStockBajo = ({ filas }: { filas: StockBajoRow[] }) => {
   if (filas.length === 0) return null
@@ -32,8 +33,12 @@ export const DashboardStockBajo = ({ filas }: { filas: StockBajoRow[] }) => {
               <TableRow key={`${f.codigoInterno}-${f.bodega}-${i}`}>
                 <TableCell>{f.descripcion}</TableCell>
                 <TableCell>{f.bodega}</TableCell>
-                <TableCell className="text-right">{f.cantidad}</TableCell>
-                <TableCell className="text-right">{f.minimo}</TableCell>
+                <TableCell className="text-right">
+                  {fmtCantidad(f.cantidad)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmtCantidad(f.minimo)}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

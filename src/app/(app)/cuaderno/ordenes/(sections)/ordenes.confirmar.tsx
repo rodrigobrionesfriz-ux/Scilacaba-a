@@ -20,10 +20,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { confirmacionSchema } from "@/schemas/confirmaciones.schema"
 import { crearConfirmacion } from "@/server/confirmaciones/confirmaciones.actions"
 import type { OrdenRow } from "@/types/ordenes.types"
+import { fmtCantidad } from "@/utils/cantidad.utils"
 import { recalcularProductosReales } from "@/utils/ordenes.utils"
-
-const fmt = (n: number, d = 3) =>
-  n.toLocaleString("es-CL", { maximumFractionDigits: d })
 
 const estadoInicial = (orden: OrdenRow) => ({
   fechaApp: "",
@@ -181,7 +179,7 @@ export const OrdenConfirmar = ({ orden }: { orden: OrdenRow }) => {
               <ul className="list-inside list-disc">
                 {reales.map((p) => (
                   <li key={p.nombre}>
-                    {p.nombre}: {fmt(p.qtyAplicada)} {p.unitS}
+                    {p.nombre}: {fmtCantidad(p.qtyAplicada)} {p.unitS}
                   </li>
                 ))}
               </ul>
