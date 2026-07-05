@@ -1,35 +1,54 @@
-import { Button } from "@/components/ui/button"
 import {
   DASHBOARD_SUBTITLE,
   DASHBOARD_TITLE,
 } from "@/constants/dashboard.constants"
+import { getUsuarioActual } from "@/server/auth/auth.queries"
 import { getDashboardStats } from "@/server/dashboard/dashboard.queries"
-import { formatCLP } from "@/utils/money.utils"
+import { can } from "@/utils/permisos.utils"
+import { DashboardAcciones } from "./dashboard.acciones"
+import { DashboardCompraUrgenteBanner } from "./dashboard.compra-urgente-banner"
+import { DashboardKpis } from "./dashboard.kpis"
+import { DashboardMovimientosRecientes } from "./dashboard.movimientos-recientes"
+import { DashboardStockBajo } from "./dashboard.stock-bajo"
 
 export const DashboardView = async () => {
-  const stats = await getDashboardStats()
+  const [stats, usuario] = await Promise.all([
+    getDashboardStats(),
+    getUsuarioActual(),
+  ])
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-2xl font-bold">{DASHBOARD_TITLE}</h1>
-      <p className="mt-2 text-muted-foreground">{DASHBOARD_SUBTITLE}</p>
-      <dl className="mt-4 grid grid-cols-3 gap-4 text-sm">
-        <div>
-          <dt className="text-muted-foreground">Productos</dt>
-          <dd className="text-lg font-semibold">{stats.totalProductos}</dd>
+    <main className="mx-auto flex max-w-6xl flex-col gap-4 p-8">
+      <div>
+        <h1 className="text-2xl font-bold">{DASHBOARD_TITLE}</h1>
+        <p className="mt-2 text-muted-foreground">{DASHBOARD_SUBTITLE}</p>
+      </div>
+
+      <DashboardCompraUrgenteBanner count={stats.comprasUrgentesCount} />
+
+      <DashboardKpis
+        totalProductos={stats.totalProductos}
+        totalBodegas={stats.totalBodegas}
+        valorInventario={stats.valorInventario}
+        valorServicios={stats.valorServicios}
+        totalMovimientos={stats.totalMovimientos}
+        stockBajoCount={stats.stockBajoCount}
+        porVencerCount={stats.porVencerCount}
+      />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <DashboardMovimientosRecientes
+            movimientos={stats.movimientosRecientes}
+          />
         </div>
-        <div>
-          <dt className="text-muted-foreground">Bodegas</dt>
-          <dd className="text-lg font-semibold">{stats.totalBodegas}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Valor inventario</dt>
-          <dd className="text-lg font-semibold">
-            {formatCLP(stats.valorInventario)}
-          </dd>
-        </div>
-      </dl>
-      <Button className="mt-4">OK</Button>
+        <DashboardAcciones
+          puedeMovimientos={can(usuario, "movimientos.crear")}
+          puedeProductos={can(usuario, "productos.crear")}
+        />
+      </div>
+
+      <DashboardStockBajo filas={stats.stockBajo} />
     </main>
   )
 }
