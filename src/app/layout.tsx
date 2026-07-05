@@ -1,5 +1,5 @@
 import { SerwistProvider } from "@serwist/turbopack/react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 import { ThemeProvider } from "@/components/ui/theme-provider"
@@ -19,6 +19,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SCI · La Cabaña",
   description: "Sistema de Control de Inventario — La Cabaña",
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 const RootLayout = ({ children }: Readonly<{ children: React.ReactNode }>) => (
