@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 export const TerrenoTabs = () => {
   const pathname = usePathname()
   return (
-    <nav className="flex gap-1 border-b">
+    <nav className="flex gap-1 overflow-x-auto whitespace-nowrap border-b">
       {TABS_TERRENO.map((tab) => {
         const activo =
           pathname === tab.href || pathname.startsWith(`${tab.href}/`)

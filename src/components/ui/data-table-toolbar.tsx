@@ -45,7 +45,7 @@ export const DataTableToolbar = <TData,>({
             table.setGlobalFilter(e.target.value)
           }}
           placeholder={placeholder}
-          className="w-72"
+          className="w-full sm:w-72"
         />
         {mostrarEstado && (
           <Select

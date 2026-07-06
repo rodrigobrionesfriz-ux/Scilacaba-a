@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, KeyRound, LogOut } from "lucide-react"
+import { ChevronDown, KeyRound, LogOut, Menu } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
@@ -18,7 +18,12 @@ import {
 import { ROLE_LABELS } from "@/constants/permisos.constants"
 import { signOut } from "@/lib/auth-client"
 
-type Props = { nombre: string; email: string; role: string }
+type Props = {
+  nombre: string
+  email: string
+  role: string
+  onOpenMenu?: () => void
+}
 
 const iniciales = (nombre: string) =>
   nombre
@@ -27,7 +32,7 @@ const iniciales = (nombre: string) =>
     .map((p) => p.charAt(0).toUpperCase())
     .join("")
 
-export const AppTopbar = ({ nombre, email, role }: Props) => {
+export const AppTopbar = ({ nombre, email, role, onOpenMenu }: Props) => {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const rolLabel = ROLE_LABELS[role] ?? role
@@ -40,42 +45,57 @@ export const AppTopbar = ({ nombre, email, role }: Props) => {
     })
 
   return (
-    <header className="flex h-14 items-center justify-end border-b px-4">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button variant="ghost" className="h-auto gap-2 px-2 py-1" />}
-        >
-          <Avatar className="size-7">
-            <AvatarFallback className="text-xs">
-              {iniciales(nombre)}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-sm font-medium sm:inline">{nombre}</span>
-          <ChevronDown className="size-4 text-muted-foreground" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="font-medium">{nombre}</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {email}
-              </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {rolLabel}
-              </span>
-            </DropdownMenuLabel>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem render={<Link href="/cambiar-password" />}>
-            <KeyRound className="size-4" />
-            Cambiar contraseña
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={pending} onClick={cerrarSesion}>
-            <LogOut className="size-4" />
-            Cerrar sesión
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <header className="flex h-14 items-center justify-between border-b px-4">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="md:hidden"
+        onClick={onOpenMenu}
+        aria-label="Abrir menú"
+      >
+        <Menu className="size-5" />
+      </Button>
+      <div className="ml-auto">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" className="h-auto gap-2 px-2 py-1" />
+            }
+          >
+            <Avatar className="size-7">
+              <AvatarFallback className="text-xs">
+                {iniciales(nombre)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-medium sm:inline">
+              {nombre}
+            </span>
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="flex flex-col gap-0.5">
+                <span className="font-medium">{nombre}</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {email}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {rolLabel}
+                </span>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/cambiar-password" />}>
+              <KeyRound className="size-4" />
+              Cambiar contraseña
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={pending} onClick={cerrarSesion}>
+              <LogOut className="size-4" />
+              Cerrar sesión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   )
 }
