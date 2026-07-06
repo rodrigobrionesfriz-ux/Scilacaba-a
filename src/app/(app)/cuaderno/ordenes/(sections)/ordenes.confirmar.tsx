@@ -90,12 +90,12 @@ export const OrdenConfirmar = ({ orden }: { orden: OrdenRow }) => {
         <DialogHeader>
           <DialogTitle>Confirmar {orden.numero}</DialogTitle>
           <DialogDescription>
-            Registra la aplicación realizada. Las cantidades reales se recalculan
-            según el agua aplicada.
+            Registra la aplicación realizada. Las cantidades reales se
+            recalculan según el agua aplicada.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="cf-fecha">Fecha de aplicación *</Label>
               <Input
@@ -153,10 +153,15 @@ export const OrdenConfirmar = ({ orden }: { orden: OrdenRow }) => {
           </div>
 
           <fieldset className="flex flex-col gap-2 rounded-md border p-3">
-            <legend className="px-1 text-sm font-medium">Paños aplicados *</legend>
+            <legend className="px-1 text-sm font-medium">
+              Paños aplicados *
+            </legend>
             <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
               {orden.distribucion.map((d) => (
-                <label key={d.panoId} className="flex items-center gap-2 text-sm">
+                <label
+                  key={d.panoId}
+                  className="flex items-center gap-2 text-sm"
+                >
                   <Checkbox
                     checked={panoIds.includes(d.panoId)}
                     onCheckedChange={() =>
@@ -186,7 +191,7 @@ export const OrdenConfirmar = ({ orden }: { orden: OrdenRow }) => {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="cf-temp">Temp. (°C)</Label>
               <Input

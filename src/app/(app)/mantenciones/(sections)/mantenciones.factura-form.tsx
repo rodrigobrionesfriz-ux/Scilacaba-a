@@ -90,12 +90,12 @@ export const FacturaForm = ({ orden }: { orden: MantencionDetalle }) => {
         <DialogHeader>
           <DialogTitle>Registrar factura · {orden.numero}</DialogTitle>
           <DialogDescription>
-            Genera un movimiento de entrada en la bodega de servicios por el monto
-            neto.
+            Genera un movimiento de entrada en la bodega de servicios por el
+            monto neto.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Tipo de documento *</Label>
               <Select

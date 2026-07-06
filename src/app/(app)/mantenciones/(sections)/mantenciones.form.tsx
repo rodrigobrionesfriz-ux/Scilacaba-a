@@ -28,7 +28,10 @@ import {
   MANT_TIPOS_DETALLE,
 } from "@/constants/mantenciones.constants"
 import { ordenTrabajoSchema } from "@/schemas/mantenciones.schema"
-import { crearOrden, editarOrden } from "@/server/mantenciones/mantenciones.actions"
+import {
+  crearOrden,
+  editarOrden,
+} from "@/server/mantenciones/mantenciones.actions"
 import type {
   MantencionDetalle,
   ProductoServicioOption,
@@ -100,7 +103,9 @@ export const MantencionForm = ({
     setForm((prev) => ({ ...prev, [key]: value }))
 
   const setLinea = (i: number, patch: Partial<LineaFila>) =>
-    setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+    setLineas((prev) =>
+      prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
+    )
 
   const total = calcularTotalOT(
     lineas.map((l) => ({
@@ -184,7 +189,7 @@ export const MantencionForm = ({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="fecha">Fecha *</Label>
               <Input

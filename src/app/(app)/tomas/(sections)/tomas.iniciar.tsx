@@ -94,7 +94,8 @@ export const TomaIniciar = ({ bodegas, grupos, tipos }: TomaIniciarProps) => {
         <DialogHeader>
           <DialogTitle>Iniciar toma de inventario</DialogTitle>
           <DialogDescription>
-            Se genera la lista de productos a contar según la bodega y el alcance.
+            Se genera la lista de productos a contar según la bodega y el
+            alcance.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -136,7 +137,7 @@ export const TomaIniciar = ({ bodegas, grupos, tipos }: TomaIniciarProps) => {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Grupo</Label>
               <Select

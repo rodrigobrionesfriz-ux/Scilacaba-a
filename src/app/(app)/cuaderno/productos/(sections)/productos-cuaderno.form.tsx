@@ -110,7 +110,7 @@ export const ProductoCuadernoForm = ({
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Tipo</Label>
               <Select
@@ -147,7 +147,7 @@ export const ProductoCuadernoForm = ({
               onChange={(e) => set("objetivo", e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="dosis">Dosis</Label>
               <Input

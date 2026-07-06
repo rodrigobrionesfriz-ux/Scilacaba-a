@@ -78,7 +78,12 @@ const productosIniciales = (o?: OrdenRow): ProductoFila[] =>
       }))
     : [{ nombre: "", dosis: "", unidad: "L/ha" }]
 
-export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) => {
+export const OrdenForm = ({
+  orden,
+  panos,
+  catalogo,
+  equipos,
+}: OrdenFormProps) => {
   const router = useRouter()
   const esEdicion = Boolean(orden)
   const [open, setOpen] = useState(false)
@@ -113,7 +118,11 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
   // Preview de distribución en vivo (misma util pura que usa la action).
   const productosValidos: ProductoInput[] = productos
     .filter((p) => p.nombre.trim() && Number(p.dosis) > 0)
-    .map((p) => ({ nombre: p.nombre, dosis: Number(p.dosis), unidad: p.unidad }))
+    .map((p) => ({
+      nombre: p.nombre,
+      dosis: Number(p.dosis),
+      unidad: p.unidad,
+    }))
   const panosSel: PanoDistribInput[] = panoIds.flatMap((id) => {
     const p = panos.find((pp) => String(pp.id) === id)
     if (!p) return []
@@ -187,7 +196,9 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
-            {esEdicion ? `Editar ${orden?.numero}` : "Nueva orden de aplicación"}
+            {esEdicion
+              ? `Editar ${orden?.numero}`
+              : "Nueva orden de aplicación"}
           </DialogTitle>
           <DialogDescription>
             Los campos marcados con * son obligatorios. La distribución por paño
@@ -271,7 +282,7 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
           </div>
 
           {/* Mojamiento */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="moj">Mojamiento (L/ha)</Label>
               <Input
@@ -293,12 +304,15 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
             </div>
             <div className="flex flex-col gap-2">
               <Label>Moj. total efectivo</Label>
-              <Input value={preview.mojT > 0 ? fmt(preview.mojT, 0) : ""} readOnly />
+              <Input
+                value={preview.mojT > 0 ? fmt(preview.mojT, 0) : ""}
+                readOnly
+              />
             </div>
           </div>
 
           {/* Nebulizadora */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="col-span-2 flex flex-col gap-2">
               <Label>Nebulizadora</Label>
               <div className="flex gap-2">
@@ -338,7 +352,10 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
           <fieldset className="flex flex-col gap-2 rounded-md border p-3">
             <legend className="px-1 text-sm font-medium">Productos *</legend>
             {productos.map((p, i) => (
-              <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-2">
+              <div
+                key={i}
+                className="grid grid-cols-[1fr_auto_auto_auto] gap-2"
+              >
                 <Input
                   list="cuaderno-catalogo-oa"
                   value={p.nombre}
@@ -409,10 +426,7 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
               {panos.map((p) => {
                 const id = String(p.id)
                 return (
-                  <label
-                    key={id}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <label key={id} className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={panoIds.includes(id)}
                       onCheckedChange={() =>
@@ -458,9 +472,9 @@ export const OrdenForm = ({ orden, panos, catalogo, equipos }: OrdenFormProps) =
           {preview.distribucion.length > 0 && (
             <div className="rounded-md border">
               <div className="border-b px-3 py-2 text-sm font-medium">
-                Distribución · {fmt(preview.tHas)} há · {fmt(preview.tAgua, 0)} L
-                agua · {fmt(preview.tProd)} {preview.productos[0]?.unitS ?? ""}{" "}
-                (producto principal)
+                Distribución · {fmt(preview.tHas)} há · {fmt(preview.tAgua, 0)}{" "}
+                L agua · {fmt(preview.tProd)}{" "}
+                {preview.productos[0]?.unitS ?? ""} (producto principal)
               </div>
               <div className="max-h-40 overflow-y-auto">
                 <table className="w-full text-sm">

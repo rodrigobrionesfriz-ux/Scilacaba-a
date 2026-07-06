@@ -93,7 +93,7 @@ export const PanoForm = ({ pano }: { pano?: PanoRow }) => {
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="nombre">Nombre *</Label>
               <Input
@@ -112,7 +112,7 @@ export const PanoForm = ({ pano }: { pano?: PanoRow }) => {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="anio">Año plantación</Label>
               <Input
@@ -133,7 +133,7 @@ export const PanoForm = ({ pano }: { pano?: PanoRow }) => {
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="hectareas">Há plantadas</Label>
               <Input
