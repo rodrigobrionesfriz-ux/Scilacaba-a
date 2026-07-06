@@ -54,12 +54,17 @@ const estadoInicial = (p?: ProductoRow) => ({
   ccTipo: p?.ccTipo ?? "",
   ccIngredienteActivo: p?.ccIngredienteActivo ?? "",
   ccObjetivo: p?.ccObjetivo ?? "",
-  ccDosis: p?.ccDosis === null || p?.ccDosis === undefined ? "" : String(p.ccDosis),
+  ccDosis:
+    p?.ccDosis === null || p?.ccDosis === undefined ? "" : String(p.ccDosis),
   ccUnidad: p?.ccUnidad ?? "",
   activo: p?.activo ?? true,
 })
 
-export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => {
+export const ProductoForm = ({
+  producto,
+  tipos,
+  grupos,
+}: ProductoFormProps) => {
   const router = useRouter()
   const esEdicion = Boolean(producto)
   const [open, setOpen] = useState(false)
@@ -116,12 +121,11 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {esEdicion
-              ? `Editar ${producto?.codigoInterno}`
-              : "Nuevo producto"}
+            {esEdicion ? `Editar ${producto?.codigoInterno}` : "Nuevo producto"}
           </DialogTitle>
           <DialogDescription>
-            Completa los datos del producto. Los marcados con * son obligatorios.
+            Completa los datos del producto. Los marcados con * son
+            obligatorios.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -134,7 +138,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="codigoEan">Código EAN</Label>
               <Input
@@ -163,7 +167,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Tipo de producto *</Label>
               <Select
@@ -290,7 +294,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
             <legend className="px-1 text-xs text-muted-foreground">
               Datos agronómicos (Cuaderno de Campo)
             </legend>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ccTipo">Tipo</Label>
                 <Input
@@ -308,7 +312,7 @@ export const ProductoForm = ({ producto, tipos, grupos }: ProductoFormProps) => 
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="ccObjetivo">Objetivo</Label>
                 <Input

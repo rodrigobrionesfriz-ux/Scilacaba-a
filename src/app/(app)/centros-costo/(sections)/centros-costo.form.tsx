@@ -62,7 +62,9 @@ export const CentroCostoForm = ({ centro, areas }: CentroCostoFormProps) => {
         toast.error(res.error)
         return
       }
-      toast.success(esEdicion ? "Centro de costo actualizado" : "Centro de costo creado")
+      toast.success(
+        esEdicion ? "Centro de costo actualizado" : "Centro de costo creado",
+      )
       setOpen(false)
       if (!esEdicion) setForm(estadoInicial())
       router.refresh()
@@ -92,14 +94,17 @@ export const CentroCostoForm = ({ centro, areas }: CentroCostoFormProps) => {
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="codigo">Código *</Label>
               <Input
                 id="codigo"
                 value={form.codigo}
                 onChange={(e) =>
-                  set("codigo", e.target.value.toUpperCase().replace(/\s+/g, "-"))
+                  set(
+                    "codigo",
+                    e.target.value.toUpperCase().replace(/\s+/g, "-"),
+                  )
                 }
                 disabled={esEdicion}
                 required

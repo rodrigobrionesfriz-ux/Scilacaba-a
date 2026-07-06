@@ -118,7 +118,7 @@ export const AplicacionForm = ({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="fecha">Fecha *</Label>
               <Input
@@ -149,7 +149,7 @@ export const AplicacionForm = ({
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Tipo *</Label>
               <Select
@@ -195,7 +195,7 @@ export const AplicacionForm = ({
               ))}
             </datalist>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="dosis">Dosis</Label>
               <Input
@@ -244,7 +244,7 @@ export const AplicacionForm = ({
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="operador">Operador</Label>
               <Input

@@ -21,7 +21,7 @@ export const EntidadComercialFields = ({
   esEdicion,
 }: EntidadComercialFieldsProps) => (
   <>
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="codigo">Código (RUT sin DV) *</Label>
         <Input
@@ -52,7 +52,7 @@ export const EntidadComercialFields = ({
         required
       />
     </div>
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="giro">Giro</Label>
         <Input
@@ -78,7 +78,7 @@ export const EntidadComercialFields = ({
         onChange={(e) => set("direccion", e.target.value)}
       />
     </div>
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="comuna">Comuna</Label>
         <Input
@@ -96,7 +96,7 @@ export const EntidadComercialFields = ({
         />
       </div>
     </div>
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="telefono">Teléfono</Label>
         <Input
