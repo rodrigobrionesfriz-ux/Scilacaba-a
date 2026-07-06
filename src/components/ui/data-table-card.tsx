@@ -42,8 +42,7 @@ export const DataTableCards = <TData,>({
           >
             {row.getVisibleCells().map((cell) => {
               const header = cell.column.columnDef.header
-              const label =
-                typeof header === "string" ? header : cell.column.id
+              const label = typeof header === "string" ? header : cell.column.id
               return (
                 <div
                   key={cell.id}
